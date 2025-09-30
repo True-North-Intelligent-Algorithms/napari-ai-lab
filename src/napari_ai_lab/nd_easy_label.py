@@ -61,6 +61,19 @@ Instructions:
     def _on_click(self):
         print("Welcome to NDEasyLabel! Let's Go!")
 
+    def _on_points_changed(self, event):
+        """Handle points layer data changes - prints point locations."""
+        points_layer = event.source
+        if event.action == "added" and len(points_layer.data) > 0:
+            # Get the most recently added point (last in the list)
+            latest_point = points_layer.data[-1]
+            print(f"Point added at location: {latest_point}")
+
+            # Print all points for reference
+            print(f"Total points: {len(points_layer.data)}")
+            for i, point in enumerate(points_layer.data):
+                print(f"  Point {i+1}: {point}")
+
     def _on_open_directory(self):
         """Open a file dialog to select an image directory."""
         directory = QFileDialog.getExistingDirectory(
@@ -72,12 +85,12 @@ Instructions:
 
         if directory:
             print(f"Selected directory: {directory}")
-            self._load_image_directory(directory)
+            self.load_image_directory(directory)
         else:
             print("No directory selected")
             return
 
-    def _load_image_directory(self, directory):
+    def load_image_directory(self, directory):
         """Load images from the selected directory into napari."""
         try:
             # Load images from directory using utility function
@@ -104,9 +117,29 @@ Instructions:
                 padded_images, name=f"Image Stack ({len(images)} images)"
             )
 
+            # Add points layer for annotation with point type choices
+            self._point_choices = ["positive", "negative"]
+            LABEL_COLOR_CYCLE = ["red", "blue"]  # positive=red, negative=blue
+
+            points_layer = self.viewer.add_points(
+                name="Point Layer",
+                property_choices={"label": self._point_choices},
+                border_color="label",
+                border_color_cycle=LABEL_COLOR_CYCLE,
+                symbol="o",
+                face_color="transparent",
+                border_width=0.5,
+                size=1,
+                ndim=len(padded_images.shape),
+            )
+
+            # Connect point event handler
+            points_layer.events.data.connect(self._on_points_changed)
+
             print(
                 f"Successfully loaded and processed {len(images)} images into napari as a stack."
             )
+            print("Added points layer for annotation. Click to add points!")
 
         except (OSError, ValueError, ImportError, RuntimeError) as e:
             QMessageBox.critical(

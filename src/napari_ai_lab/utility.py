@@ -97,8 +97,19 @@ def pad_to_largest(
     # =============================================================================
     # STEP 1: Find maximum dimensions across all images
     # =============================================================================
-    max_rows = max(image.shape[0] for image in images)
-    max_cols = max(image.shape[1] for image in images)
+    # Find max Y and X dimensions (always present)
+    max_rows = max(image.shape[-2] for image in images)  # Y dimension
+    max_cols = max(image.shape[-1] for image in images)  # X dimension
+
+    # Find max Z dimension for 3D images (ZYX)
+    max_depth = 0
+    has_3d_images = any(axis_info == "ZYX" for axis_info in axis_infos)
+    if has_3d_images:
+        max_depth = max(
+            image.shape[0]
+            for image, axis_info in zip(images, axis_infos, strict=False)
+            if axis_info == "ZYX"
+        )
 
     # Check if we have any color images (YXC) - if so, convert grayscale to RGB
     has_color_images = any(axis_info == "YXC" for axis_info in axis_infos)
@@ -109,9 +120,6 @@ def pad_to_largest(
     padded_images = []
 
     for image, axis_info in zip(images, axis_infos, strict=False):
-        # Calculate the padding for each dimension
-        pad_rows = max_rows - image.shape[0]
-        pad_cols = max_cols - image.shape[1]
 
         # Convert grayscale to RGB if we have color images in the set
         if has_color_images and axis_info == "YX":
@@ -120,11 +128,22 @@ def pad_to_largest(
             image = np.repeat(image, 3, axis=-1)
             axis_info = "YXC"  # Update axis_info after conversion
 
-        # Handle different axis types
+        # Convert 2D images to 3D if we have 3D images in the set
+        if has_3d_images and axis_info in ["YX", "YXC"]:
+            # Add Z dimension at the beginning
+            image = np.expand_dims(image, axis=0)
+            if axis_info == "YX":
+                axis_info = "ZYX"
+            elif axis_info == "YXC":
+                axis_info = "ZYXC"  # This would be 4D, handle carefully
+
+        # Calculate padding for each dimension based on axis type
         if axis_info == "YXC":
-            # 3D image with channels - we occasionally hit rgba images, just use the first 3 channels
+            # 3D image with channels: pad Y,X dimensions
+            pad_rows = max_rows - image.shape[0]  # Y
+            pad_cols = max_cols - image.shape[1]  # X
+            # Clip to first 3 channels if RGBA
             image = image[:, :, :3]
-            # Pad Y and X dimensions, leave channels unchanged
             padded_image = np.pad(
                 image,
                 ((0, pad_rows), (0, pad_cols), (0, 0)),
@@ -132,15 +151,43 @@ def pad_to_largest(
                 constant_values=0,
             )
         elif axis_info == "YX":
-            # 2D grayscale image - pad Y and X dimensions
+            # 2D grayscale image: pad Y,X dimensions
+            pad_rows = max_rows - image.shape[0]  # Y
+            pad_cols = max_cols - image.shape[1]  # X
             padded_image = np.pad(
                 image,
                 ((0, pad_rows), (0, pad_cols)),
                 mode="constant",
                 constant_values=0,
             )
+        elif axis_info == "ZYX":
+            # 3D spatial image: pad Z,Y,X dimensions
+            pad_depth = max_depth - image.shape[0]  # Z
+            pad_rows = max_rows - image.shape[1]  # Y
+            pad_cols = max_cols - image.shape[2]  # X
+            padded_image = np.pad(
+                image,
+                ((0, pad_depth), (0, pad_rows), (0, pad_cols)),
+                mode="constant",
+                constant_values=0,
+            )
+        elif axis_info == "ZYXC":
+            # 4D image with Z,Y,X,C: pad Z,Y,X dimensions
+            pad_depth = max_depth - image.shape[0]  # Z
+            pad_rows = max_rows - image.shape[1]  # Y
+            pad_cols = max_cols - image.shape[2]  # X
+            # Clip to first 3 channels if RGBA
+            image = image[:, :, :, :3]
+            padded_image = np.pad(
+                image,
+                ((0, pad_depth), (0, pad_rows), (0, pad_cols), (0, 0)),
+                mode="constant",
+                constant_values=0,
+            )
         else:
-            # For other axis types, treat as 2D for now (fallback)
+            # Fallback: treat as 2D and pad Y,X dimensions
+            pad_rows = max_rows - image.shape[-2]  # Y (second to last)
+            pad_cols = max_cols - image.shape[-1]  # X (last)
             padded_image = np.pad(
                 image,
                 ((0, pad_rows), (0, pad_cols)),
