@@ -1,17 +1,11 @@
 name: napari-ai-lab
 display_name: Napari AI Lab
 # use 'hidden' to remove plugin from napari hub search results
-visibility: public
+visibility: hidden 
 # see https://napari.org/stable/plugins/technical_references/manifest.html#fields for valid categories
 # categories: []
 contributions:
   commands:
-    - id: napari-ai-lab.write_multiple
-      python_name: napari_ai_lab._writer:write_multiple
-      title: Save multi-layer data with Napari AI Lab
-    - id: napari-ai-lab.write_single_image
-      python_name: napari_ai_lab._writer:write_single_image
-      title: Save image data with Napari AI Lab
     - id: napari-ai-lab.make_container_widget
       python_name: napari_ai_lab:ImageThreshold
       title: Make threshold Container widget
@@ -24,13 +18,12 @@ contributions:
     - id: napari-ai-lab.make_qwidget
       python_name: napari_ai_lab:ExampleQWidget
       title: Make example QWidget
-  writers:
-    - command: napari-ai-lab.write_multiple
-      layer_types: ['image*','labels*']
-      filename_extensions: []
-    - command: napari-ai-lab.write_single_image
-      layer_types: ['image']
-      filename_extensions: ['.npy']
+    - id: napari-ai-lab.napari_easy_augment_batch_dl
+      python_name: napari_easy_augment_batch_dl.easy_augment_batch_dl:NapariEasyAugmentBatchDL
+      title: Easy Augment Batch DL
+    - id: napari-ai-lab.nd_easy_label
+      python_name: napari_ai_lab.nd_easy_label:NDEasyLabel
+      title: ND Easy Label
   widgets:
     - command: napari-ai-lab.make_container_widget
       display_name: Container Threshold
@@ -41,3 +34,7 @@ contributions:
       display_name: Autogenerate Threshold
     - command: napari-ai-lab.make_qwidget
       display_name: Example QWidget
+    - command: napari-ai-lab.napari_easy_augment_batch_dl
+      display_name: Easy Augment Batch DL
+    - command: napari-ai-lab.nd_easy_label
+      display_name: ND Easy Label
