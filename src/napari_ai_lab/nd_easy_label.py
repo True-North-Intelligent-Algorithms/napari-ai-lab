@@ -74,12 +74,28 @@ Instructions:
             for i, point in enumerate(points_layer.data):
                 print(f"  Point {i+1}: {point}")
 
+    def _on_shapes_changed(self, event):
+        """Handle shapes layer data changes - prints shape information."""
+        shapes_layer = event.source
+        if event.action == "added" and len(shapes_layer.data) > 0:
+            # Get the most recently added shape (last in the list)
+            latest_shape = shapes_layer.data[-1]
+            print(
+                f"Shape added: {latest_shape.shape} with {len(latest_shape)} points"
+            )
+            print(f"Shape coordinates: {latest_shape}")
+
+            # Print all shapes for reference
+            print(f"Total shapes: {len(shapes_layer.data)}")
+            for i, shape in enumerate(shapes_layer.data):
+                print(f"  Shape {i+1}: {shape.shape} with {len(shape)} points")
+
     def _on_open_directory(self):
         """Open a file dialog to select an image directory."""
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select Image Directory",
-            "",
+            "...",
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
 
@@ -121,6 +137,12 @@ Instructions:
             self._point_choices = ["positive", "negative"]
             LABEL_COLOR_CYCLE = ["red", "blue"]  # positive=red, negative=blue
 
+            # For annotation layers, we want ndim to match the displayed dimensions
+            # This prevents issues with 4D data slice comparisons
+            annotation_ndim = min(
+                len(padded_images.shape), 3
+            )  # Cap at 3D for annotation layers
+
             points_layer = self.viewer.add_points(
                 name="Point Layer",
                 property_choices={"label": self._point_choices},
@@ -136,10 +158,25 @@ Instructions:
             # Connect point event handler
             points_layer.events.data.connect(self._on_points_changed)
 
+            # Add shapes layer for region annotation
+            shapes_layer = self.viewer.add_shapes(
+                name="Shapes Layer",
+                edge_color="green",
+                face_color="transparent",
+                edge_width=2,
+                ndim=annotation_ndim,
+            )
+
+            # Connect shapes event handler
+            shapes_layer.events.data.connect(self._on_shapes_changed)
+
             print(
                 f"Successfully loaded and processed {len(images)} images into napari as a stack."
             )
             print("Added points layer for annotation. Click to add points!")
+            print(
+                "Added shapes layer for region annotation. Draw shapes to define regions!"
+            )
 
         except (OSError, ValueError, ImportError, RuntimeError) as e:
             QMessageBox.critical(
