@@ -35,6 +35,19 @@ class Otsu3D(InteractiveSegmenterBase):
         }
     )
 
+    axial_roi_size: int = field(
+        metadata={
+            "type": "int",
+            "harvest": True,
+            "advanced": False,
+            "training": False,
+            "min": 1,
+            "max": 100,
+            "default": 10,
+            "step": 1,
+        }
+    )
+
     def __init__(self, name=None):
         """
         Initialize the Otsu3D segmenter.
@@ -111,6 +124,9 @@ class Otsu3D(InteractiveSegmenterBase):
             print(
                 f"  Threshold range: {min(thresholds):.2f} - {max(thresholds):.2f}"
             )
+            print(
+                f"  ROI Settings - Lateral: {self.lateral_roi_size}, Axial: {self.axial_roi_size}"
+            )
         else:
             # Apply global Otsu thresholding across entire 3D volume
             threshold = filters.threshold_otsu(image_gray)
@@ -118,6 +134,9 @@ class Otsu3D(InteractiveSegmenterBase):
 
             print(
                 f"Otsu3D: Applied global threshold {threshold:.2f} to 3D volume"
+            )
+            print(
+                f"  ROI Settings - Lateral: {self.lateral_roi_size}, Axial: {self.axial_roi_size}"
             )
 
         return binary_mask.astype(np.uint8)
