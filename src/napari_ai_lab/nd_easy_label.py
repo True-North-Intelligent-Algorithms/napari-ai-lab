@@ -1,5 +1,7 @@
 import napari
+import numpy as np
 from qtpy.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QLabel,
     QMessageBox,
@@ -9,7 +11,9 @@ from qtpy.QtWidgets import (
 )
 from tnia.widgets import ParameterSlider
 
+from .InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
+from .widgets import ParameterFormWidget
 
 
 class NDEasyLabel(QWidget):
@@ -18,6 +22,15 @@ class NDEasyLabel(QWidget):
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self.viewer = viewer
+
+        # Initialize layer references
+        self.image_layer = None
+        self.label_layer = None
+        self.points_layer = None
+        self.shapes_layer = None
+
+        # Initialize label counter
+        self.current_label_num = 1
 
         btn = QPushButton("Click me!")
         btn.clicked.connect(self._on_click)
@@ -29,6 +42,26 @@ class NDEasyLabel(QWidget):
         self.setLayout(QVBoxLayout())
         self.layout().addWidget(btn)
         self.layout().addWidget(self.dir_btn)
+
+        # Add Interactive Segmenter selection
+        self.segmenter_label = QLabel("Interactive Segmenter:")
+        self.layout().addWidget(self.segmenter_label)
+
+        self.segmenter_combo = QComboBox()
+        self.segmenter_combo.currentTextChanged.connect(
+            self._on_segmenter_changed
+        )
+        self.layout().addWidget(self.segmenter_combo)
+
+        # Parameter form widget for segmenter parameters
+        self.parameter_form = ParameterFormWidget()
+        self.parameter_form.parameters_changed.connect(
+            self._on_parameters_changed
+        )
+        self.layout().addWidget(self.parameter_form)
+
+        # Populate segmenter combo with registered frameworks
+        self._populate_segmenter_combo()
 
         # Add parameter controls
         self.iou_threshold_slider = ParameterSlider(
@@ -61,18 +94,137 @@ Instructions:
     def _on_click(self):
         print("Welcome to NDEasyLabel! Let's Go!")
 
+    def _populate_segmenter_combo(self):
+        """Populate the segmenter combo box with registered frameworks."""
+        # Clear existing items
+        self.segmenter_combo.clear()
+
+        # Get registered frameworks
+        frameworks = InteractiveSegmenterBase.get_registered_frameworks()
+
+        if frameworks:
+            # Add frameworks to combo box
+            for name in sorted(frameworks.keys()):
+                self.segmenter_combo.addItem(name)
+
+            # Select first item if available
+            if self.segmenter_combo.count() > 0:
+                self.segmenter_combo.setCurrentIndex(0)
+                self._on_segmenter_changed(self.segmenter_combo.currentText())
+        else:
+            # No frameworks registered
+            self.segmenter_combo.addItem("No segmenters available")
+            self.segmenter_combo.setEnabled(False)
+
+    def _on_segmenter_changed(self, segmenter_name):
+        """Handle changes to the segmenter selection."""
+        if not segmenter_name or segmenter_name == "No segmenters available":
+            self.parameter_form.clear_form()
+            return
+
+        # Get the selected segmenter class
+        segmenter_class = InteractiveSegmenterBase.get_framework(
+            segmenter_name
+        )
+        if segmenter_class:
+            # Update parameter form with new segmenter class
+            self.parameter_form.set_segmenter_class(segmenter_class)
+            print(f"Selected segmenter: {segmenter_name}")
+            print(f"Supported axes: {segmenter_class().supported_axes}")
+        else:
+            print(
+                f"Warning: Segmenter '{segmenter_name}' not found in registry"
+            )
+            self.parameter_form.clear_form()
+
+    def _on_parameters_changed(self, parameters):
+        """Handle changes to segmenter parameters."""
+        segmenter_name = self.segmenter_combo.currentText()
+        print(f"Parameters changed for {segmenter_name}: {parameters}")
+        # Here you could store parameters or trigger updates as needed
+
+    def get_current_segmenter(self):
+        """Get the currently selected segmenter with current parameter values."""
+        segmenter_name = self.segmenter_combo.currentText()
+        if not segmenter_name or segmenter_name == "No segmenters available":
+            return None
+
+        try:
+            # Create segmenter instance with current parameters
+            return self.parameter_form.create_segmenter_instance()
+        except (AttributeError, ValueError, TypeError, RuntimeError) as e:
+            print(f"Error creating segmenter instance: {e}")
+            return None
+
     def _on_points_changed(self, event):
-        """Handle points layer data changes - prints point locations."""
+        """Handle points layer data changes - creates 2D ROI around point."""
         points_layer = event.source
         if event.action == "added" and len(points_layer.data) > 0:
             # Get the most recently added point (last in the list)
             latest_point = points_layer.data[-1]
             print(f"Point added at location: {latest_point}")
 
+            # Create 2D ROI around point and fill with label 354
+            # self._create_roi_at_point(latest_point)
+
             # Print all points for reference
             print(f"Total points: {len(points_layer.data)}")
             for i, point in enumerate(points_layer.data):
                 print(f"  Point {i+1}: {point}")
+
+            # Use current label number and increment for next use
+            self.set_square(
+                self.label_layer.data,
+                latest_point,
+                size=20,
+                value=self.current_label_num,
+            )
+
+            print(f"Added square with label {self.current_label_num}")
+            self.current_label_num += 1
+
+            self.label_layer.refresh()
+
+    def set_square(self, arr, point, size=20, value=80):
+        """
+        Set a square region of given size around (y, x) at the slice defined by
+        the leading coordinates of `point`.
+
+        Parameters
+        ----------
+        arr : np.ndarray
+            N-dimensional array.
+        point : tuple or list
+            Indices into arr, length = arr.ndim. Last two are (y, x).
+        size : int
+            Side length of the square (default 20).
+        value : scalar
+            Value to assign inside the square.
+        """
+        *leading, y, x = point
+
+        # Convert coordinates to integers (napari points can be floats)
+        leading = [int(coord) for coord in leading]
+        y, x = int(y), int(x)
+
+        half = size // 2
+
+        # bounds (ensure integers)
+        y0 = int(max(0, y - half))
+        y1 = int(min(arr.shape[-2], y + half))
+        x0 = int(max(0, x - half))
+        x1 = int(min(arr.shape[-1], x + half))
+
+        # build slice object for all dims
+        index = tuple(leading) + (slice(y0, y1), slice(x0, x1))
+
+        arr[index] = value
+
+    def _create_roi_at_point(self, point_coords):
+        """Create a 2D ROI around point and fill with label 354."""
+        if not self.label_layer:
+            print("No label layer available")
+            return
 
     def _on_shapes_changed(self, event):
         """Handle shapes layer data changes - prints shape information."""
@@ -128,9 +280,34 @@ Instructions:
                 images, axis_infos, force8bit=True, normalize_per_channel=False
             )
 
-            # Add the processed image stack to napari viewer
-            self.viewer.add_image(
+            # Add the processed image stack to napari viewer and store reference
+            self.image_layer = self.viewer.add_image(
                 padded_images, name=f"Image Stack ({len(images)} images)"
+            )
+
+            # Initialize the rest of the layers based on the image layer
+            self._set_image_layer(self.image_layer)
+
+        except (OSError, ValueError, ImportError, RuntimeError) as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while loading images: {str(e)}",
+            )
+            print(f"Error loading images: {e}")
+
+    def _set_image_layer(self, image_layer):
+        """Set up all annotation layers based on the provided image layer."""
+        try:
+            # Store the image layer reference
+            self.image_layer = image_layer
+
+            # Get image data from the layer
+            image_data = image_layer.data
+
+            # Add labels layer and store reference
+            self.label_layer = self.viewer.add_labels(
+                np.zeros_like(image_data, dtype=np.uint16), name="Labels"
             )
 
             # Add points layer for annotation with point type choices
@@ -140,10 +317,11 @@ Instructions:
             # For annotation layers, we want ndim to match the displayed dimensions
             # This prevents issues with 4D data slice comparisons
             annotation_ndim = min(
-                len(padded_images.shape), 3
+                len(image_data.shape), 3
             )  # Cap at 3D for annotation layers
 
-            points_layer = self.viewer.add_points(
+            # Add points layer and store reference
+            self.points_layer = self.viewer.add_points(
                 name="Point Layer",
                 property_choices={"label": self._point_choices},
                 border_color="label",
@@ -152,14 +330,14 @@ Instructions:
                 face_color="transparent",
                 border_width=0.5,
                 size=1,
-                ndim=len(padded_images.shape),
+                ndim=len(image_data.shape),
             )
 
             # Connect point event handler
-            points_layer.events.data.connect(self._on_points_changed)
+            self.points_layer.events.data.connect(self._on_points_changed)
 
-            # Add shapes layer for region annotation
-            shapes_layer = self.viewer.add_shapes(
+            # Add shapes layer for region annotation and store reference
+            self.shapes_layer = self.viewer.add_shapes(
                 name="Shapes Layer",
                 edge_color="green",
                 face_color="transparent",
@@ -168,20 +346,26 @@ Instructions:
             )
 
             # Connect shapes event handler
-            shapes_layer.events.data.connect(self._on_shapes_changed)
+            self.shapes_layer.events.data.connect(self._on_shapes_changed)
 
             print(
-                f"Successfully loaded and processed {len(images)} images into napari as a stack."
+                f"Successfully set up annotation layers for image layer: {image_layer.name}"
             )
             print("Added points layer for annotation. Click to add points!")
             print(
                 "Added shapes layer for region annotation. Draw shapes to define regions!"
             )
 
-        except (OSError, ValueError, ImportError, RuntimeError) as e:
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            OSError,
+        ) as e:
+            print(f"Error setting up image layer: {e}")
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An error occurred while loading images: {str(e)}",
+                f"An error occurred while setting up annotation layers: {str(e)}",
             )
-            print(f"Error loading images: {e}")
