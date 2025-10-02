@@ -2,7 +2,7 @@ import contextlib
 from pathlib import Path
 
 import napari
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, Signal
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -23,14 +23,19 @@ class NDSequenceViewer(QWidget):
     the list of images without opening them yet.
     """
 
+    # Signal emitted when the current image changes
+    # Emits (image_layer, image_path, parent_directory)
+    image_changed = Signal(object, str, str)
+
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
         self.viewer = viewer
-
+        self._loading_new_image = False
         # Initialize image list and current image layer
         self.image_files = []
         self.current_index = 0
         self.current_image_layer = None
+        self.parent_directory = None
 
         # Set up the UI with horizontal layout
         self.setLayout(QHBoxLayout())
@@ -79,6 +84,9 @@ class NDSequenceViewer(QWidget):
     def _load_image_list(self, directory):
         """Load list of image files from the selected directory."""
         try:
+            # Store parent directory for zarr persistence
+            self.parent_directory = str(Path(directory).resolve())
+
             # Common image extensions
             image_extensions = {
                 ".png",
@@ -138,13 +146,22 @@ class NDSequenceViewer(QWidget):
 
     def _on_scroll_changed(self, value):
         """Handle scroll bar value changes - load new image."""
-        if 0 <= value < len(self.image_files):
-            self.current_index = value
-            self._update_image_info()
-            self._load_current_image()
-            print(
-                f"Scrolled to image {value + 1}/{len(self.image_files)}: {self.image_files[value].name}"
-            )
+
+        if self._loading_new_image:
+            return  # Already loading, ignore this event
+
+        self._loading_new_image = True
+
+        try:
+            if 0 <= value < len(self.image_files):
+                self.current_index = value
+                self._update_image_info()
+                self._load_current_image()
+                print(
+                    f"Scrolled to image {value + 1}/{len(self.image_files)}: {self.image_files[value].name}"
+                )
+        finally:
+            self._loading_new_image = False
 
     def _update_image_info(self):
         """Update the image info label with current image details."""
@@ -167,8 +184,7 @@ class NDSequenceViewer(QWidget):
         try:
             # Remove old image layer if it exists
             if self.current_image_layer is not None:
-                with contextlib.suppress(ValueError, KeyError):
-                    self.viewer.layers.remove(self.current_image_layer)
+                self.viewer.layers.remove(self.current_image_layer)
                 self.current_image_layer = None
 
             # Load new image
@@ -184,6 +200,14 @@ class NDSequenceViewer(QWidget):
             )
 
             print(f"Loaded image shape: {image_data.shape}")
+
+            # Emit signal that image has changed with enhanced information
+
+            self.image_changed.emit(
+                self.current_image_layer,
+                str(image_path),
+                self.parent_directory,
+            )
 
         except (OSError, ValueError, TypeError, RuntimeError) as e:
             print(f"Error loading image {image_path}: {e}")

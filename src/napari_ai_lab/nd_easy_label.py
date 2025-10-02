@@ -1,3 +1,5 @@
+import contextlib
+
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
@@ -31,6 +33,13 @@ class NDEasyLabel(QWidget):
 
         # Initialize label counter
         self.current_label_num = 1
+
+        # Track current image context so we can load labels and other info
+        self.current_image_path = None
+        self.current_parent_directory = None
+
+        # Signal processing state protection
+        self._processing_image_change = False
 
         btn = QPushButton("Click me!")
         btn.clicked.connect(self._on_click)
@@ -220,12 +229,6 @@ Instructions:
 
         arr[index] = value
 
-    def _create_roi_at_point(self, point_coords):
-        """Create a 2D ROI around point and fill with label 354."""
-        if not self.label_layer:
-            print("No label layer available")
-            return
-
     def _on_shapes_changed(self, event):
         """Handle shapes layer data changes - prints shape information."""
         shapes_layer = event.source
@@ -295,6 +298,54 @@ Instructions:
                 f"An error occurred while loading images: {str(e)}",
             )
             print(f"Error loading images: {e}")
+
+    def _cleanup_existing_layers(self):
+        """Remove existing annotation layers from viewer safely."""
+        print("Starting layer cleanup...")
+
+        # Disconnect event handlers first to prevent callbacks during cleanup
+        if self.points_layer:
+            with contextlib.suppress(Exception):
+                self.points_layer.events.data.disconnect(
+                    self._on_points_changed
+                )
+
+        if self.shapes_layer:
+            with contextlib.suppress(Exception):
+                self.shapes_layer.events.data.disconnect(
+                    self._on_shapes_changed
+                )
+
+        # Remove layers one by one with proper error handling
+        layers_to_remove = [
+            ("label", self.label_layer),
+            ("points", self.points_layer),
+            ("shapes", self.shapes_layer),
+        ]
+
+        for layer_name, layer in layers_to_remove:
+            if layer:
+                try:
+                    if layer in self.viewer.layers:
+                        print(f"Removing {layer_name} layer: {layer.name}")
+                        self.viewer.layers.remove(layer)
+                        print(f"Successfully removed {layer_name} layer")
+                    else:
+                        print(f"{layer_name} layer not in viewer")
+                except (
+                    ValueError,
+                    KeyError,
+                    AttributeError,
+                    RuntimeError,
+                ) as e:
+                    print(f"Error removing {layer_name} layer: {e}")
+
+        # Reset references
+        self.label_layer = None
+        self.points_layer = None
+        self.shapes_layer = None
+
+        print("Completed layer cleanup")
 
     def _set_image_layer(self, image_layer):
         """Set up all annotation layers based on the provided image layer."""
@@ -369,3 +420,76 @@ Instructions:
                 "Error",
                 f"An error occurred while setting up annotation layers: {str(e)}",
             )
+
+    def connect_sequence_viewer(self, sequence_viewer):
+        """Connect to sequence viewer for automatic layer updates."""
+        sequence_viewer.image_changed.connect(self._on_sequence_image_changed)
+        print("Connected to sequence viewer for automatic layer updates")
+
+    def _on_sequence_image_changed(
+        self, image_layer, image_path, parent_directory
+    ):
+        """Handle sequence viewer image changes with simple processing lock to prevent crashes."""
+        # If we're already processing a signal, ignore this one to prevent conflicts
+        if self._processing_image_change:
+            print(
+                "Signal received while processing - ignoring to prevent conflicts"
+            )
+            return
+
+        # Process the image change immediately
+        self._process_image_change(image_layer, image_path, parent_directory)
+
+    def _process_image_change(self, image_layer, image_path, parent_directory):
+        """Process the image change with simple processing lock."""
+        # Set processing flag to prevent re-entrant calls
+        self._processing_image_change = True
+
+        try:
+            print(f"Processing image change: {image_path}")
+
+            print("Switching images")
+
+            if image_layer and image_path and parent_directory:
+                print(f"Setting up new image: {image_layer.name}")
+                print(f"Image path: {image_path}")
+                print(f"Parent directory: {parent_directory}")
+
+                # Update current context
+                self.current_image_path = image_path
+                self.current_parent_directory = parent_directory
+
+                # Clean up existing layers
+                self._cleanup_existing_layers()
+
+                # Not sure if this helps, but try a small delay to let
+                # Napari properly release layer resources
+                # This prevents race conditions between layer removal and creation
+                import time
+
+                time.sleep(0.05)  # 50ms delay
+
+                print("Creating new layers...")
+                self._set_image_layer(image_layer)
+            else:
+                print("Received invalid image data from sequence viewer")
+                self._cleanup_existing_layers()
+                # Clear current context
+                self.current_image_path = None
+                self.current_parent_directory = None
+
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            AttributeError,
+            KeyError,
+        ) as e:
+            print(f"Error processing image change: {e}")
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            # Always clear the processing flag
+            self._processing_image_change = False
+            print("Finished processing image change")
