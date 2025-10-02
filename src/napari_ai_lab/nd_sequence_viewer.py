@@ -147,7 +147,10 @@ class NDSequenceViewer(QWidget):
     def _on_scroll_changed(self, value):
         """Handle scroll bar value changes - load new image."""
 
+        print(f"Scroll bar changed to {value}")
+
         if self._loading_new_image:
+            print("Already loading a new image, ignoring scroll event")
             return  # Already loading, ignore this event
 
         self._loading_new_image = True
@@ -158,7 +161,7 @@ class NDSequenceViewer(QWidget):
                 self._update_image_info()
                 self._load_current_image()
                 print(
-                    f"Scrolled to image {value + 1}/{len(self.image_files)}: {self.image_files[value].name}"
+                    f"Scrolled to image {value + 1}/{len(self.image_files)}: {self.image_files[value].name}\n\n"
                 )
         finally:
             self._loading_new_image = False
