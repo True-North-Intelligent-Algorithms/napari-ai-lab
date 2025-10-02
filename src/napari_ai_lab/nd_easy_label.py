@@ -124,88 +124,63 @@ class NDEasyLabel(QWidget):
             )
             self.parameter_form.clear_form()
 
+        self.segmenter = InteractiveSegmenterBase.get_framework(
+            segmenter_name
+        )()
+
     def _on_parameters_changed(self, parameters):
         """Handle changes to segmenter parameters."""
         segmenter_name = self.segmenter_combo.currentText()
         print(f"Parameters changed for {segmenter_name}: {parameters}")
         # Here you could store parameters or trigger updates as needed
 
-    def get_current_segmenter(self):
-        """Get the currently selected segmenter with current parameter values."""
-        segmenter_name = self.segmenter_combo.currentText()
-        if not segmenter_name or segmenter_name == "No segmenters available":
-            return None
-
-        try:
-            # Create segmenter instance with current parameters
-            return self.parameter_form.create_segmenter_instance()
-        except (AttributeError, ValueError, TypeError, RuntimeError) as e:
-            print(f"Error creating segmenter instance: {e}")
-            return None
-
     def _on_points_changed(self, event):
-        """Handle points layer data changes - creates 2D ROI around point."""
+        """Handle points layer data changes - creates segmentation around point using current segmenter."""
         points_layer = event.source
         if event.action == "added" and len(points_layer.data) > 0:
             # Get the most recently added point (last in the list)
             latest_point = points_layer.data[-1]
             print(f"Point added at location: {latest_point}")
 
-            # Create 2D ROI around point and fill with label 354
-            # self._create_roi_at_point(latest_point)
-
             # Print all points for reference
             print(f"Total points: {len(points_layer.data)}")
             for i, point in enumerate(points_layer.data):
                 print(f"  Point {i+1}: {point}")
 
-            # Use current label number and increment for next use
-            self.set_square(
-                self.label_layer.data,
-                latest_point,
-                size=20,
-                value=self.current_label_num,
-            )
+            # Get current image data
+            if self.image_layer is None:
+                print("No image layer available")
+                return
 
-            print(f"Added square with label {self.current_label_num}")
-            self.current_label_num += 1
+            image_data = self.image_layer.data
 
-            self.label_layer.refresh()
+            # Call segmenter with the latest point
+            try:
+                mask = self.segmenter.segment(
+                    image_data, points=[latest_point], shapes=None
+                )
 
-    def set_square(self, arr, point, size=20, value=80):
-        """
-        Set a square region of given size around (y, x) at the slice defined by
-        the leading coordinates of `point`.
+                # Apply the mask to the labels layer
+                self.label_layer.data[mask] = self.current_label_num
 
-        Parameters
-        ----------
-        arr : np.ndarray
-            N-dimensional array.
-        point : tuple or list
-            Indices into arr, length = arr.ndim. Last two are (y, x).
-        size : int
-            Side length of the square (default 20).
-        value : scalar
-            Value to assign inside the square.
-        """
-        *leading, y, x = point
+                print(
+                    f"Added segmentation with label {self.current_label_num}"
+                )
+                self.current_label_num += 1
 
-        # Convert coordinates to integers (napari points can be floats)
-        leading = [int(coord) for coord in leading]
-        y, x = int(y), int(x)
+                self.label_layer.refresh()
 
-        half = size // 2
+            except (
+                AttributeError,
+                ValueError,
+                TypeError,
+                RuntimeError,
+                IndexError,
+            ) as e:
+                print(f"Error during segmentation: {e}")
+                import traceback
 
-        # bounds (ensure integers)
-        y0 = int(max(0, y - half))
-        y1 = int(min(arr.shape[-2], y + half))
-        x0 = int(max(0, x - half))
-        x1 = int(min(arr.shape[-1], x + half))
-
-        # build slice object for all dims
-        index = tuple(leading) + (slice(y0, y1), slice(x0, x1))
-
-        arr[index] = value
+                traceback.print_exc()
 
     def _on_shapes_changed(self, event):
         """Handle shapes layer data changes - prints shape information."""
