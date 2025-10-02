@@ -90,11 +90,21 @@ class NDEasyLabel(QWidget):
         frameworks = InteractiveSegmenterBase.get_registered_frameworks()
 
         if frameworks:
-            # Add frameworks to combo box
-            for name in sorted(frameworks.keys()):
+            # Create custom ordering with Square2D first, then others alphabetically
+            framework_names = list(frameworks.keys())
+            if "Square2D" in framework_names:
+                # Put Square2D first, then sort the rest
+                framework_names.remove("Square2D")
+                ordered_names = ["Square2D"] + sorted(framework_names)
+            else:
+                # Fallback to alphabetical if Square2D not found
+                ordered_names = sorted(framework_names)
+
+            # Add frameworks to combo box in custom order
+            for name in ordered_names:
                 self.segmenter_combo.addItem(name)
 
-            # Select first item if available
+            # Select first item if available (which will be Square2D)
             if self.segmenter_combo.count() > 0:
                 self.segmenter_combo.setCurrentIndex(0)
                 self._on_segmenter_changed(self.segmenter_combo.currentText())
