@@ -1,6 +1,33 @@
+from pathlib import Path
+
 import numpy as np
 from skimage import io
-from tnia.io.io_helper import collect_all_image_names
+
+
+def collect_all_image_names(image_path, extensions=None):
+    """
+    Collects all image names
+
+    Args:
+        image_path (Path): directory to look for files
+        extensions (list): list of extensions to look for
+
+    Returns:
+        list: list of image file names
+    """
+    if extensions is None:
+        extensions = ["jpg", "jpeg", "tif", "tiff", "png"]
+
+    image_path = Path(image_path)
+
+    image_file_list = []
+
+    for extension in extensions:
+        image_file_list = image_file_list + list(
+            image_path.glob("*." + extension)
+        )
+
+    return image_file_list
 
 
 def load_images_from_directory(directory):
