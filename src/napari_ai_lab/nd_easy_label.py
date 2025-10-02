@@ -132,7 +132,13 @@ class NDEasyLabel(QWidget):
         """Handle changes to segmenter parameters."""
         segmenter_name = self.segmenter_combo.currentText()
         print(f"Parameters changed for {segmenter_name}: {parameters}")
-        # Here you could store parameters or trigger updates as needed
+
+        # Sync the current segmenter instance with new parameter values
+        if hasattr(self, "segmenter") and self.segmenter is not None:
+            self.segmenter = self.parameter_form.sync_segmenter_instance(
+                self.segmenter
+            )
+            print("Synced segmenter instance with new parameters")
 
     def _on_points_changed(self, event):
         """Handle points layer data changes - creates segmentation around point using current segmenter."""
@@ -153,6 +159,12 @@ class NDEasyLabel(QWidget):
                 return
 
             image_data = self.image_layer.data
+
+            # Ensure segmenter is synced with current parameters before use
+            if hasattr(self, "segmenter") and self.segmenter is not None:
+                self.segmenter = self.parameter_form.sync_segmenter_instance(
+                    self.segmenter
+                )
 
             # Call segmenter with the latest point
             try:

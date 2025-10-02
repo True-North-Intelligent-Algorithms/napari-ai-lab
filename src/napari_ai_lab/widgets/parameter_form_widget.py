@@ -341,3 +341,27 @@ class ParameterFormWidget(QWidget):
         kwargs = {**self.parameter_values, **additional_kwargs}
 
         return self.segmenter_class(**kwargs)
+
+    def sync_segmenter_instance(self, segmenter_instance):
+        """
+        Sync an existing segmenter instance with current parameter values from the widget.
+
+        Args:
+            segmenter_instance: Existing segmenter instance to update with current widget values.
+
+        Returns:
+            The same segmenter instance with updated parameter values.
+        """
+        if segmenter_instance is None:
+            return None
+
+        # Update each parameter in the segmenter instance
+        for field_name, value in self.parameter_values.items():
+            if hasattr(segmenter_instance, field_name):
+                setattr(segmenter_instance, field_name, value)
+            else:
+                print(
+                    f"Warning: Segmenter instance has no attribute '{field_name}'"
+                )
+
+        return segmenter_instance
