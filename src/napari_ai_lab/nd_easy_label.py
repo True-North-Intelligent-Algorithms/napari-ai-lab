@@ -12,11 +12,10 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 from superqt.utils import ensure_main_thread
-from tnia.widgets import ParameterSlider
 
 from .InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
-from .widgets import ParameterFormWidget
+from .widgets import ParameterFormWidget, ParameterSlider
 
 
 class NDEasyLabel(QWidget):
