@@ -22,6 +22,20 @@ class Otsu3D(InteractiveSegmenterBase):
     to create binary segmentation masks for 3D volumetric images.
     """
 
+    instructions = """
+Instructions for Otsu 3D Segmentation:
+1. Automatic thresholding for 3D volumetric data (Z-stacks, time series)
+2. Lateral ROI Size: Controls XY region analysis (20-50 pixels typical)
+3. Axial ROI Size: Controls Z-direction analysis (5-15 slices typical)
+4. Two modes available via advanced options:
+   • Global: Single threshold for entire volume (default)
+   • Slice-wise: Individual threshold per Z-slice (better for varying contrast)
+5. Works with both grayscale volumes and multichannel (converts to grayscale)
+6. Points and shapes are ignored - fully automatic segmentation
+7. Ideal for: cell nuclei, fluorescent particles, consistent 3D structures
+8. Adjust ROI sizes if results are too fragmented or merged
+    """
+
     lateral_roi_size: int = field(
         metadata={
             "type": "int",

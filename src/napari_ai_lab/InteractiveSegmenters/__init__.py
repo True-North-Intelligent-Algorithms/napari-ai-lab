@@ -8,5 +8,6 @@ that can be used with napari and other image analysis workflows.
 from .InteractiveSegmenterBase import InteractiveSegmenterBase
 from .Otsu2D import Otsu2D
 from .Otsu3D import Otsu3D
+from .SAM3D import SAM3D
 
-__all__ = ["InteractiveSegmenterBase", "Otsu2D", "Otsu3D"]
+__all__ = ["InteractiveSegmenterBase", "Otsu2D", "Otsu3D", "SAM3D"]

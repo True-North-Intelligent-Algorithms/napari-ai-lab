@@ -46,6 +46,7 @@ class ParameterFormWidget(QWidget):
         self.segmenter_class = segmenter_class
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
+        self._instructions_text = None  # Instructions label widget
 
         # Main layout
         self.main_layout = QVBoxLayout(self)
@@ -72,6 +73,11 @@ class ParameterFormWidget(QWidget):
 
     def clear_form(self):
         """Clear all parameter widgets from the form."""
+        # Clear instructions widget if it exists
+        if self._instructions_text is not None:
+            self._instructions_text.deleteLater()
+            self._instructions_text = None
+
         # Clear existing widgets
         while self.form_layout.count():
             child = self.form_layout.takeAt(0)
@@ -90,11 +96,35 @@ class ParameterFormWidget(QWidget):
         ):
             return
 
+        # Check if the segmenter class has instructions
+        self._add_instructions_if_present()
+
         # Get dataclass fields
         fields = dataclasses.fields(self.segmenter_class)
 
         for field in fields:
             self._create_widget_for_field(field)
+
+    def _add_instructions_if_present(self):
+        """
+        Add instructions label if the segmenter class has instructions.
+        """
+        if hasattr(self.segmenter_class, "instructions"):
+            instructions_text = self.segmenter_class.instructions
+            if instructions_text and isinstance(instructions_text, str):
+                # Create instructions label with similar styling as nd_easy_label
+                self._instructions_text = QLabel(instructions_text)
+                self._instructions_text.setStyleSheet(
+                    "QLabel { font-size: 14px; color: #357; }"
+                )
+                self._instructions_text.setWordWrap(True)
+
+                # Add instructions at the top of the form
+                self.main_layout.addWidget(self._instructions_text)
+
+                print(
+                    f"Added instructions for {self.segmenter_class.__name__}"
+                )
 
     def _create_widget_for_field(self, field):
         """

@@ -15,7 +15,7 @@ from superqt.utils import ensure_main_thread
 
 from .InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
-from .widgets import ParameterFormWidget, ParameterSlider
+from .widgets import ParameterFormWidget
 from .writers import get_writer
 
 
@@ -77,34 +77,6 @@ class NDEasyLabel(QWidget):
 
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
-
-        # Add parameter controls
-        self.iou_threshold_slider = ParameterSlider(
-            "IoU Threshold", 0.0, 1.0, 0.7
-        )
-        self.layout().addWidget(self.iou_threshold_slider)
-
-        self.box_extension_slider = ParameterSlider(
-            "Box Extension", 0.0, 2.0, 0.5
-        )
-        self.layout().addWidget(self.box_extension_slider)
-
-        # Add instructions
-        instructions_text = """
-Instructions:
-1. Activate Points layer
-2. Draw points on objects
-3. SAM creates 3D segmentation
-4. Press 'C' to commit current label
-5. Press 'X' to erase current label
-6. Press 'V' to toggle positive/negative points
-        """
-        self.instructions_label = QLabel(instructions_text)
-        self.instructions_label.setStyleSheet(
-            "QLabel { font-size: 14px; color: #357; }"
-        )
-        self.instructions_label.setWordWrap(True)
-        self.layout().addWidget(self.instructions_label)
 
     def _on_click(self):
         print("Welcome to NDEasyLabel! Let's Go!")

@@ -22,6 +22,17 @@ class Otsu2D(InteractiveSegmenterBase):
     to create binary segmentation masks for 2D images.
     """
 
+    instructions = """
+Instructions for Otsu 2D Segmentation:
+1. Works best with images that have clear foreground/background separation
+2. Automatically finds optimal threshold - no manual tuning needed
+3. Lateral ROI Size: Affects region analysis (typically 20-50 pixels)
+4. Supports both grayscale and color images (converts color to grayscale)
+5. Points and shapes are ignored - this is fully automatic thresholding
+6. Best results with high contrast images (cells, particles, etc.)
+7. May struggle with gradual intensity transitions or noisy images
+    """
+
     lateral_roi_size: int = field(
         metadata={
             "type": "int",
