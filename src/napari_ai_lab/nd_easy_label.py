@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from superqt.utils import ensure_main_thread
 from tnia.widgets import ParameterSlider
 
 from .InteractiveSegmenters import InteractiveSegmenterBase
@@ -426,6 +427,7 @@ Instructions:
         sequence_viewer.image_changed.connect(self._on_sequence_image_changed)
         print("Connected to sequence viewer for automatic layer updates")
 
+    @ensure_main_thread
     def _on_sequence_image_changed(
         self, image_layer, image_path, parent_directory
     ):
@@ -437,13 +439,14 @@ Instructions:
             )
             return
 
+        self._processing_image_change = True
+
         # Process the image change immediately
         self._process_image_change(image_layer, image_path, parent_directory)
 
     def _process_image_change(self, image_layer, image_path, parent_directory):
         """Process the image change with simple processing lock."""
         # Set processing flag to prevent re-entrant calls
-        self._processing_image_change = True
 
         try:
             print(f"Processing image change: {image_path}")
@@ -493,3 +496,4 @@ Instructions:
             # Always clear the processing flag
             self._processing_image_change = False
             print("Finished processing image change")
+            print("==============================")
