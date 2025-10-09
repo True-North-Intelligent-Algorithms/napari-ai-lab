@@ -155,6 +155,7 @@ class NDEasyLabel(QWidget):
         points_layer = event.source
         if event.action == "added" and len(points_layer.data) > 0:
             # Get the most recently added point (last in the list)
+            # TODO: send all points to segmenter for multi-point support
             latest_point = points_layer.data[-1]
             print(f"Point added at location: {latest_point}")
 
@@ -178,6 +179,7 @@ class NDEasyLabel(QWidget):
 
             # Call segmenter with the latest point
             try:
+
                 mask = self.segmenter.segment(
                     image_data, points=[latest_point], shapes=None
                 )
