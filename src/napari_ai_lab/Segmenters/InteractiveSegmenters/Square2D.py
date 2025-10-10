@@ -21,7 +21,13 @@ class Square2D(InteractiveSegmenterBase):
     """
 
     # Instructions displayed in the UI
-    instructions = "Click points to create square regions. Adjust size parameter to control square dimensions."
+    instructions = """
+    0. This segmenter is for testing purposes only.
+    1. Select Points Layer
+    2. Click to add points
+    3. At each point a square label should appear
+    4. Adjust size parameter to control square dimensions."
+    """
 
     # Parameters with metadata for automatic UI generation
     size: int = dataclasses.field(

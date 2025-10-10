@@ -10,6 +10,7 @@ from ._widget import (
     threshold_magic_widget,
 )
 from ._writer import write_multiple, write_single_image
+from .nd_easy_segmentation import NDEasySegmentation
 
 __all__ = (
     "write_single_image",
@@ -18,4 +19,5 @@ __all__ = (
     "ImageThreshold",
     "threshold_autogenerate_widget",
     "threshold_magic_widget",
+    "NDEasySegmentation",
 )

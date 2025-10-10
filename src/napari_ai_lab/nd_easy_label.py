@@ -13,7 +13,7 @@ from qtpy.QtWidgets import (
 )
 from superqt.utils import ensure_main_thread
 
-from .InteractiveSegmenters import InteractiveSegmenterBase
+from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
 from .widgets import ParameterFormWidget
 from .writers import get_writer

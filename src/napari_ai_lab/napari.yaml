@@ -1,7 +1,7 @@
 name: napari-ai-lab
 display_name: Napari AI Lab
 # use 'hidden' to remove plugin from napari hub search results
-visibility: hidden 
+visibility: hidden
 # see https://napari.org/stable/plugins/technical_references/manifest.html#fields for valid categories
 # categories: []
 contributions:
@@ -24,6 +24,9 @@ contributions:
     - id: napari-ai-lab.nd_easy_label
       python_name: napari_ai_lab.nd_easy_label:NDEasyLabel
       title: ND Easy Label
+    - id: napari-ai-lab.nd_easy_segmentation
+      python_name: napari_ai_lab.nd_easy_segmentation:NDEasySegmentation
+      title: ND Easy Segmentation (Unified)
   widgets:
     - command: napari-ai-lab.make_container_widget
       display_name: Container Threshold
@@ -38,3 +41,5 @@ contributions:
       display_name: Easy Augment Batch DL
     - command: napari-ai-lab.nd_easy_label
       display_name: ND Easy Label
+    - command: napari-ai-lab.nd_easy_segmentation
+      display_name: ND Easy Segmentation (Unified)
