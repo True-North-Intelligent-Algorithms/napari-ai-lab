@@ -29,10 +29,13 @@ algorithms work independently of any specific visualization framework. This ensu
 # Run individual tests
 python Interactive_Otsu.py
 python Interactive_Threshold.py
-python Interactive_Square2D.py
+python Interactive_Cellpose.py      # Requires: pip install cellpose
+python Interactive_Appose_Cellpose.py  # Tests appose execution string generation
 
 # Or run from project root
 python src/napari_ai_lab/interactive_tests/Interactive_Otsu.py
+python src/napari_ai_lab/interactive_tests/Interactive_Cellpose.py
+python src/napari_ai_lab/interactive_tests/Interactive_Appose_Cellpose.py
 ```
 
 ## Dependencies
