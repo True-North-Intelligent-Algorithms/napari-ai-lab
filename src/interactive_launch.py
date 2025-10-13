@@ -2,6 +2,18 @@ import napari
 
 from napari_ai_lab.nd_easy_label import NDEasyLabel
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
+from napari_ai_lab.Segmenters.InteractiveSegmenters import (
+    SAM3D,
+    Otsu2D,
+    Otsu3D,
+    Square2D,
+)
+
+# Register all interactive segmenters
+Square2D.register()
+Otsu2D.register()
+Otsu3D.register()
+SAM3D.register()
 
 viewer = napari.Viewer()
 

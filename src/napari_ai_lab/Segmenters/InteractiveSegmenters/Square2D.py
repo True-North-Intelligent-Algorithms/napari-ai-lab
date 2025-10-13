@@ -147,6 +147,7 @@ class Square2D(InteractiveSegmenterBase):
         """
         return {"size": self.size}
 
-
-# Register this segmenter when the module is imported
-InteractiveSegmenterBase.register_framework("Square2D", Square2D)
+    @classmethod
+    def register(cls):
+        """Register this segmenter with the framework."""
+        return InteractiveSegmenterBase.register_framework("Square2D", cls)

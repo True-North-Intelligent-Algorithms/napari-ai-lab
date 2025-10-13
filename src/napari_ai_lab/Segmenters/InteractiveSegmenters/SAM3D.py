@@ -114,6 +114,7 @@ Instructions:
         else:
             return np.zeros(image.shape, dtype=np.uint8)
 
-
-# Register this segmenter when the module is imported
-InteractiveSegmenterBase.register_framework("SAM3D", SAM3D)
+    @classmethod
+    def register(cls):
+        """Register this segmenter with the framework."""
+        return InteractiveSegmenterBase.register_framework("SAM3D", cls)

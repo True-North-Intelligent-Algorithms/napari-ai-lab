@@ -111,6 +111,7 @@ Instructions for Otsu 2D Segmentation:
 
         return binary_mask.astype(np.uint8)
 
-
-# Register this segmenter when the module is imported
-InteractiveSegmenterBase.register_framework("Otsu2D", Otsu2D)
+    @classmethod
+    def register(cls):
+        """Register this segmenter with the framework."""
+        return InteractiveSegmenterBase.register_framework("Otsu2D", cls)
