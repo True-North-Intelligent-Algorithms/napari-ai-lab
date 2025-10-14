@@ -21,6 +21,7 @@ __all__ = ["GlobalSegmenterBase"]
 
 # Optional segmenters - only imported if their dependencies are available
 _OPTIONAL_SEGMENTERS = {
+    "CellposeSegmenter": ".CellposeSegmenter",
     "OtsuSegmenter": ".OtsuSegmenter",
     "ThresholdSegmenter": ".ThresholdSegmenter",
 }

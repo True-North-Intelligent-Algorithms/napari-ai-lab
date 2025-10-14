@@ -20,13 +20,13 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
+from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
 from .widgets import ParameterFormWidget
 from .writers import get_writer
 
 
-class NDEasySegmentation(QWidget):
+class NDEasySegment(QWidget):
     """
     Unified segmentation widget supporting both interactive and automatic modes.
 
@@ -165,7 +165,7 @@ class NDEasySegmentation(QWidget):
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""
         self.segmenter_combo.clear()
-        frameworks = InteractiveSegmenterBase.get_registered_frameworks()
+        frameworks = GlobalSegmenterBase.get_registered_frameworks()
 
         if frameworks:
             # Custom ordering with Square2D first for interactive mode
@@ -192,9 +192,7 @@ class NDEasySegmentation(QWidget):
             self.parameter_form.clear_form()
             return
 
-        segmenter_class = InteractiveSegmenterBase.get_framework(
-            segmenter_name
-        )
+        segmenter_class = GlobalSegmenterBase.get_framework(segmenter_name)
         if segmenter_class:
             self.parameter_form.set_segmenter_class(segmenter_class)
             print(f"Selected segmenter: {segmenter_name}")
@@ -206,9 +204,7 @@ class NDEasySegmentation(QWidget):
             self.parameter_form.clear_form()
 
         # Create segmenter instance
-        self.segmenter = InteractiveSegmenterBase.get_framework(
-            segmenter_name
-        )()
+        self.segmenter = GlobalSegmenterBase.get_framework(segmenter_name)()
 
     def _on_parameters_changed(self, parameters):
         """Handle changes to segmenter parameters."""

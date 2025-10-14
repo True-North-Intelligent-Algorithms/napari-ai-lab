@@ -120,8 +120,9 @@ Simple Threshold Segmentation:
         """
         return {"threshold": self.threshold, "invert_mask": self.invert_mask}
 
-
-# Register this segmenter when the module is imported
-GlobalSegmenterBase.register_framework(
-    "ThresholdSegmenter", ThresholdSegmenter
-)
+    @classmethod
+    def register(cls):
+        """Register this segmenter with the framework."""
+        return GlobalSegmenterBase.register_framework(
+            "ThresholdSegmenter", cls
+        )

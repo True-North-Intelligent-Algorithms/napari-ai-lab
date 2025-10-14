@@ -154,6 +154,7 @@ Otsu Automatic Segmentation:
         """
         return {"invert_mask": self.invert_mask}
 
-
-# Register this segmenter when the module is imported
-GlobalSegmenterBase.register_framework("OtsuSegmenter", OtsuSegmenter)
+    @classmethod
+    def register(cls):
+        """Register this segmenter with the framework."""
+        return GlobalSegmenterBase.register_framework("OtsuSegmenter", cls)
