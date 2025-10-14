@@ -268,7 +268,7 @@ import appose
 ndarr_mask = appose.NDArray(dtype=str(result.dtype), shape=result.shape)
 ndarr_mask.ndarray()[:] = result
 
-task.outputs["cellpose_mask"] = ndarr_mask
+task.outputs["mask"] = ndarr_mask
 '''
 
         print(

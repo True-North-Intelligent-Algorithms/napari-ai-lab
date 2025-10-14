@@ -12,41 +12,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import data
 
+from napari_ai_lab.Segmenters.execute_appose import execute_appose
 from napari_ai_lab.Segmenters.GlobalSegmenters.CellposeSegmenter import (
     CellposeSegmenter,
 )
 
 # Remote cellpose environment path
 CELLPOSE_ENV_PATH = "C:\\Users\\bnort\\miniconda3\\envs\\microsam_cellpose"
-
-
-def execute_remote_cellpose(image, segmenter):
-    """Execute cellpose remotely via appose."""
-    try:
-        import appose
-
-        execution_string = segmenter.get_execution_string(image)
-
-        env = appose.base(CELLPOSE_ENV_PATH).build()
-        ndarr_img = appose.NDArray(dtype=str(image.dtype), shape=image.shape)
-        ndarr_img.ndarray()[:] = image
-
-        with env.python() as python:
-            task = python.task(
-                execution_string, inputs={"image": ndarr_img}, queue="main"
-            )
-            task.wait_for()
-
-            if task.error:
-                print(f"⚠️  Task error: {task.error}")
-                return None
-
-            result = task.outputs.get("cellpose_mask", None)
-            return result
-
-    except (ImportError, AttributeError, RuntimeError, OSError) as e:
-        print(f"❌ Remote execution failed: {e}")
-        return None
 
 
 def test_cellpose_interactive():
@@ -94,7 +66,7 @@ def test_cellpose_interactive():
         else:
             # Remote execution via appose
             print("🌐 Running cellpose with Appose...")
-            result = execute_remote_cellpose(image, segmenter)
+            result = execute_appose(image, segmenter, CELLPOSE_ENV_PATH)
 
             mask_array = result.ndarray()
             num_cells = len(np.unique(mask_array)) - 1
