@@ -15,7 +15,7 @@ from superqt.utils import ensure_main_thread
 
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
-from .widgets import ParameterFormWidget
+from .widgets import SegmenterWidget
 from .writers import get_writer
 
 
@@ -69,7 +69,7 @@ class NDEasyLabel(QWidget):
         self.layout().addWidget(self.segmenter_combo)
 
         # Parameter form widget for segmenter parameters
-        self.parameter_form = ParameterFormWidget()
+        self.parameter_form = SegmenterWidget()
         self.parameter_form.parameters_changed.connect(
             self._on_parameters_changed
         )

@@ -1,8 +1,8 @@
 """
-Parameter Form Widget for Interactive Segmenters.
+Segmenter Widget for Interactive and Global Segmenters.
 
 This module provides a widget that automatically generates form elements
-for parameters defined in Interactive Segmenter dataclasses.
+for parameters defined in Segmenter dataclasses.
 """
 
 import dataclasses
@@ -22,11 +22,11 @@ from qtpy.QtWidgets import (
 )
 
 
-class ParameterFormWidget(QWidget):
+class SegmenterWidget(QWidget):
     """
     A widget that automatically generates form elements from dataclass parameters.
 
-    This widget inspects the dataclass fields of an Interactive Segmenter
+    This widget inspects the dataclass fields of a Segmenter (Interactive or Global)
     and creates appropriate Qt input widgets based on the field metadata.
     """
 
@@ -35,10 +35,10 @@ class ParameterFormWidget(QWidget):
 
     def __init__(self, segmenter_class=None, parent=None):
         """
-        Initialize the parameter form widget.
+        Initialize the segmenter widget.
 
         Args:
-            segmenter_class: The Interactive Segmenter class (dataclass) to parse parameters from.
+            segmenter_class: The Segmenter class (dataclass) to parse parameters from.
             parent: Parent widget.
         """
         super().__init__(parent)
@@ -47,6 +47,8 @@ class ParameterFormWidget(QWidget):
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
         self._instructions_text = None  # Instructions label widget
+        self._axis_combo = None  # Axis selection combo box
+        self.selected_axis = None  # Currently selected axis
 
         # Main layout
         self.main_layout = QVBoxLayout(self)
@@ -65,7 +67,7 @@ class ParameterFormWidget(QWidget):
         Set the segmenter class and rebuild the parameter form.
 
         Args:
-            segmenter_class: The Interactive Segmenter class (dataclass) to parse parameters from.
+            segmenter_class: The Segmenter class (dataclass) to parse parameters from.
         """
         self.segmenter_class = segmenter_class
         self.clear_form()
@@ -78,6 +80,11 @@ class ParameterFormWidget(QWidget):
             self._instructions_text.deleteLater()
             self._instructions_text = None
 
+        # Clear axis combo if it exists
+        if self._axis_combo is not None:
+            self._axis_combo.deleteLater()
+            self._axis_combo = None
+
         # Clear existing widgets
         while self.form_layout.count():
             child = self.form_layout.takeAt(0)
@@ -86,6 +93,7 @@ class ParameterFormWidget(QWidget):
 
         self.parameter_widgets.clear()
         self.parameter_values.clear()
+        self.selected_axis = None
 
     def parse_parameters(self):
         """
@@ -98,6 +106,9 @@ class ParameterFormWidget(QWidget):
 
         # Check if the segmenter class has instructions
         self._add_instructions_if_present()
+
+        # Add axis selection if segmenter supports multiple axes
+        self._add_axis_selection_if_present()
 
         # Get dataclass fields
         fields = dataclasses.fields(self.segmenter_class)
@@ -125,6 +136,51 @@ class ParameterFormWidget(QWidget):
                 print(
                     f"Added instructions for {self.segmenter_class.__name__}"
                 )
+
+    def _add_axis_selection_if_present(self):
+        """
+        Add axis selection combo box if the segmenter supports multiple axes.
+        """
+        if hasattr(self.segmenter_class, "supported_axes"):
+            try:
+                # Create a temporary instance to get supported axes
+                temp_instance = self.segmenter_class()
+                supported_axes = temp_instance.supported_axes
+
+                if supported_axes and len(supported_axes) > 1:
+                    from qtpy.QtWidgets import QComboBox
+
+                    # Create axis selection combo box
+                    self._axis_combo = QComboBox()
+
+                    for axis in supported_axes:
+                        self._axis_combo.addItem(axis)
+
+                    # Set default to first axis
+                    self.selected_axis = supported_axes[0]
+
+                    # Connect value changes
+                    self._axis_combo.currentTextChanged.connect(
+                        self._on_axis_changed
+                    )
+
+                    # Add to form with label
+                    axis_label = QLabel("Axis to Process:")
+                    self.form_layout.addRow(axis_label, self._axis_combo)
+
+                    print(
+                        f"Added axis selection for {self.segmenter_class.__name__}: {supported_axes}"
+                    )
+
+            except (TypeError, ValueError, AttributeError, RuntimeError) as e:
+                print(
+                    f"Could not get supported axes for {self.segmenter_class.__name__}: {e}"
+                )
+
+    def _on_axis_changed(self, axis_text):
+        """Handle axis selection changes."""
+        self.selected_axis = axis_text
+        print(f"Selected axis: {axis_text}")
 
     def _create_widget_for_field(self, field):
         """
@@ -160,6 +216,10 @@ class ParameterFormWidget(QWidget):
             )
         elif field_type == "bool":
             widget = self._create_bool_widget(field_name, default_val)
+        elif field_type == "str" and "choices" in metadata:
+            widget = self._create_choice_widget(
+                field_name, metadata["choices"], default_val
+            )
         else:
             # Default to a generic widget (could be extended for strings, etc.)
             widget = QLabel(f"Unsupported type: {field_type}")
@@ -282,6 +342,29 @@ class ParameterFormWidget(QWidget):
 
         return checkbox
 
+    def _create_choice_widget(
+        self, field_name: str, choices: list, default_val: str | None
+    ):
+        """Create a choice widget (combobox) for string parameters with predefined options."""
+        from qtpy.QtWidgets import QComboBox
+
+        combobox = QComboBox()
+
+        for choice in choices:
+            combobox.addItem(choice)
+
+        if default_val is not None and default_val in choices:
+            combobox.setCurrentText(default_val)
+
+        # Connect value changes
+        combobox.currentTextChanged.connect(
+            lambda text, name=field_name: self._on_parameter_changed(
+                name, text
+            )
+        )
+
+        return combobox
+
     def _on_parameter_changed(self, field_name: str, value: Any):
         """
         Handle parameter value changes.
@@ -320,6 +403,8 @@ class ParameterFormWidget(QWidget):
                     widget.setValue(value)
                 elif isinstance(widget, QCheckBox):
                     widget.setChecked(value)
+                elif hasattr(widget, "setCurrentText"):  # ComboBox
+                    widget.setCurrentText(str(value))
 
                 # Update stored value
                 self.parameter_values[field_name] = value
@@ -365,3 +450,27 @@ class ParameterFormWidget(QWidget):
                 )
 
         return segmenter_instance
+
+    def get_selected_axis(self):
+        """
+        Get the currently selected axis configuration.
+
+        Returns:
+            str: The selected axis configuration (e.g., "YX", "ZYX", etc.) or None if no axis selected.
+        """
+        return self.selected_axis
+
+    def set_selected_axis(self, axis):
+        """
+        Set the selected axis configuration.
+
+        Args:
+            axis (str): The axis configuration to select.
+        """
+        if self._axis_combo is not None:
+            index = self._axis_combo.findText(axis)
+            if index >= 0:
+                self._axis_combo.setCurrentIndex(index)
+                self.selected_axis = axis
+            else:
+                print(f"Warning: Axis '{axis}' not found in available options")

@@ -63,7 +63,8 @@ Simple Threshold Segmentation:
         Returns:
             list: Supported axis configurations for threshold segmentation.
         """
-        return ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC", "TZYX", "TZYXC"]
+        # return ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC", "TZYX", "TZYXC"]
+        return ["YX", "YXC"]
 
     def segment(self, image, **kwargs):
         """

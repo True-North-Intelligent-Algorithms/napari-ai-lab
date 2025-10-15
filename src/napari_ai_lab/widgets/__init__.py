@@ -4,7 +4,7 @@ Widgets module for napari-ai-lab.
 This module contains custom Qt widgets for the napari-ai-lab plugin.
 """
 
-from .parameter_form_widget import ParameterFormWidget
 from .parameter_slider import ParameterSlider
+from .segmenter_widget import SegmenterWidget
 
-__all__ = ["ParameterFormWidget", "ParameterSlider"]
+__all__ = ["SegmenterWidget", "ParameterSlider"]

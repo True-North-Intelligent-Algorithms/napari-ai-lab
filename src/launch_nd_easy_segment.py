@@ -1,6 +1,7 @@
 import napari
 
 from napari_ai_lab.nd_easy_segment import NDEasySegment
+from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
 from napari_ai_lab.Segmenters.GlobalSegmenters import (
     CellposeSegmenter,
     ThresholdSegmenter,
@@ -19,6 +20,18 @@ parent_dir = (
 nd_easy_segment_widget = NDEasySegment(viewer)
 viewer.window.add_dock_widget(nd_easy_segment_widget)
 
-nd_easy_segment_widget.load_image_directory(parent_dir)
+# nd_easy_segment_widget.load_image_directory(parent_dir)
+
+# Add the NDSequenceViewer widget to the viewer
+nd_sequence_viewer_widget = NDSequenceViewer(viewer)
+viewer.window.add_dock_widget(
+    nd_sequence_viewer_widget, name="Sequence Viewer", area="bottom"
+)
+
+# Connect sequence viewer to easy segment for automatic layer updates
+nd_easy_segment_widget.connect_sequence_viewer(nd_sequence_viewer_widget)
+
+# Automatically load images from the parent directory into sequence viewer
+nd_sequence_viewer_widget._load_image_list(parent_dir)
 
 napari.run()

@@ -5,6 +5,8 @@ This module provides a unified interface for both interactive (point/shape-based
 and automatic (full plane/volume) segmentation workflows.
 """
 
+import contextlib
+
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
@@ -19,10 +21,11 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from superqt.utils import ensure_main_thread
 
 from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
-from .widgets import ParameterFormWidget
+from .widgets import SegmenterWidget
 from .writers import get_writer
 
 
@@ -98,7 +101,7 @@ class NDEasySegment(QWidget):
         main_layout.addWidget(self.segmenter_combo)
 
         # Parameter form widget
-        self.parameter_form = ParameterFormWidget()
+        self.parameter_form = SegmenterWidget()
         self.parameter_form.parameters_changed.connect(
             self._on_parameters_changed
         )
@@ -126,7 +129,7 @@ class NDEasySegment(QWidget):
         info_label = QLabel(
             "Click points or draw shapes on the image to segment."
         )
-        info_label.setWordWrap(True)
+
         interactive_layout.addWidget(info_label)
 
         main_layout.addWidget(self.interactive_info_group)
@@ -270,7 +273,22 @@ class NDEasySegment(QWidget):
             return
 
         print("Segmenting current image...")
-        self._segment_image_automatically(self.image_layer.data)
+
+        # Print the axis mode the user chose
+        selected_axis = self.parameter_form.get_selected_axis()
+        print(f"User selected axis mode: {selected_axis}")
+
+        # Extract current YX slice (last two dimensions are Y,X)
+
+        indices = self.viewer.dims.current_step[:-2] + (
+            slice(None),
+            slice(None),
+        )
+        current_yx_slice = self.image_layer.data[indices]
+
+        print(f"Current YX slice shape: {current_yx_slice.shape}")
+
+        self._segment_image_automatically(current_yx_slice)
 
     def _on_segment_all(self):
         """Segment all images in the directory automatically."""
@@ -301,7 +319,11 @@ class NDEasySegment(QWidget):
 
             # Apply mask to labels layer
             if self.label_layer is not None:
-                self.label_layer.data[mask] = self.current_label_num
+                indices = self.viewer.dims.current_step[:-2] + (
+                    slice(None),
+                    slice(None),
+                )
+                self.label_layer.data[indices] = mask  # self.current_label_num
                 self.current_label_num += 1
                 self.label_layer.refresh()
                 print("Automatic segmentation completed")
@@ -388,6 +410,9 @@ class NDEasySegment(QWidget):
 
             print(f"Successfully set up layers for image: {image_layer.name}")
 
+            # move image layer to bottom
+            # self.viewer.layers.move(self.image_layer, len(self.viewer.layers)-1)
+
         except (
             AttributeError,
             ValueError,
@@ -431,6 +456,26 @@ class NDEasySegment(QWidget):
             ndim=annotation_ndim,
         )
 
+    def _save_current_labels(self):
+        """Save the current labels using the configured writer."""
+        if not all(
+            [
+                self.current_image_path,
+                self.current_parent_directory,
+                self.label_layer,
+            ]
+        ):
+            print(
+                "✗ Cannot save labels - missing image context or label layer"
+            )
+            return False
+
+        return self.label_writer.save_labels(
+            self.label_layer.data,
+            self.current_image_path,
+            self.current_parent_directory,
+        )
+
     def _load_existing_labels(self, image_shape):
         """Load existing labels or create empty ones."""
         if not all([self.current_image_path, self.current_parent_directory]):
@@ -440,3 +485,141 @@ class NDEasySegment(QWidget):
         return self.label_writer.load_labels(
             self.current_image_path, self.current_parent_directory, image_shape
         )
+
+    def connect_sequence_viewer(self, sequence_viewer):
+        """Connect to sequence viewer for automatic layer updates."""
+        sequence_viewer.image_changed.connect(self._on_sequence_image_changed)
+        print("Connected to sequence viewer for automatic layer updates")
+
+    @ensure_main_thread
+    def _on_sequence_image_changed(
+        self, image_layer, image_path, parent_directory
+    ):
+        """Handle sequence viewer image changes with simple processing lock to prevent crashes."""
+        # If we're already processing a signal, ignore this one to prevent conflicts
+        if self._processing_image_change:
+            print(
+                "Signal received while processing - ignoring to prevent conflicts"
+            )
+            return
+
+        self._processing_image_change = True
+
+        # Process the image change immediately
+        self._process_image_change(image_layer, image_path, parent_directory)
+
+    def _process_image_change(self, image_layer, image_path, parent_directory):
+        """Process the image change with simple processing lock."""
+        # Set processing flag to prevent re-entrant calls
+
+        try:
+            print(f"Processing image change: {image_path}")
+
+            # Save current labels before switching (if we have a current context)
+            if (
+                self.current_image_path
+                and self.current_parent_directory
+                and self.label_layer
+            ):
+                print(f"Saving current labels for: {self.current_image_path}")
+                self._save_current_labels()
+            else:
+                print("No current labels to save (first image or no context)")
+
+            print("Switching images")
+
+            if image_layer and image_path and parent_directory:
+                print(f"Setting up new image: {image_layer.name}")
+                print(f"New image path: {image_path}")
+                print(f"New parent directory: {parent_directory}")
+
+                # Clean up existing layers BEFORE updating context
+                print("Cleaning up old layers...")
+                self._cleanup_existing_layers()
+
+                # Update current context AFTER cleanup
+                print("Updating context...")
+                self.current_image_path = image_path
+                self.current_parent_directory = parent_directory
+
+                # Small delay to let Napari properly release layer resources
+                import time
+
+                time.sleep(0.05)  # 50ms delay
+
+                print("Creating new layers with fresh labels...")
+                self._set_image_layer(image_layer)
+            else:
+                print("Received invalid image data from sequence viewer")
+                self._cleanup_existing_layers()
+                # Clear current context
+                self.current_image_path = None
+                self.current_parent_directory = None
+
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            AttributeError,
+            KeyError,
+        ) as e:
+            print(f"Error processing image change: {e}")
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            # Always clear the processing flag
+            self._processing_image_change = False
+            print("Finished processing image change")
+            print("==============================")
+
+    def _cleanup_existing_layers(self):
+        """Remove existing annotation layers from viewer safely."""
+        print("Starting layer cleanup...")
+
+        # NOTE: Label saving is now handled in _process_image_change before calling this method
+        # This prevents duplicate saves and context confusion
+
+        # Disconnect event handlers first to prevent callbacks during cleanup
+        if self.points_layer:
+            with contextlib.suppress(Exception):
+                self.points_layer.events.data.disconnect(
+                    self._on_points_changed
+                )
+
+        if self.shapes_layer:
+            with contextlib.suppress(Exception):
+                self.shapes_layer.events.data.disconnect(
+                    self._on_shapes_changed
+                )
+
+        # Remove layers one by one with proper error handling
+        layers_to_remove = [
+            ("label", self.label_layer),
+            ("points", self.points_layer),
+            ("shapes", self.shapes_layer),
+        ]
+
+        for layer_name, layer in layers_to_remove:
+            if layer:
+                try:
+                    if layer in self.viewer.layers:
+                        print(f"Removing {layer_name} layer: {layer.name}")
+                        self.viewer.layers.remove(layer)
+                        print(f"Successfully removed {layer_name} layer")
+                    else:
+                        print(f"{layer_name} layer not in viewer")
+                except (
+                    ValueError,
+                    KeyError,
+                    AttributeError,
+                    RuntimeError,
+                ) as e:
+                    print(f"Error removing {layer_name} layer: {e}")
+
+        # Reset references
+        self.label_layer = None
+        self.points_layer = None
+        self.shapes_layer = None
+
+        print("Completed layer cleanup")
