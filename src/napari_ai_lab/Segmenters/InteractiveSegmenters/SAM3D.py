@@ -11,6 +11,17 @@ import numpy as np
 
 from .InteractiveSegmenterBase import InteractiveSegmenterBase
 
+try:
+    from micro_sam.sam_annotator._state import AnnotatorState
+
+    is_micro_sam_available = True
+except ImportError:
+    AnnotatorState = None
+    is_micro_sam_available = False
+    print(
+        "Warning: micro_sam is not installed. SAM3D segmenter will not work."
+    )
+
 
 @dataclass
 class SAM3D(InteractiveSegmenterBase):
@@ -96,6 +107,22 @@ Instructions:
             raise ValueError(
                 f"SAM3D only supports 3D images. Got shape: {image.shape}"
             )
+
+        # Show message box asking about embeddings
+        from qtpy.QtWidgets import QMessageBox
+
+        reply = QMessageBox.question(
+            None,
+            "SAM3D Segmenter",
+            "SAM3D segmenter has been called. Do you want to generate embedding?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+
+        if reply == QMessageBox.Yes:
+            print("User chose to generate embeddings")
+        else:
+            print("User chose not to generate embeddings")
 
         # TODO: Implement SAM3D segmentation logic
         # For now, return empty segmentation for GUI testing
