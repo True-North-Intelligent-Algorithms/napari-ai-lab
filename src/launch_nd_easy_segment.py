@@ -1,5 +1,6 @@
 import napari
 
+from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.nd_easy_segment import NDEasySegment
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
 from napari_ai_lab.Segmenters.GlobalSegmenters import (
@@ -33,6 +34,7 @@ viewer.window.add_dock_widget(
 nd_easy_segment_widget.connect_sequence_viewer(nd_sequence_viewer_widget)
 
 # Automatically load images from the parent directory into sequence viewer
-nd_sequence_viewer_widget._load_image_list(parent_dir)
+model = ImageDataModel(parent_dir)
+nd_sequence_viewer_widget.set_image_data_model(model)
 
 napari.run()

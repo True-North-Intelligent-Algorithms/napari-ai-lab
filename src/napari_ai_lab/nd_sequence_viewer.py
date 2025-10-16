@@ -119,10 +119,6 @@ class NDSequenceViewer(QWidget):
             print(f"Error setting image model: {e}")
             self._reset_display()
 
-    def _load_image_list(self, directory):
-        """Legacy method for compatibility - creates model internally."""
-        self.set_image_data_model(ImageDataModel(directory))
-
     def _on_scroll_changed(self, value):
         """Handle scroll bar value changes - load new image."""
 
