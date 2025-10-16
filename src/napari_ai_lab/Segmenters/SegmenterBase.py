@@ -67,14 +67,9 @@ class SegmenterBase:
         """
         return list(cls.registry.keys())
 
-    def __init__(self, name=None):
-        """
-        Initialize the segmenter.
-
-        Args:
-            name (str, optional): Name of this segmenter instance.
-        """
-        self.name = name or self.__class__.__name__
+    def __init__(self):
+        """Initialize the segmenter."""
+        self.name = self.__class__.__name__
 
     @property
     def supported_axes(self):

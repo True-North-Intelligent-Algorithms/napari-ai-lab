@@ -22,11 +22,11 @@ class Square2D(InteractiveSegmenterBase):
 
     # Instructions displayed in the UI
     instructions = """
-    0. This segmenter is for testing purposes only.
-    1. Select Points Layer
-    2. Click to add points
-    3. At each point a square label should appear
-    4. Adjust size parameter to control square dimensions."
+0. This segmenter is for testing purposes only.
+1. Select Points Layer
+2. Click to add points
+3. At each point a square label should appear
+4. Adjust size parameter to control square dimensions."
     """
 
     # Parameters with metadata for automatic UI generation
@@ -41,14 +41,8 @@ class Square2D(InteractiveSegmenterBase):
         },
     )
 
-    def __init__(self, name=None):
-        """
-        Initialize the SAM3D segmenter.
-
-        Args:
-            name (str, optional): Name of this segmenter instance.
-        """
-        super().__init__(name)
+    def __init__(self):
+        super().__init__()
 
     @property
     def supported_axes(self) -> list[str]:

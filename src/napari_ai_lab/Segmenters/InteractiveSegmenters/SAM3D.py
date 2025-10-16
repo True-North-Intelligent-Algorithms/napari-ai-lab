@@ -68,14 +68,9 @@ Instructions:
         }
     )
 
-    def __init__(self, name=None):
-        """
-        Initialize the SAM3D segmenter.
-
-        Args:
-            name (str, optional): Name of this segmenter instance.
-        """
-        super().__init__(name)
+    def __init__(self):
+        """Initialize the SAM3D segmenter."""
+        super().__init__()
 
     @property
     def supported_axes(self):

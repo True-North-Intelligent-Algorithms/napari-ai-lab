@@ -46,14 +46,9 @@ Instructions for Otsu 2D Segmentation:
         }
     )
 
-    def __init__(self, name=None):
-        """
-        Initialize the Otsu2D segmenter.
-
-        Args:
-            name (str, optional): Name of this segmenter instance.
-        """
-        super().__init__(name)
+    def __init__(self):
+        """Initialize the Otsu2D segmenter."""
+        super().__init__()
 
     @property
     def supported_axes(self):
