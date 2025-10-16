@@ -149,16 +149,6 @@ class BaseNDEasyWidget(QWidget):
         # TODO: Move implementation from both widgets
         raise NotImplementedError("To be implemented in next step")
 
-    def _save_current_labels(self):
-        """Save the current labels using the configured writer."""
-        # TODO: Move implementation from both widgets (nd_easy_segment version)
-        raise NotImplementedError("To be implemented in next step")
-
-    def save_labels_now(self):
-        """Public method to manually save current labels immediately."""
-        # TODO: Move implementation from nd_easy_label
-        raise NotImplementedError("To be implemented in next step")
-
     def connect_sequence_viewer(self, sequence_viewer):
         """Connect to sequence viewer for automatic layer updates."""
         sequence_viewer.image_changed.connect(self._on_sequence_image_changed)
