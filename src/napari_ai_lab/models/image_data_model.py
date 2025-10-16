@@ -109,5 +109,16 @@ class ImageDataModel:
         # Use existing _scan_images functionality
         self._scan_images()
 
+    def get_label_writer(self):
+        """
+        Get a label writer for this model.
+
+        Returns:
+            BaseWriter: A numpy writer instance for label persistence
+        """
+        from ..writers import get_writer
+
+        return get_writer("numpy")
+
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"

@@ -23,6 +23,8 @@ parent_dir = (
     r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
 )
 
+model = ImageDataModel(parent_dir)
+
 # Add the NDSequenceViewer widget to the viewer
 nd_sequence_viewer_widget = NDSequenceViewer(viewer)
 viewer.window.add_dock_widget(
@@ -30,7 +32,7 @@ viewer.window.add_dock_widget(
 )
 
 # Add the NDEasyLabel widget to the viewer
-nd_easy_label_widget = NDEasyLabel(viewer)
+nd_easy_label_widget = NDEasyLabel(viewer, model)
 viewer.window.add_dock_widget(
     nd_easy_label_widget, name="ND Easy Label", area="right"
 )
@@ -39,7 +41,6 @@ viewer.window.add_dock_widget(
 nd_easy_label_widget.connect_sequence_viewer(nd_sequence_viewer_widget)
 
 # Automatically load images from the parent directory into sequence viewer
-model = ImageDataModel(parent_dir)
 nd_sequence_viewer_widget.set_image_data_model(model)
 
 napari.run()

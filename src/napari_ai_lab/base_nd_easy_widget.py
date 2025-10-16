@@ -8,7 +8,6 @@ NDEasyLabel and NDEasySegment widgets.
 import contextlib
 
 import napari
-import numpy as np
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -16,8 +15,8 @@ from qtpy.QtWidgets import (
 )
 from superqt.utils import ensure_main_thread
 
+from .models import ImageDataModel
 from .utility import load_images_from_directory, pad_to_largest
-from .writers import get_writer
 
 
 class BaseNDEasyWidget(QWidget):
@@ -30,7 +29,9 @@ class BaseNDEasyWidget(QWidget):
     Common attributes and methods will be moved here progressively to reduce code duplication.
     """
 
-    def __init__(self, viewer: "napari.viewer.Viewer"):
+    def __init__(
+        self, viewer: "napari.viewer.Viewer", image_data_model: ImageDataModel
+    ):
         """
         Initialize the base widget with common setup.
 
@@ -39,6 +40,7 @@ class BaseNDEasyWidget(QWidget):
         """
         super().__init__()
         self.viewer = viewer
+        self.image_data_model = image_data_model
 
         # Initialize layer references (common to both widgets)
         self.image_layer = None
@@ -51,13 +53,12 @@ class BaseNDEasyWidget(QWidget):
 
         # Track current image context (common to both widgets)
         self.current_image_path = None
-        self.current_parent_directory = None
 
         # Signal processing state protection (common to both widgets)
         self._processing_image_change = False
 
-        # Initialize label writer (common to both widgets)
-        self.label_writer = get_writer("numpy")
+        # Initialize label writer from model (common to both widgets)
+        self.label_writer = self.image_data_model.get_label_writer()
 
         # Segmenter management (common to both widgets)
         self.segmenter = None
@@ -155,9 +156,7 @@ class BaseNDEasyWidget(QWidget):
         print("Connected to sequence viewer for automatic layer updates")
 
     @ensure_main_thread
-    def _on_sequence_image_changed(
-        self, image_layer, image_path, parent_directory
-    ):
+    def _on_sequence_image_changed(self, image_layer, image_path):
         """Handle sequence viewer image changes with simple processing lock to prevent crashes."""
         # If we're already processing a signal, ignore this one to prevent conflicts
         if self._processing_image_change:
@@ -169,13 +168,7 @@ class BaseNDEasyWidget(QWidget):
         self._processing_image_change = True
 
         # Process the image change immediately
-        self._process_image_change(image_layer, image_path, parent_directory)
-
-    def _process_image_change(self, image_layer, image_path, parent_directory):
-        """Process the image change - must be implemented by child classes."""
-        raise NotImplementedError(
-            "Child classes must implement _process_image_change"
-        )
+        self._process_image_change(image_layer, image_path)
 
     def _cleanup_existing_layers(self):
         """Remove existing annotation layers from viewer safely."""
@@ -228,8 +221,8 @@ class BaseNDEasyWidget(QWidget):
 
         print("Completed layer cleanup")
 
-    def _process_image_change(self, image_layer, image_path, parent_directory):
-        """Process the image change with simple processing lock."""
+    def _process_image_change(self, image_layer, image_path):
+        """Process  image change with simple processing lock."""
         # Set processing flag to prevent re-entrant calls
 
         try:
@@ -238,20 +231,18 @@ class BaseNDEasyWidget(QWidget):
             # Save current labels before switching (if we have a current context)
             if (
                 self.current_image_path
-                and self.current_parent_directory
+                and self.image_data_model.parent_directory
                 and self.label_layer
             ):
-                print(f"Saving current labels for: {self.current_image_path}")
                 self._save_current_labels()
             else:
                 print("No current labels to save (first image or no context)")
 
             print("Switching images")
 
-            if image_layer and image_path and parent_directory:
+            if image_layer and image_path:
                 print(f"Setting up new image: {image_layer.name}")
                 print(f"New image path: {image_path}")
-                print(f"New parent directory: {parent_directory}")
 
                 # Clean up existing layers BEFORE updating context
                 print("Cleaning up old layers...")
@@ -260,7 +251,7 @@ class BaseNDEasyWidget(QWidget):
                 # Update current context AFTER cleanup
                 print("Updating context...")
                 self.current_image_path = image_path
-                self.current_parent_directory = parent_directory
+                # parent_directory is managed by image_data_model, no need to store locally
 
                 # Small delay to let Napari properly release layer resources
                 import time
@@ -274,7 +265,7 @@ class BaseNDEasyWidget(QWidget):
                 self._cleanup_existing_layers()
                 # Clear current context
                 self.current_image_path = None
-                self.current_parent_directory = None
+                # parent_directory is managed by image_data_model
 
         except (
             OSError,
@@ -295,32 +286,20 @@ class BaseNDEasyWidget(QWidget):
 
     def _load_existing_labels(self, image_shape):
         """Load existing labels or create empty ones."""
-        if not all([self.current_image_path, self.current_parent_directory]):
-            print("No image context for loading labels")
-            return np.zeros(image_shape, dtype=np.uint16)
 
         return self.label_writer.load_labels(
-            self.current_image_path, self.current_parent_directory, image_shape
+            self.current_image_path,
+            self.image_data_model.parent_directory,
+            image_shape,
         )
 
     def _save_current_labels(self):
         """Save the current labels using the configured writer."""
-        if not all(
-            [
-                self.current_image_path,
-                self.current_parent_directory,
-                self.label_layer,
-            ]
-        ):
-            print(
-                "✗ Cannot save labels - missing image context or label layer"
-            )
-            return False
 
         return self.label_writer.save_labels(
             self.label_layer.data,
             self.current_image_path,
-            self.current_parent_directory,
+            self.image_data_model.parent_directory,
         )
 
     def _on_parameters_changed(self, parameters):
@@ -358,7 +337,7 @@ class BaseNDEasyWidget(QWidget):
     # - self.viewer
     # - self.image_layer, self.label_layer, self.points_layer, self.shapes_layer
     # - self.current_label_num
-    # - self.current_image_path, self.current_parent_directory
+    # - self.current_image_path (parent_directory managed by image_data_model)
     # - self._processing_image_change
     # - self.label_writer
     # - self.segmenter

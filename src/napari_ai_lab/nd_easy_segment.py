@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
 )
 
 from .base_nd_easy_widget import BaseNDEasyWidget
+from .models import ImageDataModel
 from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 from .widgets import SegmenterWidget
 
@@ -31,8 +32,10 @@ class NDEasySegment(BaseNDEasyWidget):
     - Automatic Mode: Full plane/volume segmentation (like nd_easy_segment)
     """
 
-    def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__(viewer)
+    def __init__(
+        self, viewer: "napari.viewer.Viewer", image_data_model: ImageDataModel
+    ):
+        super().__init__(viewer, image_data_model)
 
         # Setup UI
         self._setup_ui()
@@ -209,7 +212,7 @@ class NDEasySegment(BaseNDEasyWidget):
                     image_data,
                     points=[latest_point],
                     shapes=None,
-                    parent_directory=self.current_parent_directory,
+                    parent_directory=self.image_data_model.parent_directory,
                 )
 
                 self.label_layer.data[mask] = self.current_label_num
@@ -282,7 +285,7 @@ class NDEasySegment(BaseNDEasyWidget):
                 image_data,
                 points=None,
                 shapes=None,
-                parent_directory=self.current_parent_directory,
+                parent_directory=self.image_data_model.parent_directory,
             )
 
             # Apply mask to labels layer

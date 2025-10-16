@@ -8,6 +8,7 @@ from qtpy.QtWidgets import (
 )
 
 from .base_nd_easy_widget import BaseNDEasyWidget
+from .models import ImageDataModel
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
 from .widgets import SegmenterWidget
 
@@ -15,8 +16,12 @@ from .widgets import SegmenterWidget
 class NDEasyLabel(BaseNDEasyWidget):
     # your QWidget.__init__ can optionally request the napari viewer instance
     # use a type annotation of 'napari.viewer.Viewer' for any parameter
-    def __init__(self, viewer: "napari.viewer.Viewer"):
-        super().__init__(viewer)
+    def __init__(
+        self,
+        viewer: "napari.viewer.Viewer",
+        image_data_model: "ImageDataModel",
+    ):
+        super().__init__(viewer, image_data_model)
         self.setup_ui()
 
     def setup_ui(self):
@@ -147,7 +152,7 @@ class NDEasyLabel(BaseNDEasyWidget):
                     image_data,
                     points=[latest_point],
                     shapes=None,
-                    parent_directory=self.current_parent_directory,
+                    parent_directory=self.image_data_model.parent_directory,
                 )
 
                 # Apply the mask to the labels layer
