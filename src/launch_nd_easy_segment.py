@@ -13,7 +13,8 @@ ThresholdSegmenter.register()
 
 viewer = napari.Viewer()
 parent_dir = (
-    r"D:\images\tnia-python-images\imagesc\2025_09_29_gray_scale_3d_test_set"
+    # r"D:\images\tnia-python-images\imagesc\2025_09_29_gray_scale_3d_test_set"
+    r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
 )
 
 # Add the NDEasySegment widget to the viewer

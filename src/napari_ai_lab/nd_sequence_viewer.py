@@ -1,5 +1,4 @@
 import contextlib
-from pathlib import Path
 
 import napari
 from qtpy.QtCore import Qt, Signal
@@ -13,6 +12,8 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 from skimage import io
+
+from .models import ImageDataModel
 
 
 class NDSequenceViewer(QWidget):
@@ -31,11 +32,10 @@ class NDSequenceViewer(QWidget):
         super().__init__()
         self.viewer = viewer
         self._loading_new_image = False
-        # Initialize image list and current image layer
-        self.image_files = []
+        # Initialize image model and current image layer
+        self.image_data_model = None
         self.current_index = 0
         self.current_image_layer = None
-        self.parent_directory = None
 
         # Set up the UI with horizontal layout
         self.setLayout(QHBoxLayout())
@@ -76,47 +76,22 @@ class NDSequenceViewer(QWidget):
 
         if directory:
             print(f"Selected directory: {directory}")
-            self._load_image_list(directory)
+            self.set_image_data_model(ImageDataModel(directory))
         else:
             print("No directory selected")
             return
 
-    def _load_image_list(self, directory):
-        """Load list of image files from the selected directory."""
+    def set_image_data_model(self, model: ImageDataModel):
+        """Set the image data model and update the UI."""
         try:
-            # Store parent directory for zarr persistence
-            self.parent_directory = str(Path(directory).resolve())
+            self.image_data_model = model
+            image_paths = model.get_image_paths()
 
-            # Common image extensions
-            image_extensions = {
-                ".png",
-                ".jpg",
-                ".jpeg",
-                ".tif",
-                ".tiff",
-                ".bmp",
-                ".gif",
-            }
-
-            # Get all files in directory
-            directory_path = Path(directory)
-            all_files = list(directory_path.iterdir())
-
-            # Filter for image files
-            self.image_files = [
-                f
-                for f in all_files
-                if f.is_file() and f.suffix.lower() in image_extensions
-            ]
-
-            # Sort files by name
-            self.image_files.sort(key=lambda x: x.name.lower())
-
-            if self.image_files:
-                print(f"Found {len(self.image_files)} image files")
+            if image_paths:
+                print(f"Found {len(image_paths)} image files")
 
                 # Update scroll bar
-                self.image_scrollbar.setMaximum(len(self.image_files) - 1)
+                self.image_scrollbar.setMaximum(len(image_paths) - 1)
                 self.image_scrollbar.setEnabled(True)
                 self.image_scrollbar.setValue(0)
 
@@ -135,14 +110,18 @@ class NDSequenceViewer(QWidget):
                 )
                 self._reset_display()
 
-        except (OSError, PermissionError, ValueError) as e:
+        except (OSError, PermissionError, ValueError, FileNotFoundError) as e:
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An error occurred while loading image list: {str(e)}",
+                f"An error occurred while setting image model: {str(e)}",
             )
-            print(f"Error loading image list: {e}")
+            print(f"Error setting image model: {e}")
             self._reset_display()
+
+    def _load_image_list(self, directory):
+        """Legacy method for compatibility - creates model internally."""
+        self.set_image_data_model(ImageDataModel(directory))
 
     def _on_scroll_changed(self, value):
         """Handle scroll bar value changes - load new image."""
@@ -156,31 +135,39 @@ class NDSequenceViewer(QWidget):
         self._loading_new_image = True
 
         try:
-            if 0 <= value < len(self.image_files):
+            if (
+                self.image_data_model
+                and 0 <= value < self.image_data_model.get_image_count()
+            ):
                 self.current_index = value
                 self._update_image_info()
                 self._load_current_image()
+                image_paths = self.image_data_model.get_image_paths()
                 print(
-                    f"Scrolled to image {value + 1}/{len(self.image_files)}: {self.image_files[value].name}\n\n"
+                    f"Scrolled to image {value + 1}/{len(image_paths)}: {image_paths[value].name}\n\n"
                 )
         finally:
             self._loading_new_image = False
 
     def _update_image_info(self):
         """Update the image info label with current image details."""
-        if self.image_files and 0 <= self.current_index < len(
-            self.image_files
+        if (
+            self.image_data_model
+            and 0
+            <= self.current_index
+            < self.image_data_model.get_image_count()
         ):
-            current_file = self.image_files[self.current_index]
-            info_text = f"Image {self.current_index + 1}/{len(self.image_files)}: {current_file.name}"
+            image_paths = self.image_data_model.get_image_paths()
+            current_file = image_paths[self.current_index]
+            info_text = f"Image {self.current_index + 1}/{len(image_paths)}: {current_file.name}"
             self.image_info_label.setText(info_text)
         else:
             self.image_info_label.setText("No images available")
 
     def _load_current_image(self):
         """Load the current image into the napari viewer."""
-        if not self.image_files or not (
-            0 <= self.current_index < len(self.image_files)
+        if not self.image_data_model or not (
+            0 <= self.current_index < self.image_data_model.get_image_count()
         ):
             return
 
@@ -191,7 +178,8 @@ class NDSequenceViewer(QWidget):
                 self.current_image_layer = None
 
             # Load new image
-            image_path = self.image_files[self.current_index]
+            image_paths = self.image_data_model.get_image_paths()
+            image_path = image_paths[self.current_index]
             print(f"Loading image: {image_path}")
 
             # Read image using skimage
@@ -205,11 +193,10 @@ class NDSequenceViewer(QWidget):
             print(f"Loaded image shape: {image_data.shape}")
 
             # Emit signal that image has changed with enhanced information
-
             self.image_changed.emit(
                 self.current_image_layer,
                 str(image_path),
-                self.parent_directory,
+                str(self.image_data_model.parent_directory),
             )
 
         except (OSError, ValueError, TypeError, RuntimeError) as e:
@@ -228,7 +215,7 @@ class NDSequenceViewer(QWidget):
                 self.viewer.layers.remove(self.current_image_layer)
             self.current_image_layer = None
 
-        self.image_files = []
+        self.image_data_model = None
         self.current_index = 0
         self.image_scrollbar.setMaximum(0)
         self.image_scrollbar.setValue(0)
@@ -237,16 +224,26 @@ class NDSequenceViewer(QWidget):
 
     def get_current_image_path(self):
         """Get the path of the currently selected image."""
-        if self.image_files and 0 <= self.current_index < len(
-            self.image_files
+        if (
+            self.image_data_model
+            and 0
+            <= self.current_index
+            < self.image_data_model.get_image_count()
         ):
-            return str(self.image_files[self.current_index])
+            image_paths = self.image_data_model.get_image_paths()
+            return str(image_paths[self.current_index])
         return None
 
     def get_image_count(self):
         """Get the total number of images in the series."""
-        return len(self.image_files)
+        return (
+            self.image_data_model.get_image_count()
+            if self.image_data_model
+            else 0
+        )
 
     def get_all_image_paths(self):
         """Get all image paths in the series."""
-        return [str(f) for f in self.image_files]
+        if self.image_data_model:
+            return [str(f) for f in self.image_data_model.get_image_paths()]
+        return []
