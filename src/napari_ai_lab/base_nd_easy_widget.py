@@ -323,20 +323,6 @@ class BaseNDEasyWidget(QWidget):
             self.current_parent_directory,
         )
 
-    def set_writer(self, writer_type: str, **kwargs):
-        """
-        Change the label writer type.
-
-        Args:
-            writer_type: Type of writer ("numpy", "zarr", "tiff", etc.)
-            **kwargs: Additional arguments for the writer
-        """
-        try:
-            self.label_writer = get_writer(writer_type, **kwargs)
-            print(f"Successfully switched to {writer_type} writer")
-        except ValueError as e:
-            print(f"Error switching writer: {e}")
-
     def _on_parameters_changed(self, parameters):
         """Handle changes to segmenter parameters."""
         segmenter_name = self.segmenter_combo.currentText()

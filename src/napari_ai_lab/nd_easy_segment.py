@@ -20,7 +20,6 @@ from qtpy.QtWidgets import (
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 from .widgets import SegmenterWidget
-from .writers import get_writer
 
 
 class NDEasySegment(BaseNDEasyWidget):
@@ -34,27 +33,6 @@ class NDEasySegment(BaseNDEasyWidget):
 
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(viewer)
-        self.viewer = viewer
-
-        # Initialize layer references
-        self.image_layer = None
-        self.label_layer = None
-        self.points_layer = None
-        self.shapes_layer = None
-
-        # Initialize label counter
-        self.current_label_num = 1
-
-        # Track current image context
-        self.current_image_path = None
-        self.current_parent_directory = None
-        self._processing_image_change = False
-
-        # Initialize label writer
-        self.label_writer = get_writer("numpy")
-
-        # Current segmenter instance
-        self.segmenter = None
 
         # Setup UI
         self._setup_ui()
@@ -228,7 +206,10 @@ class NDEasySegment(BaseNDEasyWidget):
 
             try:
                 mask = self.segmenter.segment(
-                    image_data, points=[latest_point], shapes=None
+                    image_data,
+                    points=[latest_point],
+                    shapes=None,
+                    parent_directory=self.current_parent_directory,
                 )
 
                 self.label_layer.data[mask] = self.current_label_num
@@ -297,7 +278,12 @@ class NDEasySegment(BaseNDEasyWidget):
             )
 
             # Call segmenter without points/shapes for automatic segmentation
-            mask = self.segmenter.segment(image_data, points=None, shapes=None)
+            mask = self.segmenter.segment(
+                image_data,
+                points=None,
+                shapes=None,
+                parent_directory=self.current_parent_directory,
+            )
 
             # Apply mask to labels layer
             if self.label_layer is not None:

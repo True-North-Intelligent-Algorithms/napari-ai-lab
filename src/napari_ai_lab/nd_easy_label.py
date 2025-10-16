@@ -10,7 +10,6 @@ from qtpy.QtWidgets import (
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
 from .widgets import SegmenterWidget
-from .writers import get_writer
 
 
 class NDEasyLabel(BaseNDEasyWidget):
@@ -18,28 +17,10 @@ class NDEasyLabel(BaseNDEasyWidget):
     # use a type annotation of 'napari.viewer.Viewer' for any parameter
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__(viewer)
-        self.viewer = viewer
+        self.setup_ui()
 
-        # Initialize layer references
-        self.image_layer = None
-        self.label_layer = None
-        self.points_layer = None
-        self.shapes_layer = None
-
-        # Initialize label counter
-        self.current_label_num = 1
-
-        # Track current image context so we can load labels and other info
-        self.current_image_path = None
-        self.current_parent_directory = None
-
-        # Signal processing state protection
-        self._processing_image_change = False
-
-        # Initialize label writer (easily changeable to other formats)
-        self.label_writer = get_writer(
-            "numpy"
-        )  # Change this line to switch formats
+    def setup_ui(self):
+        """Set up the user interface."""
 
         btn = QPushButton("Click me!")
         btn.clicked.connect(self._on_click)
@@ -163,7 +144,10 @@ class NDEasyLabel(BaseNDEasyWidget):
             try:
 
                 mask = self.segmenter.segment(
-                    image_data, points=[latest_point], shapes=None
+                    image_data,
+                    points=[latest_point],
+                    shapes=None,
+                    parent_directory=self.current_parent_directory,
                 )
 
                 # Apply the mask to the labels layer
