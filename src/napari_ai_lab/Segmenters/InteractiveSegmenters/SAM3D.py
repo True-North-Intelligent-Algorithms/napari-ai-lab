@@ -5,6 +5,7 @@ This module provides a 3D Segment Anything Model (SAM) segmenter that works with
 3D volumetric data using point and shape annotations.
 """
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -90,7 +91,8 @@ Instructions:
             image (numpy.ndarray): Input 3D image to segment.
             points (list, optional): List of annotation points for prompting SAM.
             shapes (list, optional): List of annotation shapes for prompting SAM.
-            **kwargs: Additional keyword arguments.
+            **kwargs: Additional keyword arguments including:
+                parent_directory (str, optional): Directory path for embedding storage.
 
         Returns:
             numpy.ndarray: Segmentation mask (same shape as input image).
@@ -106,10 +108,16 @@ Instructions:
         # Show message box asking about embeddings
         from qtpy.QtWidgets import QMessageBox
 
+        # Extract parent directory from kwargs if provided
+        parent_directory = kwargs.get("parent_directory", "unknown folder")
+
+        # Create message with folder information
+        message = f"SAM3D segmenter has been called. Do you want to generate embedding in folder {parent_directory}?"
+
         reply = QMessageBox.question(
             None,
             "SAM3D Segmenter",
-            "SAM3D segmenter has been called. Do you want to generate embedding?",
+            message,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
@@ -118,6 +126,8 @@ Instructions:
             print("User chose to generate embeddings")
         else:
             print("User chose not to generate embeddings")
+
+        self.embedding_directory = os.path.join(parent_directory, "embeddings")
 
         # TODO: Implement SAM3D segmentation logic
         # For now, return empty segmentation for GUI testing
