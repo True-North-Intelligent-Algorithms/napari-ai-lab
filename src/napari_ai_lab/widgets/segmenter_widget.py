@@ -33,17 +33,17 @@ class SegmenterWidget(QWidget):
     # Signal emitted when any parameter value changes
     parameters_changed = Signal(dict)
 
-    def __init__(self, segmenter_class=None, parent=None):
+    def __init__(self, segmenter=None, parent=None):
         """
         Initialize the segmenter widget.
 
         Args:
-            segmenter_class: The Segmenter class (dataclass) to parse parameters from.
+            segmenter: The Segmenter instance (dataclass) to create parameter widgets for.
             parent: Parent widget.
         """
         super().__init__(parent)
 
-        self.segmenter_class = segmenter_class
+        self.segmenter = segmenter
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
         self._instructions_text = None  # Instructions label widget
@@ -58,18 +58,18 @@ class SegmenterWidget(QWidget):
         self.form_layout = QFormLayout()
         self.main_layout.addLayout(self.form_layout)
 
-        # Parse and create widgets if segmenter class is provided
-        if segmenter_class is not None:
+        # Parse and create widgets if segmenter is provided
+        if segmenter is not None:
             self.parse_parameters()
 
-    def set_segmenter_class(self, segmenter_class):
+    def set_segmenter(self, segmenter):
         """
-        Set the segmenter class and rebuild the parameter form.
+        Set the segmenter instance and rebuild the parameter form.
 
         Args:
-            segmenter_class: The Segmenter class (dataclass) to parse parameters from.
+            segmenter: The Segmenter instance (dataclass) to create parameter widgets for.
         """
-        self.segmenter_class = segmenter_class
+        self.segmenter = segmenter
         self.clear_form()
         self.parse_parameters()
 
@@ -99,29 +99,27 @@ class SegmenterWidget(QWidget):
         """
         Parse dataclass fields and create appropriate Qt widgets.
         """
-        if not self.segmenter_class or not dataclasses.is_dataclass(
-            self.segmenter_class
-        ):
+        if not self.segmenter or not dataclasses.is_dataclass(self.segmenter):
             return
 
-        # Check if the segmenter class has instructions
+        # Check if the segmenter has instructions
         self._add_instructions_if_present()
 
         # Add axis selection if segmenter supports multiple axes
         self._add_axis_selection_if_present()
 
         # Get dataclass fields
-        fields = dataclasses.fields(self.segmenter_class)
+        fields = dataclasses.fields(self.segmenter)
 
         for field in fields:
             self._create_widget_for_field(field)
 
     def _add_instructions_if_present(self):
         """
-        Add instructions label if the segmenter class has instructions.
+        Add instructions label if the segmenter has instructions.
         """
-        if hasattr(self.segmenter_class, "instructions"):
-            instructions_text = self.segmenter_class.instructions
+        if hasattr(self.segmenter, "instructions"):
+            instructions_text = self.segmenter.instructions
             if instructions_text and isinstance(instructions_text, str):
                 # Create instructions label with similar styling as nd_easy_label
                 self._instructions_text = QLabel(instructions_text)
@@ -134,18 +132,17 @@ class SegmenterWidget(QWidget):
                 self.main_layout.addWidget(self._instructions_text)
 
                 print(
-                    f"Added instructions for {self.segmenter_class.__name__}"
+                    f"Added instructions for {self.segmenter.__class__.__name__}"
                 )
 
     def _add_axis_selection_if_present(self):
         """
         Add axis selection combo box if the segmenter supports multiple axes.
         """
-        if hasattr(self.segmenter_class, "supported_axes"):
+        if hasattr(self.segmenter, "supported_axes"):
             try:
-                # Create a temporary instance to get supported axes
-                temp_instance = self.segmenter_class()
-                supported_axes = temp_instance.supported_axes
+                # Get supported axes directly from the segmenter instance
+                supported_axes = self.segmenter.supported_axes
 
                 if supported_axes and len(supported_axes) > 1:
                     from qtpy.QtWidgets import QComboBox
@@ -169,12 +166,12 @@ class SegmenterWidget(QWidget):
                     self.form_layout.addRow(axis_label, self._axis_combo)
 
                     print(
-                        f"Added axis selection for {self.segmenter_class.__name__}: {supported_axes}"
+                        f"Added axis selection for {self.segmenter.__class__.__name__}: {supported_axes}"
                     )
 
             except (TypeError, ValueError, AttributeError, RuntimeError) as e:
                 print(
-                    f"Could not get supported axes for {self.segmenter_class.__name__}: {e}"
+                    f"Could not get supported axes for {self.segmenter.__class__.__name__}: {e}"
                 )
 
     def _on_axis_changed(self, axis_text):
@@ -409,23 +406,21 @@ class SegmenterWidget(QWidget):
                 # Update stored value
                 self.parameter_values[field_name] = value
 
-    def create_segmenter_instance(self, **additional_kwargs):
+    def update_segmenter_parameters(self):
         """
-        Create an instance of the segmenter class with current parameter values.
+        Update the segmenter instance with current parameter values from the widget.
 
-        Args:
-            **additional_kwargs: Additional keyword arguments to pass to constructor.
-
-        Returns:
-            Instance of the segmenter class with current parameter values.
+        Updates the segmenter instance in-place with the current form values.
         """
-        if not self.segmenter_class:
-            raise ValueError("No segmenter class set")
+        if not self.segmenter:
+            raise ValueError("No segmenter instance set")
 
-        # Combine parameter values with additional kwargs
-        kwargs = {**self.parameter_values, **additional_kwargs}
+        # Update segmenter parameters with current form values
+        for field_name, value in self.parameter_values.items():
+            if hasattr(self.segmenter, field_name):
+                setattr(self.segmenter, field_name, value)
 
-        return self.segmenter_class(**kwargs)
+        return self.segmenter
 
     def sync_segmenter_instance(self, segmenter_instance):
         """

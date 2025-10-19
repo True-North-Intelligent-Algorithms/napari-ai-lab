@@ -99,24 +99,39 @@ class NDEasyLabel(BaseNDEasyWidget):
             self.parameter_form.clear_form()
             return
 
-        # Get the selected segmenter class
-        segmenter_class = InteractiveSegmenterBase.get_framework(
+        self.segmenter = InteractiveSegmenterBase.get_framework(
             segmenter_name
-        )
-        if segmenter_class:
-            # Update parameter form with new segmenter class
-            self.parameter_form.set_segmenter_class(segmenter_class)
+        )()
+
+        if self.segmenter:
+            # Update parameter form with new segmenter instance
+            self.parameter_form.set_segmenter(self.segmenter)
             print(f"Selected segmenter: {segmenter_name}")
-            print(f"Supported axes: {segmenter_class().supported_axes}")
+            print(f"Supported axes: {self.segmenter.supported_axes}")
         else:
             print(
                 f"Warning: Segmenter '{segmenter_name}' not found in registry"
             )
             self.parameter_form.clear_form()
 
-        self.segmenter = InteractiveSegmenterBase.get_framework(
-            segmenter_name
-        )()
+        if self.image_layer is not None:
+
+            image_data = self.image_layer.data
+
+            # Get embedding directory and image name for predictor initialization
+            embedding_dir = (
+                self.image_data_model.get_base_embeddings_directory()
+            )
+            image_paths = self.image_data_model.get_image_paths()
+            if self.current_image_index < len(image_paths):
+                image_name = image_paths[self.current_image_index].stem
+            else:
+                image_name = "unknown"
+
+            # Initialize predictor before segmentation
+            self.segmenter.initialize_predictor(
+                image_data, str(embedding_dir), image_name
+            )
 
     def _on_points_changed(self, event):
         """Handle points layer data changes - creates segmentation around point using current segmenter."""
@@ -147,16 +162,16 @@ class NDEasyLabel(BaseNDEasyWidget):
 
             # Call segmenter with the latest point
             try:
-
                 mask = self.segmenter.segment(
                     image_data,
                     points=[latest_point],
                     shapes=None,
-                    parent_directory=self.image_data_model.parent_directory,
                 )
 
                 # Apply the mask to the labels layer
-                self.label_layer.data[mask] = self.current_label_num
+                self.label_layer.data[mask != 0] = (
+                    mask[mask != 0] * self.current_label_num
+                )
 
                 print(
                     f"Added segmentation with label {self.current_label_num}"

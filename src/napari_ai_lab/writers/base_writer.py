@@ -32,66 +32,32 @@ class BaseWriter(ABC):
         self.subdirectory = subdirectory
 
     @abstractmethod
-    def save_labels(
-        self, labels_data: np.ndarray, image_path: str, parent_directory: str
+    def save(
+        self, save_directory: str, image_name: str, data: np.ndarray
     ) -> bool:
         """
-        Save labels data to storage.
+        Save data to storage.
 
         Args:
-            labels_data: Label array to save
-            image_path: Path to the image file these labels belong to
-            parent_directory: Parent directory containing the image
+            save_directory: Directory where data should be saved
+            image_name: Name of the image (without extension)
+            data: Array to save
 
         Returns:
             True if successful, False otherwise
         """
 
     @abstractmethod
-    def load_labels(
-        self,
-        image_path: str,
-        parent_directory: str,
-        image_shape: tuple[int, ...],
-    ) -> np.ndarray:
+    def load(self, load_directory: str, image_name: str) -> np.ndarray:
         """
-        Load labels data from storage.
+        Load data from storage.
 
         Args:
-            image_path: Path to the image file
-            parent_directory: Parent directory containing the image
-            image_shape: Expected shape of the labels array
+            load_directory: Directory where data is stored
+            image_name: Name of the image (without extension)
 
         Returns:
-            Labels array (empty if no saved labels exist)
-        """
-
-    @abstractmethod
-    def get_labels_path(
-        self, image_path: str, parent_directory: str
-    ) -> Path | None:
-        """
-        Get the storage path for labels corresponding to an image.
-
-        Args:
-            image_path: Path to the image file
-            parent_directory: Parent directory containing the image
-
-        Returns:
-            Path where labels are/will be stored, or None if invalid
-        """
-
-    @abstractmethod
-    def labels_exist(self, image_path: str, parent_directory: str) -> bool:
-        """
-        Check if saved labels exist for the given image.
-
-        Args:
-            image_path: Path to the image file
-            parent_directory: Parent directory containing the image
-
-        Returns:
-            True if labels exist, False otherwise
+            Array data (empty if no saved data exists)
         """
 
     def ensure_labels_directory(self, labels_path: Path) -> None:
@@ -115,15 +81,3 @@ class BaseWriter(ABC):
             Base name without extension
         """
         return Path(image_path).stem
-
-    def get_base_labels_directory(self, parent_directory: str) -> Path:
-        """
-        Get the base directory for storing labels.
-
-        Args:
-            parent_directory: Parent directory containing images
-
-        Returns:
-            Path to annotations/subdirectory/ folder
-        """
-        return Path(parent_directory) / "annotations" / self.subdirectory

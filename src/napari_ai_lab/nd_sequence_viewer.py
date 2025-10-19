@@ -25,8 +25,8 @@ class NDSequenceViewer(QWidget):
     """
 
     # Signal emitted when the current image changes
-    # Emits (image_layer, image_path, parent_directory)
-    image_changed = Signal(object, str)
+    # Emits (image_layer, image_index)
+    image_changed = Signal(object, int)
 
     def __init__(self, viewer: "napari.viewer.Viewer"):
         super().__init__()
@@ -188,10 +188,10 @@ class NDSequenceViewer(QWidget):
 
             print(f"Loaded image shape: {image_data.shape}")
 
-            # Emit signal that image has changed with enhanced information
+            # Emit signal that image has changed with image layer and index
             self.image_changed.emit(
                 self.current_image_layer,
-                str(image_path),
+                self.current_index,
             )
 
         except (OSError, ValueError, TypeError, RuntimeError) as e:

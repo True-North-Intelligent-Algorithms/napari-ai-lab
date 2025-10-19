@@ -109,6 +109,29 @@ class ImageDataModel:
         # Use existing _scan_images functionality
         self._scan_images()
 
+    def get_base_annotations_directory(
+        self, subdirectory: str = "class_0"
+    ) -> Path:
+        """
+        Get the base directory for storing annotations.
+
+        Args:
+            subdirectory: Subdirectory name under 'annotations' (default: "class_0")
+
+        Returns:
+            Path to annotations/subdirectory/ folder
+        """
+        return self.parent_directory / "annotations" / subdirectory
+
+    def get_base_embeddings_directory(self) -> Path:
+        """
+        Get the base directory for storing embeddings.
+
+        Returns:
+            Path to embeddings/ folder
+        """
+        return self.parent_directory / "embeddings"
+
     def get_label_writer(self):
         """
         Get a label writer for this model.

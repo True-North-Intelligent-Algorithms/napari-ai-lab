@@ -106,6 +106,19 @@ class SegmenterBase:
         """
         return {}
 
+    def initialize_predictor(self, image, save_path: str, image_name: str):
+        """
+        Initialize the predictor for this segmenter.
+
+        This is a base implementation that does nothing. Segmenters that require
+        predictor initialization (like SAM models) should override this method.
+
+        Args:
+            image: Current image data for predictor initialization
+            save_path (str): Directory path where embeddings/models are saved/loaded
+            image_name (str): Name of the image (without extension)
+        """
+
     def __str__(self):
         """String representation of the segmenter."""
         return f"{self.__class__.__name__}(name='{self.name}')"

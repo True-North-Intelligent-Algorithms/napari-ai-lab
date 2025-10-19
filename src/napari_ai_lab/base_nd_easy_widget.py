@@ -53,6 +53,7 @@ class BaseNDEasyWidget(QWidget):
 
         # Track current image context (common to both widgets)
         self.current_image_path = None
+        self.current_image_index = 0
 
         # Signal processing state protection (common to both widgets)
         self._processing_image_change = False
@@ -145,18 +146,13 @@ class BaseNDEasyWidget(QWidget):
         # TODO: Move implementation from both widgets
         raise NotImplementedError("To be implemented in next step")
 
-    def _load_existing_labels(self, image_shape):
-        """Load existing labels or create empty ones."""
-        # TODO: Move implementation from both widgets
-        raise NotImplementedError("To be implemented in next step")
-
     def connect_sequence_viewer(self, sequence_viewer):
         """Connect to sequence viewer for automatic layer updates."""
         sequence_viewer.image_changed.connect(self._on_sequence_image_changed)
         print("Connected to sequence viewer for automatic layer updates")
 
     @ensure_main_thread
-    def _on_sequence_image_changed(self, image_layer, image_path):
+    def _on_sequence_image_changed(self, image_layer, image_index):
         """Handle sequence viewer image changes with simple processing lock to prevent crashes."""
         # If we're already processing a signal, ignore this one to prevent conflicts
         if self._processing_image_change:
@@ -168,7 +164,7 @@ class BaseNDEasyWidget(QWidget):
         self._processing_image_change = True
 
         # Process the image change immediately
-        self._process_image_change(image_layer, image_path)
+        self._process_image_change(image_layer, image_index)
 
     def _cleanup_existing_layers(self):
         """Remove existing annotation layers from viewer safely."""
@@ -221,12 +217,21 @@ class BaseNDEasyWidget(QWidget):
 
         print("Completed layer cleanup")
 
-    def _process_image_change(self, image_layer, image_path):
-        """Process  image change with simple processing lock."""
+    def _process_image_change(self, image_layer, image_index):
+        """Process image change with simple processing lock."""
         # Set processing flag to prevent re-entrant calls
 
         try:
-            print(f"Processing image change: {image_path}")
+            print(f"Processing image change: index {image_index}")
+
+            # Get image path from model using index
+            image_paths = self.image_data_model.get_image_paths()
+            if 0 <= image_index < len(image_paths):
+                image_path = str(image_paths[self.current_image_index])
+                print(f"Image path from model: {image_path}")
+            else:
+                print(f"Invalid image index: {self.current_image_index}")
+                image_path = None
 
             # Save current labels before switching (if we have a current context)
             if (
@@ -239,6 +244,8 @@ class BaseNDEasyWidget(QWidget):
                 print("No current labels to save (first image or no context)")
 
             print("Switching images")
+            # Set the current image index from the signal
+            self.current_image_index = image_index
 
             if image_layer and image_path:
                 print(f"Setting up new image: {image_layer.name}")
@@ -286,20 +293,56 @@ class BaseNDEasyWidget(QWidget):
 
     def _load_existing_labels(self, image_shape):
         """Load existing labels or create empty ones."""
-
-        return self.label_writer.load_labels(
-            self.current_image_path,
-            self.image_data_model.parent_directory,
-            image_shape,
+        # Get annotation directory from model
+        annotation_dir = self.image_data_model.get_base_annotations_directory(
+            "class_0"
         )
+        annotation_dir.mkdir(parents=True, exist_ok=True)
+
+        image_paths = self.image_data_model.get_image_paths()
+        image_name = image_paths[self.current_image_index].stem
+
+        # Load using simplified writer interface
+        data = self.label_writer.load(str(annotation_dir), image_name)
+
+        # If empty or no data, create empty labels
+        if data.size == 0:
+            import numpy as np
+
+            return np.zeros(image_shape, dtype=np.uint16)
+
+        return data
 
     def _save_current_labels(self):
         """Save the current labels using the configured writer."""
+        # Get annotation directory from model
+        annotation_dir = self.image_data_model.get_base_annotations_directory(
+            "class_0"
+        )
+        annotation_dir.mkdir(parents=True, exist_ok=True)
 
-        return self.label_writer.save_labels(
-            self.label_layer.data,
-            self.current_image_path,
-            self.image_data_model.parent_directory,
+        # Get current image name from model using current_image_index
+        image_paths = self.image_data_model.get_image_paths()
+        if self.current_image_index < len(image_paths):
+            image_name = image_paths[self.current_image_index].stem
+        else:
+            # Fallback to current_image_path if index is invalid
+            from pathlib import Path
+
+            image_name = (
+                Path(self.current_image_path).stem
+                if self.current_image_path
+                else "unknown"
+            )
+
+        # Convert to uint16 before saving
+        import numpy as np
+
+        labels_data = self.label_layer.data.astype(np.uint16)
+
+        # Save using simplified writer interface
+        return self.label_writer.save(
+            str(annotation_dir), image_name, labels_data
         )
 
     def _on_parameters_changed(self, parameters):
