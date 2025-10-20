@@ -13,6 +13,7 @@ import numpy as np
 from .InteractiveSegmenterBase import InteractiveSegmenterBase
 
 try:
+    from micro_sam.multi_dimensional_segmentation import segment_mask_in_volume
     from micro_sam.sam_annotator._state import AnnotatorState
     from micro_sam.sam_annotator.util import prompt_segmentation
 
@@ -96,6 +97,8 @@ Instructions:
 
         self.state = None
 
+        self.selected_axis = self.supported_axes[0]
+
     def initialize_predictor(self, image, save_path: str, image_name: str):
         """
         Initialize the SAM predictor with embeddings.
@@ -138,7 +141,7 @@ Instructions:
         Returns:
             list: Supported axis configurations for 3D SAM segmentation.
         """
-        return ["ZYX", "ZYXC"]
+        return ["YX", "ZYX", "ZYXC"]
 
     def segment(self, image, points=None, shapes=None, **kwargs):
         """
@@ -205,6 +208,26 @@ Instructions:
 
         seg = np.zeros_like(image, dtype=np.uint8)
         seg[z_pos] = seg_z_pos
+
+        print(self.selected_axis)
+
+        if self.selected_axis == "ZYX":
+            stop_lower, stop_upper = False, False
+            projection = "single_point"
+
+            # Step 2: Segment the rest of the volume based on projecting prompts.
+            seg, (z_min, z_max) = segment_mask_in_volume(
+                seg,
+                self.state.predictor,
+                self.state.image_embeddings,
+                np.array([z_pos]),
+                stop_lower=stop_lower,
+                stop_upper=stop_upper,
+                iou_threshold=self.iou_threshold,
+                projection=projection,
+                box_extension=self.box_extension,
+                # update_progress=lambda update: pbar_signals.pbar_update.emit(update),
+            )
 
         return seg
 
