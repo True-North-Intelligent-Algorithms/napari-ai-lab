@@ -22,6 +22,7 @@ class NDEasyLabel(BaseNDEasyWidget):
         image_data_model: "ImageDataModel",
     ):
         super().__init__(viewer, image_data_model)
+        self.segmenter_cache = {}  # Cache for segmenter instances
         self.setup_ui()
 
     def setup_ui(self):
@@ -99,12 +100,19 @@ class NDEasyLabel(BaseNDEasyWidget):
             self.parameter_form.clear_form()
             return
 
-        self.segmenter = InteractiveSegmenterBase.get_framework(
-            segmenter_name
-        )()
+        # Check if segmenter is already in cache
+        if segmenter_name in self.segmenter_cache:
+            self.segmenter = self.segmenter_cache[segmenter_name]
+        else:
+            # Create new segmenter instance and cache it
+            self.segmenter = InteractiveSegmenterBase.get_framework(
+                segmenter_name
+            )()
+            if self.segmenter:
+                self.segmenter_cache[segmenter_name] = self.segmenter
 
         if self.segmenter:
-            # Update parameter form with new segmenter instance
+            # Update parameter form with segmenter instance
             self.parameter_form.set_segmenter(self.segmenter)
             print(f"Selected segmenter: {segmenter_name}")
             print(f"Supported axes: {self.segmenter.supported_axes}")

@@ -177,6 +177,7 @@ class SegmenterWidget(QWidget):
     def _on_axis_changed(self, axis_text):
         """Handle axis selection changes."""
         self.selected_axis = axis_text
+        self.segmenter.selected_axis = axis_text
         print(f"Selected axis: {axis_text}")
 
     def _create_widget_for_field(self, field):
@@ -193,11 +194,16 @@ class SegmenterWidget(QWidget):
         # Get constraints from metadata
         min_val = metadata.get("min", None)
         max_val = metadata.get("max", None)
-        default_val = metadata.get("default", None)
         step = metadata.get("step", 1)
 
-        # Store default value
-        self.parameter_values[field_name] = default_val
+        # Get current value from segmenter instance, fallback to metadata default
+        if self.segmenter and hasattr(self.segmenter, field_name):
+            current_val = getattr(self.segmenter, field_name)
+        else:
+            current_val = metadata.get("default", None)
+
+        # Store current value
+        self.parameter_values[field_name] = current_val
 
         # Create label
         label = QLabel(field_name.replace("_", " ").title())
@@ -205,17 +211,17 @@ class SegmenterWidget(QWidget):
         # Create appropriate widget based on field type
         if field_type == "int":
             widget = self._create_int_widget(
-                field_name, min_val, max_val, default_val, step
+                field_name, min_val, max_val, current_val, step
             )
         elif field_type == "float":
             widget = self._create_float_widget(
-                field_name, min_val, max_val, default_val, step
+                field_name, min_val, max_val, current_val, step
             )
         elif field_type == "bool":
-            widget = self._create_bool_widget(field_name, default_val)
+            widget = self._create_bool_widget(field_name, current_val)
         elif field_type == "str" and "choices" in metadata:
             widget = self._create_choice_widget(
-                field_name, metadata["choices"], default_val
+                field_name, metadata["choices"], current_val
             )
         else:
             # Default to a generic widget (could be extended for strings, etc.)
