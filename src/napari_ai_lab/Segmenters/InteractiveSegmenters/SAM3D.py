@@ -110,40 +110,22 @@ Instructions:
         )
 
         # Show message box asking about embeddings
-        from qtpy.QtWidgets import QMessageBox
 
         # Create embedding directory path using Path
         parent_directory = Path(save_path).parent
         embedding_directory = parent_directory / "embeddings"
-        embedding_save_path = embedding_directory / image_name
-
-        # Create message with embedding save path information
-        message = f"SAM3D segmenter has been called. Do you want to generate embedding at:\n{embedding_save_path}?"
-
-        reply = QMessageBox.question(
-            None,
-            "SAM3D Segmenter",
-            message,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
+        embedding_save_path = (
+            embedding_directory / image_name / self.model_type
         )
 
-        if reply == QMessageBox.Yes:
-            print("User chose to generate embeddings")
-            self.embedding_directory = str(embedding_directory)
-            self.embedding_save_path = str(embedding_save_path)
-            print(f"SAM3D: Embedding save path: {self.embedding_save_path}")
-            # TODO: Implement embedding generation/loading logic here
-        else:
-            print("User chose not to generate embeddings")
-            self.embedding_directory = None
-            self.embedding_save_path = None
+        self.embedding_directory = str(embedding_directory)
+        self.embedding_save_path = str(embedding_save_path)
 
         self.state = AnnotatorState()
         self.state.reset_state()
         self.state.initialize_predictor(
             image,
-            model_type="vit_b_lm",
+            model_type=self.model_type,
             ndim=3,
             save_path=self.embedding_save_path,
         )
