@@ -72,6 +72,24 @@ Instructions:
         },
     )
 
+    model_type: str = field(
+        default="vit_b",
+        metadata={
+            "type": "str",
+            "harvest": True,
+            "advanced": False,
+            "training": False,
+            "choices": [
+                "vit_b",
+                "vit_b_lm",
+                "vit_b_em_organelles",
+                "vit_b_medical_imaging",
+                "vit_b_histopathology",
+            ],
+            "default": "vit_b",
+        },
+    )
+
     def __init__(self):
         """Initialize the SAM3D segmenter."""
         super().__init__()
