@@ -17,10 +17,10 @@ try:
     from micro_sam.sam_annotator._state import AnnotatorState
     from micro_sam.sam_annotator.util import prompt_segmentation
 
-    is_micro_sam_available = True
+    _is_micro_sam_available = True
 except ImportError:
     AnnotatorState = None
-    is_micro_sam_available = False
+    _is_micro_sam_available = False
     print(
         "Warning: micro_sam is not installed. SAM3D segmenter will not work."
     )
@@ -142,6 +142,15 @@ Instructions:
             list: Supported axis configurations for 3D SAM segmentation.
         """
         return ["YX", "ZYX", "ZYXC"]
+
+    def are_dependencies_available(self):
+        """
+        Check if required dependencies are available.
+
+        Returns:
+            bool: True if micro_sam can be imported, False otherwise.
+        """
+        return _is_micro_sam_available
 
     def segment(self, image, points=None, shapes=None, **kwargs):
         """

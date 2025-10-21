@@ -106,6 +106,18 @@ class SegmenterBase:
         """
         return {}
 
+    def are_dependencies_available(self):
+        """
+        Check if required dependencies are available.
+
+        Default implementation assumes dependencies are available.
+        Segmenters with optional dependencies should override this method.
+
+        Returns:
+            bool: True if dependencies are available, False otherwise.
+        """
+        return True
+
     def initialize_predictor(self, image, save_path: str, image_name: str):
         """
         Initialize the predictor for this segmenter.
