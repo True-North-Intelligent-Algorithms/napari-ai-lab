@@ -99,6 +99,24 @@ Instructions:
 
         self.selected_axis = self.supported_axes[0]
 
+    def initialize_embedding_save_path(self, save_path: str, image_name: str):
+        """
+        Initialize the embedding save path for this segmenter.
+
+        Args:
+            save_path (str): Directory path where embeddings are saved/loaded
+            image_name (str): Name of the image (without extension)
+        """
+        # Create embedding directory path using Path
+        parent_directory = Path(save_path).parent
+        embedding_directory = parent_directory / "embeddings"
+        embedding_save_path = (
+            embedding_directory / image_name / self.model_type
+        )
+
+        self.embedding_directory = str(embedding_directory)
+        self.embedding_save_path = str(embedding_save_path)
+
     def initialize_predictor(self, image, save_path: str, image_name: str):
         """
         Initialize the SAM predictor with embeddings.
@@ -112,24 +130,15 @@ Instructions:
             f"SAM3D: initialize_predictor called with image_shape={image.shape}, save_path={save_path}, image_name={image_name}"
         )
 
-        # Show message box asking about embeddings
-
-        # Create embedding directory path using Path
-        parent_directory = Path(save_path).parent
-        embedding_directory = parent_directory / "embeddings"
-        embedding_save_path = (
-            embedding_directory / image_name / self.model_type
-        )
-
-        self.embedding_directory = str(embedding_directory)
-        self.embedding_save_path = str(embedding_save_path)
+        # Initialize embedding save path
+        self.initialize_embedding_save_path(save_path, image_name)
 
         self.state = AnnotatorState()
         self.state.reset_state()
         self.state.initialize_predictor(
             image,
             model_type=self.model_type,
-            ndim=3,
+            ndim=len(image.shape),
             save_path=self.embedding_save_path,
         )
 
@@ -169,9 +178,9 @@ Instructions:
         Raises:
             ValueError: If image dimensions are not supported.
         """
-        if len(image.shape) not in [3, 4]:
+        if len(image.shape) not in [2, 3, 4]:
             raise ValueError(
-                f"SAM3D only supports 3D images. Got shape: {image.shape}"
+                f"SAM3D does not support 5D+ images. Got shape: {image.shape}"
             )
 
         # Check if predictor has been initialized
@@ -190,17 +199,25 @@ Instructions:
         print(f"SAM3D: IoU Threshold = {self.iou_threshold}")
         print(f"SAM3D: Box Extension = {self.box_extension}")
 
-        if points:
+        if points is not None:
             print(f"SAM3D: Using {len(points)} points for segmentation")
-        if shapes:
+        if shapes is not None:
             print(f"SAM3D: Using {len(shapes)} shapes for segmentation")
 
         labels = [1] * len(points)
 
-        z_pos = int(points[0][0])
-        points_ = [
-            (p[1], p[2]) for p in points
-        ]  # Adjust points to 2D slice coordinates
+        # Handle both 2D and 3D points
+        if len(points[0]) == 3:
+            # 3D points (Z, Y, X)
+            z_pos = int(points[0][0])
+            points_ = [
+                (p[1], p[2]) for p in points
+            ]  # Extract Y, X from 3D points
+        else:
+            z_pos = None
+            points_ = [
+                (p[0], p[1]) for p in points
+            ]  # Use Y, X directly from 2D points
 
         # perform prompt segmentation passing in the predictor, image_embeddings and points.
         seg_z_pos = prompt_segmentation(
@@ -209,14 +226,17 @@ Instructions:
             np.array(labels),
             [],
             [],
-            image.shape[1:],
+            image.shape[-2:],
             multiple_box_prompts=False,
             image_embeddings=self.state.image_embeddings,
             i=z_pos,
         )
 
-        seg = np.zeros_like(image, dtype=np.uint8)
-        seg[z_pos] = seg_z_pos
+        if z_pos is not None:
+            seg = np.zeros_like(image, dtype=np.uint8)
+            seg[z_pos] = seg_z_pos
+        else:
+            seg = seg_z_pos
 
         print(self.selected_axis)
 
@@ -239,6 +259,92 @@ Instructions:
             )
 
         return seg
+
+    def get_execution_string(self, image, **kwargs):
+        """
+        Generate a string containing the SAM3D execution code for remote execution.
+
+        Args:
+            image (numpy.ndarray): Input image to segment.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            str: Python code string that can be executed in a micro_sam environment.
+        """
+        # Create the execution string with just imports for now
+        execution_code = f"""
+task.outputs["hello"] = "world"
+task.outputs["what"] = "is happening"
+
+import numpy as np
+from micro_sam.multi_dimensional_segmentation import segment_mask_in_volume
+from micro_sam.sam_annotator._state import AnnotatorState
+from micro_sam.sam_annotator.util import prompt_segmentation
+
+# TODO: Add SAM3D segmentation logic here
+print("SAM3D remote execution - imports successful")
+
+task.outputs['hello'] = 'world'
+
+embedding_save_path = r"{self.embedding_save_path}"
+
+state = AnnotatorState()
+state.reset_state()
+state.initialize_predictor(
+    image.ndarray(),
+    model_type="{self.model_type}",
+    ndim=len(image.ndarray().shape),
+    save_path=embedding_save_path
+)
+
+# Handle both 2D and 3D points
+if len(test_points[0]) == 3:
+    # 3D points (Z, Y, X)
+    z_pos = int(test_points[0][0])
+    points_ = [
+        (p[1], p[2]) for p in test_points
+    ]  # Extract Y, X from 3D points
+else:
+    z_pos = None
+    points_ = [
+        (p[0], p[1]) for p in test_points
+    ]  # Use Y, X directly from 2D points
+
+
+labels = [1] * len(test_points)
+
+
+# perform prompt segmentation passing in the predictor, image_embeddings and points.
+seg_z_pos = prompt_segmentation(
+    state.predictor,
+    np.array(points_),
+    np.array(labels),
+    [],
+    [],
+    image.ndarray().shape[-2:],
+    multiple_box_prompts=False,
+    image_embeddings=state.image_embeddings,
+    i=z_pos,
+)
+
+# Convert result to appose format for output
+import appose
+ndarr_mask = appose.NDArray(dtype='uint16', shape=image.ndarray().shape)
+
+if z_pos is not None:
+    ndarr_mask.ndarray()[z_pos,:] = seg_z_pos
+else:
+    ndarr_mask.ndarray()[:] = seg_z_pos
+
+task.outputs['result_shape'] = result.shape
+task.outputs['mask'] = ndarr_mask
+
+"""
+
+        print(
+            "SAM3D not available locally - generated execution string for remote processing"
+        )
+        return execution_code
 
     @classmethod
     def register(cls):
