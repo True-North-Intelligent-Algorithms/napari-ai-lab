@@ -273,18 +273,11 @@ Instructions:
         """
         # Create the execution string with just imports for now
         execution_code = f"""
-task.outputs["hello"] = "world"
-task.outputs["what"] = "is happening"
 
 import numpy as np
 from micro_sam.multi_dimensional_segmentation import segment_mask_in_volume
 from micro_sam.sam_annotator._state import AnnotatorState
 from micro_sam.sam_annotator.util import prompt_segmentation
-
-# TODO: Add SAM3D segmentation logic here
-print("SAM3D remote execution - imports successful")
-
-task.outputs['hello'] = 'world'
 
 embedding_save_path = r"{self.embedding_save_path}"
 
@@ -313,7 +306,6 @@ else:
 
 labels = [1] * len(test_points)
 
-
 # perform prompt segmentation passing in the predictor, image_embeddings and points.
 seg_z_pos = prompt_segmentation(
     state.predictor,
@@ -336,7 +328,6 @@ if z_pos is not None:
 else:
     ndarr_mask.ndarray()[:] = seg_z_pos
 
-task.outputs['result_shape'] = result.shape
 task.outputs['mask'] = ndarr_mask
 
 """
