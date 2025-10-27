@@ -19,6 +19,9 @@ from napari_ai_lab.Segmenters.InteractiveSegmenters.SAM3D import SAM3D
 
 # Remote micro_sam environment path
 MICROSAM_ENV_PATH = "C:\\Users\\bnort\\miniconda3\\envs\\microsam_cellpose"
+MICROSAM_ENV_PATH = (
+    r"/home/bnorthan/mambaforge/envs/microsam_cellpose_instanseg"
+)
 
 
 def test_microsam_interactive():

@@ -19,6 +19,9 @@ from napari_ai_lab.Segmenters.GlobalSegmenters.CellposeSegmenter import (
 
 # Remote cellpose environment path
 CELLPOSE_ENV_PATH = "C:\\Users\\bnort\\miniconda3\\envs\\microsam_cellpose"
+CELLPOSE_ENV_PATH = (
+    r"/home/bnorthan/mambaforge/envs/microsam_cellpose_instanseg"
+)
 
 
 def test_cellpose_interactive():
