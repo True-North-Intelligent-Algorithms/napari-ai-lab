@@ -47,8 +47,6 @@ def execute_appose(image, segmenter, environment_path, additional_inputs=None):
 
             print(task.outputs.keys())
 
-            print(task.outputs.get("test_list", None))
-
             result = task.outputs.get("mask", None)
             return result
 

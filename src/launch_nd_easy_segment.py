@@ -5,11 +5,13 @@ from napari_ai_lab.nd_easy_segment import NDEasySegment
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
 from napari_ai_lab.Segmenters.GlobalSegmenters import (
     CellposeSegmenter,
+    StardistSegmenter,
     ThresholdSegmenter,
 )
 
 # Register all global segmenters
 CellposeSegmenter.register()
+StardistSegmenter.register()
 ThresholdSegmenter.register()
 
 viewer = napari.Viewer()
