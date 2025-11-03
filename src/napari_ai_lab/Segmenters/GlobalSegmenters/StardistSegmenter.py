@@ -5,6 +5,7 @@ This module provides a StarDist segmenter for automatic segmentation
 of entire 2D images without user prompts.
 """
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -75,6 +76,15 @@ StarDist Automatic Segmentation (2D):
         },
     )
 
+    model_path: str = field(
+        default="",
+        metadata={
+            "type": "file",
+            "file_type": "directory",
+            "default": "",
+        },
+    )
+
     normalize_input: bool = field(
         default=True,
         metadata={
@@ -86,6 +96,87 @@ StarDist Automatic Segmentation (2D):
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
+        # Initialize custom model storage
+        self.custom_model = None
+        self.is_3d_model = False
+
+    def __setattr__(self, name, value):
+        """Override setattr to detect model_path changes."""
+        # Get old value if it exists
+        old_value = getattr(self, name, None) if hasattr(self, name) else None
+
+        # Set the new value
+        super().__setattr__(name, value)
+
+        # Check if this is model_path and value changed
+        if name == "model_path" and old_value != value:
+            print(
+                f"🔄 Model path changed from '{old_value}' to '{value}'"
+            )  # Debug print
+            self._on_model_path_changed(value)
+
+    def _on_model_path_changed(self, new_path: str):
+        """Handle model path changes - load custom model and check if 2D or 3D."""
+        if new_path and new_path.strip():
+            print(f"📁 Loading custom StarDist model from: {new_path}")
+
+            try:
+                # Try to load as StarDist2D first
+                from stardist.models import StarDist2D, StarDist3D
+
+                model_path = os.path.dirname(new_path)
+                model_name = os.path.basename(new_path)
+                # Attempt to load the model from the directory
+                try:
+                    model_2d = StarDist2D(
+                        None, name=model_name, basedir=model_path
+                    )
+                    print(
+                        f"✅ Successfully loaded 2D StarDist model from: {new_path}"
+                    )
+                    print(f"   Model config: {model_2d.config}")
+                    self.custom_model = model_2d
+                    self.is_3d_model = False
+                    return
+                except (ValueError, FileNotFoundError, RuntimeError) as e2d:
+                    print(f"   ❌ Failed to load as 2D model: {e2d}")
+
+                # If 2D failed, try 3D
+                try:
+                    model_3d = StarDist3D(
+                        None, name=model_name, basedir=model_path
+                    )
+                    print(
+                        f"✅ Successfully loaded 3D StarDist model from: {new_path}"
+                    )
+                    print(f"   Model config: {model_3d.config}")
+                    self.custom_model = model_3d
+                    self.is_3d_model = True
+                    print(
+                        "   ⚠️  Warning: This segmenter is designed for 2D - 3D model may not work properly"
+                    )
+                    return
+                except (ValueError, FileNotFoundError, RuntimeError) as e3d:
+                    print(f"   ❌ Failed to load as 3D model: {e3d}")
+
+                # Both failed
+                print(
+                    f"   ❌ Could not load model from {new_path} as either 2D or 3D StarDist model"
+                )
+                self.custom_model = None
+                self.is_3d_model = False
+
+            except ImportError:
+                print(
+                    "   ❌ StarDist not available - cannot load custom model"
+                )
+                self.custom_model = None
+                self.is_3d_model = False
+
+        else:
+            print("🔄 Cleared custom model path, will use preset model")
+            self.custom_model = None
+            self.is_3d_model = False
 
     @property
     def supported_axes(self):
@@ -95,8 +186,8 @@ StarDist Automatic Segmentation (2D):
         Returns:
             list: Supported axis configurations.
         """
-        # StarDist2D supports YX and YXC; allow T variants where the caller provides current slice
-        return ["YX", "YXC", "TYX", "TYXC"]
+        # StarDist2D supports YX and ZYX
+        return ["YX", "ZYX"]
 
     def are_dependencies_available(self):
         """
@@ -144,6 +235,14 @@ StarDist Automatic Segmentation (2D):
         if not self.are_dependencies_available():
             return self.get_execution_string(image)
 
+        # Use custom model if loaded, otherwise use preset
+        model = None
+        if hasattr(self, "custom_model") and self.custom_model is not None:
+            print(f"Using custom StarDist model from: {self.model_path}")
+            model = self.custom_model
+        else:
+            print(f"Using preset model: {self.model_preset}")
+
         # Ensure 2D input (YX or YXC). If higher dims were passed, caller should slice.
         if image.ndim > 3:
             raise ValueError(
@@ -153,19 +252,25 @@ StarDist Automatic Segmentation (2D):
         # Optional normalization
         x = self._normalize(image) if self.normalize_input else image
 
-        # Load pretrained StarDist model
-        try:
-            model = StarDist2D.from_pretrained(self.model_preset)
-            print(f"Loaded StarDist2D pretrained model: {self.model_preset}")
-        except Exception as e:
-            raise RuntimeError(
-                f"Could not load StarDist2D model '{self.model_preset}': {e}"
-            ) from e
+        # Load model if not already loaded
+        if model is None:
+            try:
+                model = StarDist2D.from_pretrained(self.model_preset)
+                print(
+                    f"Loaded StarDist2D pretrained model: {self.model_preset}"
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not load StarDist2D model '{self.model_preset}': {e}"
+                ) from e
 
         # Predict instances
         try:
             labels, details = model.predict_instances(
-                x, prob_thresh=self.prob_thresh, nms_thresh=self.nms_thresh
+                x,
+                prob_thresh=self.prob_thresh,
+                nms_thresh=self.nms_thresh,
+                n_tiles=(1, 2, 2),
             )
             print(
                 f"StarDist: Found {len(np.unique(labels)) - 1} objects (prob_thresh={self.prob_thresh}, nms_thresh={self.nms_thresh})"

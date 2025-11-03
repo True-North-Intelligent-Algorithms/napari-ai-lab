@@ -22,7 +22,7 @@ class NDEasyLabel(BaseNDEasyWidget):
         image_data_model: "ImageDataModel",
     ):
         super().__init__(viewer, image_data_model)
-        self.segmenter_cache = {}  # Cache for segmenter instances
+        self.frameworks = InteractiveSegmenterBase.get_registered_frameworks()
         self.setup_ui()
 
     def setup_ui(self):
@@ -68,7 +68,7 @@ class NDEasyLabel(BaseNDEasyWidget):
         self.segmenter_combo.clear()
 
         # Get registered frameworks
-        frameworks = InteractiveSegmenterBase.get_registered_frameworks()
+        frameworks = self.frameworks
 
         if frameworks:
             # Create custom ordering with Square2D first, then others alphabetically
@@ -94,36 +94,9 @@ class NDEasyLabel(BaseNDEasyWidget):
             self.segmenter_combo.addItem("No segmenters available")
             self.segmenter_combo.setEnabled(False)
 
-    def _on_segmenter_changed(self, segmenter_name):
-        """Handle changes to the segmenter selection."""
-        if not segmenter_name or segmenter_name == "No segmenters available":
-            self.parameter_form.clear_form()
-            return
-
-        # Check if segmenter is already in cache
-        if segmenter_name in self.segmenter_cache:
-            self.segmenter = self.segmenter_cache[segmenter_name]
-        else:
-            # Create new segmenter instance and cache it
-            self.segmenter = InteractiveSegmenterBase.get_framework(
-                segmenter_name
-            )()
-            if self.segmenter:
-                self.segmenter_cache[segmenter_name] = self.segmenter
-
-        if self.segmenter:
-            # Update parameter form with segmenter instance
-            self.parameter_form.set_segmenter(self.segmenter)
-            print(f"Selected segmenter: {segmenter_name}")
-            print(f"Supported axes: {self.segmenter.supported_axes}")
-        else:
-            print(
-                f"Warning: Segmenter '{segmenter_name}' not found in registry"
-            )
-            self.parameter_form.clear_form()
-
+    def _post_segmenter_selection(self):
+        """Initialize predictor if image is loaded."""
         if self.image_layer is not None:
-
             image_data = self.image_layer.data
 
             # Get embedding directory and image name for predictor initialization

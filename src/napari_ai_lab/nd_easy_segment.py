@@ -164,26 +164,6 @@ class NDEasySegment(BaseNDEasyWidget):
             self.segmenter_combo.addItem("No segmenters available")
             self.segmenter_combo.setEnabled(False)
 
-    def _on_segmenter_changed(self, segmenter_name):
-        """Handle changes to the segmenter selection."""
-        if not segmenter_name or segmenter_name == "No segmenters available":
-            self.parameter_form.clear_form()
-            return
-
-        segmenter_class = GlobalSegmenterBase.get_framework(segmenter_name)
-        if segmenter_class:
-            self.parameter_form.set_segmenter_class(segmenter_class)
-            print(f"Selected segmenter: {segmenter_name}")
-            print(f"Supported axes: {segmenter_class().supported_axes}")
-        else:
-            print(
-                f"Warning: Segmenter '{segmenter_name}' not found in registry"
-            )
-            self.parameter_form.clear_form()
-
-        # Create segmenter instance
-        self.segmenter = GlobalSegmenterBase.get_framework(segmenter_name)()
-
     # === Interactive Mode Methods ===
     def _on_points_changed(self, event):
         """Handle points layer data changes - interactive segmentation."""
@@ -231,6 +211,25 @@ class NDEasySegment(BaseNDEasyWidget):
             ) as e:
                 print(f"Error during segmentation: {e}")
 
+    def _get_current_slice_indices(self, selected_axis):
+        """Get indices for current slice based on selected axis mode."""
+        if selected_axis == "YX":
+            return self.viewer.dims.current_step[:-2] + (
+                slice(None),
+                slice(None),
+            )
+        elif selected_axis == "ZYX":
+            return self.viewer.dims.current_step[:-3] + (
+                slice(None),
+                slice(None),
+                slice(None),
+            )
+        else:
+            return self.viewer.dims.current_step[:-2] + (
+                slice(None),
+                slice(None),
+            )
+
     # === Automatic Mode Methods ===
     def _on_segment_current(self):
         """Segment the current image automatically."""
@@ -244,12 +243,8 @@ class NDEasySegment(BaseNDEasyWidget):
         selected_axis = self.parameter_form.get_selected_axis()
         print(f"User selected axis mode: {selected_axis}")
 
-        # Extract current YX slice (last two dimensions are Y,X)
-
-        indices = self.viewer.dims.current_step[:-2] + (
-            slice(None),
-            slice(None),
-        )
+        # Extract current slice based on selected axis mode
+        indices = self._get_current_slice_indices(selected_axis)
         current_yx_slice = self.image_layer.data[indices]
 
         print(f"Current YX slice shape: {current_yx_slice.shape}")
@@ -290,10 +285,8 @@ class NDEasySegment(BaseNDEasyWidget):
 
             # Apply mask to labels layer
             if self.label_layer is not None:
-                indices = self.viewer.dims.current_step[:-2] + (
-                    slice(None),
-                    slice(None),
-                )
+                selected_axis = self.parameter_form.get_selected_axis()
+                indices = self._get_current_slice_indices(selected_axis)
                 self.label_layer.data[indices] = mask  # self.current_label_num
                 self.current_label_num += 1
                 self.label_layer.refresh()

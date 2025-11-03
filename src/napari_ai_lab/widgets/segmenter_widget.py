@@ -223,6 +223,10 @@ class SegmenterWidget(QWidget):
             widget = self._create_choice_widget(
                 field_name, metadata["choices"], current_val
             )
+        elif field_type == "file":
+            widget = self._create_file_widget(
+                field_name, metadata.get("file_type", "file"), current_val
+            )
         else:
             # Default to a generic widget (could be extended for strings, etc.)
             widget = QLabel(f"Unsupported type: {field_type}")
@@ -367,6 +371,65 @@ class SegmenterWidget(QWidget):
         )
 
         return combobox
+
+    def _create_file_widget(
+        self, field_name: str, file_type: str, current_val: str | None
+    ):
+        """Create a file/directory picker widget."""
+        from qtpy.QtWidgets import (
+            QFileDialog,
+            QHBoxLayout,
+            QLineEdit,
+            QPushButton,
+        )
+
+        # Create container widget
+        container = QWidget()
+        layout = QHBoxLayout()
+        container.setLayout(layout)
+
+        # Create text field to show selected path
+        line_edit = QLineEdit()
+        if current_val:
+            line_edit.setText(current_val)
+        line_edit.setPlaceholderText("No file/directory selected")
+
+        # Create browse button
+        browse_btn = QPushButton("Browse...")
+
+        def browse_for_path():
+            if file_type == "directory":
+                path = QFileDialog.getExistingDirectory(
+                    self, f"Select {field_name.replace('_', ' ').title()}"
+                )
+            else:
+                path, _ = QFileDialog.getOpenFileName(
+                    self, f"Select {field_name.replace('_', ' ').title()}"
+                )
+
+            if path:
+                line_edit.setText(path)
+                self._on_parameter_changed(field_name, path)
+
+        browse_btn.clicked.connect(browse_for_path)
+
+        # Connect text changes
+        line_edit.textChanged.connect(
+            lambda text, name=field_name: self._on_parameter_changed(
+                name, text
+            )
+        )
+
+        # Add widgets to layout
+        layout.addWidget(line_edit)
+        layout.addWidget(browse_btn)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Store references for easy access
+        container.line_edit = line_edit
+        container.browse_btn = browse_btn
+
+        return container
 
     def _on_parameter_changed(self, field_name: str, value: Any):
         """
