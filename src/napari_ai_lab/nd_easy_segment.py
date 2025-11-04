@@ -20,7 +20,6 @@ from qtpy.QtWidgets import (
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .models import ImageDataModel
 from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
-from .widgets import SegmenterWidget
 
 
 class NDEasySegment(BaseNDEasyWidget):
@@ -75,12 +74,8 @@ class NDEasySegment(BaseNDEasyWidget):
         )
         main_layout.addWidget(self.segmenter_combo)
 
-        # Parameter form widget
-        self.parameter_form = SegmenterWidget()
-        self.parameter_form.parameters_changed.connect(
-            self._on_parameters_changed
-        )
-        main_layout.addWidget(self.parameter_form)
+        # Parameter form widget (from base)
+        main_layout.addWidget(self._create_parameter_form())
 
         # === Mode-Specific Controls ===
         # Automatic mode controls

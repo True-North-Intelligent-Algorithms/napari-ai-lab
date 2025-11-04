@@ -19,6 +19,7 @@ from .models import ImageDataModel
 from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import load_images_from_directory, pad_to_largest
+from .widgets import SegmenterWidget
 
 
 class BaseNDEasyWidget(QWidget):
@@ -69,6 +70,14 @@ class BaseNDEasyWidget(QWidget):
 
     # === COMMON METHODS TO BE IMPLEMENTED ===
     # These methods exist in both NDEasyLabel and NDEasySegment with similar/identical implementations
+
+    def _create_parameter_form(self):
+        """Create the shared parameter form and connect change signal."""
+        self.parameter_form = SegmenterWidget()
+        self.parameter_form.parameters_changed.connect(
+            self._on_parameters_changed
+        )
+        return self.parameter_form
 
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""

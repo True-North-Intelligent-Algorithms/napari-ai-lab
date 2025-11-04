@@ -10,7 +10,6 @@ from qtpy.QtWidgets import (
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .models import ImageDataModel
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
-from .widgets import SegmenterWidget
 
 
 class NDEasyLabel(BaseNDEasyWidget):
@@ -49,12 +48,8 @@ class NDEasyLabel(BaseNDEasyWidget):
         )
         self.layout().addWidget(self.segmenter_combo)
 
-        # Parameter form widget for segmenter parameters
-        self.parameter_form = SegmenterWidget()
-        self.parameter_form.parameters_changed.connect(
-            self._on_parameters_changed
-        )
-        self.layout().addWidget(self.parameter_form)
+        # Parameter form widget for segmenter parameters (from base)
+        self.layout().addWidget(self._create_parameter_form())
 
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
