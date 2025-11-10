@@ -18,8 +18,8 @@ viewer = napari.Viewer()
 parent_dir = (
     # r"D:\images\tnia-python-images\imagesc\2025_09_29_gray_scale_3d_test_set"
     # r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
-    # r"D:\deep-learning\test\dx4",
-    r"/home/bnorthan/dplexbio/images/dx4_2/"
+    r"D:\deep-learning\test\dx4"
+    # r"/home/bnorthan/dplexbio/images/dx4_2/"
 )
 
 model = ImageDataModel(parent_dir)
@@ -35,9 +35,7 @@ nd_easy_segment_widget.parameter_form.set_selected_axis("ZYX")
 segmenter = nd_easy_segment_widget.segmenter_cache["StardistSegmenter"]
 print(f"Using segmenter: {segmenter}")
 
-segmenter._on_model_path_changed(
-    r"/home/bnorthan/dplexbio/deep-learning/models/test_256_16"
-)
+segmenter._on_model_path_changed(r"D:\deep-learning\models\test_256_16")
 
 # nd_easy_segment_widget.load_image_directory(parent_dir)
 
