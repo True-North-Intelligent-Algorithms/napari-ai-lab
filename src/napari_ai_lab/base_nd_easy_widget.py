@@ -48,7 +48,7 @@ class BaseNDEasyWidget(QWidget):
 
         # Initialize layer references (common to both widgets)
         self.image_layer = None
-        self.label_layer = None
+        self.annotation_layer = None
         self.predictions_layer = None
         self.points_layer = None
         self.shapes_layer = None
@@ -249,7 +249,7 @@ class BaseNDEasyWidget(QWidget):
 
         # Remove layers one by one with proper error handling
         layers_to_remove = [
-            ("label", self.label_layer),
+            ("label", self.annotation_layer),
             ("predictions", self.predictions_layer),
             ("points", self.points_layer),
             ("shapes", self.shapes_layer),
@@ -273,7 +273,7 @@ class BaseNDEasyWidget(QWidget):
                     print(f"Error removing {layer_name} layer: {e}")
 
         # Reset references
-        self.label_layer = None
+        self.annotation_layer = None
         self.predictions_layer = None
         self.points_layer = None
         self.shapes_layer = None
@@ -300,7 +300,7 @@ class BaseNDEasyWidget(QWidget):
             if (
                 self.current_image_path
                 and self.image_data_model.parent_directory
-                and self.label_layer
+                and self.annotation_layer
             ):
                 self._save_current_labels()
             else:
@@ -400,7 +400,7 @@ class BaseNDEasyWidget(QWidget):
         # Convert to uint16 before saving
         import numpy as np
 
-        labels_data = self.label_layer.data.astype(np.uint16)
+        labels_data = self.annotation_layer.data.astype(np.uint16)
 
         # Save using simplified writer interface
         return self.label_writer.save(

@@ -190,12 +190,12 @@ class NDEasySegment(BaseNDEasyWidget):
                     parent_directory=self.image_data_model.parent_directory,
                 )
 
-                self.label_layer.data[mask] = self.current_label_num
+                self.annotation_layer.data[mask] = self.current_label_num
                 print(
                     f"Added segmentation with label {self.current_label_num}"
                 )
                 self.current_label_num += 1
-                self.label_layer.refresh()
+                self.annotation_layer.refresh()
 
             except (
                 AttributeError,
@@ -279,12 +279,14 @@ class NDEasySegment(BaseNDEasyWidget):
             )
 
             # Apply mask to labels layer
-            if self.label_layer is not None:
+            if self.annotation_layer is not None:
                 selected_axis = self.parameter_form.get_selected_axis()
                 indices = self._get_current_slice_indices(selected_axis)
-                self.label_layer.data[indices] = mask  # self.current_label_num
+                self.annotation_layer.data[indices] = (
+                    mask  # self.current_label_num
+                )
                 self.current_label_num += 1
-                self.label_layer.refresh()
+                self.annotation_layer.refresh()
                 print("Automatic segmentation completed")
             else:
                 print("No label layer available")
@@ -312,7 +314,7 @@ class NDEasySegment(BaseNDEasyWidget):
 
             # Load existing labels or create empty ones
             labels_data = self._load_existing_annotations(image_data.shape)
-            self.label_layer = self.viewer.add_labels(
+            self.annotation_layer = self.viewer.add_labels(
                 labels_data, name="Labels (Persistent)"
             )
 

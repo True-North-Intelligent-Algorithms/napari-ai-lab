@@ -145,7 +145,7 @@ class NDEasyLabel(BaseNDEasyWidget):
                 )
 
                 # Apply the mask to the labels layer
-                self.label_layer.data[mask != 0] = (
+                self.annotation_layer.data[mask != 0] = (
                     mask[mask != 0] * self.current_label_num
                 )
 
@@ -154,7 +154,7 @@ class NDEasyLabel(BaseNDEasyWidget):
                 )
                 self.current_label_num += 1
 
-                self.label_layer.refresh()
+                self.annotation_layer.refresh()
 
             except (
                 AttributeError,
@@ -198,7 +198,7 @@ class NDEasyLabel(BaseNDEasyWidget):
             labels_data = self._load_existing_annotations(image_data.shape)
 
             # Add labels layer and store reference
-            self.label_layer = self.viewer.add_labels(
+            self.annotation_layer = self.viewer.add_labels(
                 labels_data, name="Labels (Persistent)"
             )
 
