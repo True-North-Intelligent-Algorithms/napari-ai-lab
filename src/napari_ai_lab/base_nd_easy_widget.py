@@ -49,6 +49,7 @@ class BaseNDEasyWidget(QWidget):
         # Initialize layer references (common to both widgets)
         self.image_layer = None
         self.label_layer = None
+        self.predictions_layer = None
         self.points_layer = None
         self.shapes_layer = None
 
@@ -249,6 +250,7 @@ class BaseNDEasyWidget(QWidget):
         # Remove layers one by one with proper error handling
         layers_to_remove = [
             ("label", self.label_layer),
+            ("predictions", self.predictions_layer),
             ("points", self.points_layer),
             ("shapes", self.shapes_layer),
         ]
@@ -272,6 +274,7 @@ class BaseNDEasyWidget(QWidget):
 
         # Reset references
         self.label_layer = None
+        self.predictions_layer = None
         self.points_layer = None
         self.shapes_layer = None
 
@@ -351,13 +354,12 @@ class BaseNDEasyWidget(QWidget):
             print("Finished processing image change")
             print("==============================")
 
-    def _load_existing_labels(self, image_shape):
+    def _load_existing_annotations(self, image_shape):
         """Load existing labels or create empty ones."""
         # Get annotation directory from model
         annotation_dir = self.image_data_model.get_base_annotations_directory(
             "class_0"
         )
-        annotation_dir.mkdir(parents=True, exist_ok=True)
 
         image_paths = self.image_data_model.get_image_paths()
         image_name = image_paths[self.current_image_index].stem

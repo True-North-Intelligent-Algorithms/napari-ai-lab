@@ -311,7 +311,7 @@ class NDEasySegment(BaseNDEasyWidget):
             image_data = image_layer.data
 
             # Load existing labels or create empty ones
-            labels_data = self._load_existing_labels(image_data.shape)
+            labels_data = self._load_existing_annotations(image_data.shape)
             self.label_layer = self.viewer.add_labels(
                 labels_data, name="Labels (Persistent)"
             )

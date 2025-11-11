@@ -69,9 +69,13 @@ class ImageDataModel:
         Returns:
             Path where result should be saved
         """
-        image_name = Path(image_path).stem
-        result_dir = self.results_directory / result_type / algorithm
-        return result_dir / f"{image_name}.npy"
+        # Deprecated: use the organized directories API (get_predictions_directory)
+        # This method was removed because callers should use the dedicated
+        # directory accessors like get_base_embeddings_directory and
+        # get_predictions_directory.
+        raise NotImplementedError(
+            "get_result_path has been removed; use get_predictions_directory or get_base_embeddings_directory"
+        )
 
     def ensure_result_directories(
         self, result_types: list[str], algorithms: list[str]
@@ -121,7 +125,11 @@ class ImageDataModel:
         Returns:
             Path to annotations/subdirectory/ folder
         """
-        return self.parent_directory / "annotations" / subdirectory
+        annotation_dir = self.parent_directory / "annotations" / subdirectory
+
+        annotation_dir.mkdir(parents=True, exist_ok=True)
+
+        return annotation_dir
 
     def get_base_embeddings_directory(self) -> Path:
         """
@@ -131,6 +139,21 @@ class ImageDataModel:
             Path to embeddings/ folder
         """
         return self.parent_directory / "embeddings"
+
+    def get_predictions_directory(self, algorithm: str | None = None) -> Path:
+        """
+        Get the base directory for storing prediction results.
+
+        Args:
+            algorithm: Optional algorithm name (not used yet, reserved for future)
+
+        Returns:
+            Path to predictions/ folder (optionally organized by algorithm in future)
+        """
+        # For now, predictions are stored in a flat `predictions/` folder
+        # under the parent directory. The `algorithm` parameter is reserved
+        # for future use where we might create subfolders per algorithm.
+        return self.parent_directory / "predictions"
 
     def get_label_writer(self):
         """
