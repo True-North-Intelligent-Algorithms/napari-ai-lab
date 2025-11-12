@@ -187,23 +187,20 @@ Instructions:
         if (
             not hasattr(self, "embedding_directory")
             or self.embedding_directory is None
+            or self.state is None
+            or self.state.image_embeddings is None
         ):
-            print(
-                "SAM3D: Predictor not initialized or user declined embeddings"
-            )
+            print("SAM3D: Predictor not initialized")
             return None
 
-        # TODO: Implement SAM3D segmentation logic
-        # For now, return empty segmentation for GUI testing
         print(f"SAM3D: Processing image with shape {image.shape}")
-        print(f"SAM3D: IoU Threshold = {self.iou_threshold}")
-        print(f"SAM3D: Box Extension = {self.box_extension}")
 
         if points is not None:
             print(f"SAM3D: Using {len(points)} points for segmentation")
         if shapes is not None:
             print(f"SAM3D: Using {len(shapes)} shapes for segmentation")
 
+        # TODO assign labels based on point types (positive/negative)
         labels = [1] * len(points)
 
         # Handle both 2D and 3D points
@@ -240,6 +237,7 @@ Instructions:
 
         print(self.selected_axis)
 
+        # if selected axis is ZYX, perform full volume segmentation
         if self.selected_axis == "ZYX":
             stop_lower, stop_upper = False, False
             projection = "single_point"
