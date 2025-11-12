@@ -279,6 +279,11 @@ class NDEasySegment(BaseNDEasyWidget):
             else:
                 print("No label layer available")
 
+            # save predictions via model
+            self.image_data_model.save_predictions(
+                mask, self.current_image_index
+            )
+
         except (
             AttributeError,
             ValueError,

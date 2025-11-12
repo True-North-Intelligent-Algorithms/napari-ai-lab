@@ -9,6 +9,8 @@ This model handles:
 
 from pathlib import Path
 
+import numpy as np
+
 
 class ImageDataModel:
     """
@@ -115,9 +117,7 @@ class ImageDataModel:
         # Use existing _scan_images functionality
         self._scan_images()
 
-    def get_base_annotations_directory(
-        self, subdirectory: str = "class_0"
-    ) -> Path:
+    def get_annotations_directory(self, subdirectory: str = "class_0") -> Path:
         """
         Get the base directory for storing annotations.
 
@@ -186,7 +186,7 @@ class ImageDataModel:
         # Defer imports to here to avoid bringing numpy/writer into top-level module load
         import numpy as np
 
-        annotation_dir = self.get_base_annotations_directory(subdirectory)
+        annotation_dir = self.get_annotations_directory(subdirectory)
 
         image_paths = self.get_image_paths()
         if 0 <= image_index < len(image_paths):
@@ -267,17 +267,12 @@ class ImageDataModel:
         Returns:
             The result of the writer.save(...) call.
         """
-        # Defer heavy imports
-        import numpy as np
-
-        annotation_dir = self.get_base_annotations_directory(subdirectory)
+        annotation_dir = self.get_annotations_directory(subdirectory)
         annotation_dir.mkdir(parents=True, exist_ok=True)
 
         image_paths = self.get_image_paths()
-        if 0 <= image_index < len(image_paths):
-            image_name = image_paths[image_index].stem
-        else:
-            image_name = "unknown"
+
+        image_name = image_paths[image_index].stem
 
         writer = self.get_annotations_writer()
 
@@ -285,6 +280,42 @@ class ImageDataModel:
         labels_to_save = np.asarray(labels_array).astype(np.uint16)
 
         return writer.save(str(annotation_dir), image_name, labels_to_save)
+
+    def save_predictions(
+        self,
+        predictions_array,
+        image_index: int,
+        subdirectory: str = "predictions",
+    ):
+        """
+        Save prediction array for the image at image_index under predictions/subdirectory.
+
+        Args:
+            preds_array: numpy array with predictions to save.
+            image_index: Index of the associated image.
+            subdirectory: Subdirectory under predictions to save into.
+
+        Returns:
+            Result of writer.save(...)
+        """
+        import numpy as np
+
+        predictions_dir = self.get_predictions_directory(subdirectory)
+        predictions_dir.mkdir(parents=True, exist_ok=True)
+
+        image_paths = self.get_image_paths()
+        if 0 <= image_index < len(image_paths):
+            image_name = image_paths[image_index].stem
+        else:
+            image_name = "unknown"
+
+        writer = self.get_predictions_writer()
+
+        predictions_to_save = np.asarray(predictions_array)
+
+        return writer.save(
+            str(predictions_dir), image_name, predictions_to_save
+        )
 
     def get_global_frameworks(self):
         """Return the dict of registered global segmenter frameworks, or empty dict."""
