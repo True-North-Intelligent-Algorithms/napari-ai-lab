@@ -19,7 +19,6 @@ from qtpy.QtWidgets import (
 
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .models import ImageDataModel
-from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 
 
 class NDEasySegment(BaseNDEasyWidget):
@@ -138,26 +137,15 @@ class NDEasySegment(BaseNDEasyWidget):
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""
         self.segmenter_combo.clear()
-        frameworks = GlobalSegmenterBase.get_registered_frameworks()
 
-        if frameworks:
-            # Custom ordering with Square2D first for interactive mode
-            framework_names = list(frameworks.keys())
-            if "Square2D" in framework_names:
-                framework_names.remove("Square2D")
-                ordered_names = ["Square2D"] + sorted(framework_names)
-            else:
-                ordered_names = sorted(framework_names)
+        framework_names = self.image_data_model.get_global_frameworks()
 
-            for name in ordered_names:
-                self.segmenter_combo.addItem(name)
+        for name in framework_names:
+            self.segmenter_combo.addItem(name)
 
-            if self.segmenter_combo.count() > 0:
-                self.segmenter_combo.setCurrentIndex(0)
-                self._on_segmenter_changed(self.segmenter_combo.currentText())
-        else:
-            self.segmenter_combo.addItem("No segmenters available")
-            self.segmenter_combo.setEnabled(False)
+        if self.segmenter_combo.count() > 0:
+            self.segmenter_combo.setCurrentIndex(0)
+            self._on_segmenter_changed(self.segmenter_combo.currentText())
 
     # === Interactive Mode Methods ===
     def _on_points_changed(self, event):
@@ -278,8 +266,8 @@ class NDEasySegment(BaseNDEasyWidget):
                 parent_directory=self.image_data_model.parent_directory,
             )
 
-            # Apply mask to labels layer
-            if self.annotation_layer is not None:
+            # Copy mask to predictions layer
+            if self.predictions_layer is not None:
                 selected_axis = self.parameter_form.get_selected_axis()
                 indices = self._get_current_slice_indices(selected_axis)
                 self.predictions_layer.data[indices] = (

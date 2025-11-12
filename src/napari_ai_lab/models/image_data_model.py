@@ -284,5 +284,23 @@ class ImageDataModel:
 
         return writer.save(str(annotation_dir), image_name, labels_to_save)
 
+    def get_global_frameworks(self):
+        """Return the dict of registered global segmenter frameworks, or empty dict."""
+        from ..Segmenters.GlobalSegmenters import GlobalSegmenterBase
+
+        return GlobalSegmenterBase.get_registered_frameworks()
+
+    def get_global_framework_names(self) -> list[str]:
+        """
+        Get the names of all registered global segmenter frameworks.
+        """
+
+        frameworks = self.get_global_frameworks()
+        if frameworks:
+            framework_names = list(frameworks.keys())
+        else:
+            framework_names = ["No segmenters available"]
+        return framework_names
+
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"
