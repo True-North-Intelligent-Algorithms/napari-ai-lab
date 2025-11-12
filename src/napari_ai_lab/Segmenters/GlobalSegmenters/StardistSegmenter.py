@@ -124,12 +124,13 @@ StarDist Automatic Segmentation (2D):
                 # Try to load as StarDist2D first
                 from stardist.models import StarDist2D, StarDist3D
 
-                model_path = os.path.dirname(new_path)
+                self.model_path = new_path
+                model_base_path = os.path.dirname(new_path)
                 model_name = os.path.basename(new_path)
                 # Attempt to load the model from the directory
                 try:
                     model_2d = StarDist2D(
-                        None, name=model_name, basedir=model_path
+                        None, name=model_name, basedir=model_base_path
                     )
                     print(
                         f"✅ Successfully loaded 2D StarDist model from: {new_path}"
@@ -144,7 +145,7 @@ StarDist Automatic Segmentation (2D):
                 # If 2D failed, try 3D
                 try:
                     model_3d = StarDist3D(
-                        None, name=model_name, basedir=model_path
+                        None, name=model_name, basedir=model_base_path
                     )
                     print(
                         f"✅ Successfully loaded 3D StarDist model from: {new_path}"

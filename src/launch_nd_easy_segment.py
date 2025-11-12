@@ -36,7 +36,7 @@ segmenter = nd_easy_segment_widget.segmenter_cache["StardistSegmenter"]
 print(f"Using segmenter: {segmenter}")
 
 segmenter._on_model_path_changed(r"D:\deep-learning\models\test_256_16")
-
+nd_easy_segment_widget._update_parameter_form(segmenter)
 # nd_easy_segment_widget.load_image_directory(parent_dir)
 
 # Add the NDSequenceViewer widget to the viewer

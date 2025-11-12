@@ -31,6 +31,8 @@ class ImageDataModel:
         self.parent_directory = Path(parent_directory).resolve()
         self.results_directory = self.parent_directory / "results"
         self._image_paths: list[Path] | None = None
+        # Cache for created segmenter instances (name -> instance)
+        self.segmenter_cache: dict = {}
 
         # Load image list on initialization
         self._load_image_list(str(self.parent_directory))
@@ -301,6 +303,44 @@ class ImageDataModel:
         else:
             framework_names = ["No segmenters available"]
         return framework_names
+
+    def get_segmenter(self, segmenter_name: str):
+        """
+        Return a cached segmenter instance by name, creating and caching it if needed.
+        """
+        # Return from cache if available
+        if segmenter_name in self.segmenter_cache:
+            return self.segmenter_cache[segmenter_name]
+
+        # Try Interactive segmenters first
+        try:
+            from ..Segmenters.InteractiveSegmenters import (
+                InteractiveSegmenterBase,
+            )
+
+            seg_cls = InteractiveSegmenterBase.get_framework(segmenter_name)
+            if seg_cls:
+                inst = seg_cls()
+                self.segmenter_cache[segmenter_name] = inst
+                return inst
+        except (ImportError, AttributeError, TypeError, RuntimeError):
+            # Import or construction failed; return None and allow caller to handle
+            pass
+
+        # Try Global segmenters
+        try:
+            from ..Segmenters.GlobalSegmenters import GlobalSegmenterBase
+
+            seg_cls = GlobalSegmenterBase.get_framework(segmenter_name)
+            if seg_cls:
+                inst = seg_cls()
+                self.segmenter_cache[segmenter_name] = inst
+                return inst
+        except (ImportError, AttributeError, TypeError, RuntimeError):
+            # Import or construction failed; return None and allow caller to handle
+            pass
+
+        return None
 
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"

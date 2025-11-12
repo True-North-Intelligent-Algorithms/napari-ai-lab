@@ -44,7 +44,9 @@ class BaseNDEasyWidget(QWidget):
         super().__init__()
         self.viewer = viewer
         self.image_data_model = image_data_model
-        self.segmenter_cache = {}  # Cache for segmenter instances
+        # Use the model-owned segmenter cache so caching is centralized.
+        # Keep a reference here for backwards compatibility with external code.
+        self.segmenter_cache = self.image_data_model.segmenter_cache
 
         # Initialize layer references (common to both widgets)
         self.image_layer = None
@@ -91,14 +93,8 @@ class BaseNDEasyWidget(QWidget):
             self.parameter_form.clear_form()
             return
 
-        # Check if segmenter is already in cache
-        if segmenter_name in self.segmenter_cache:
-            self.segmenter = self.segmenter_cache[segmenter_name]
-        else:
-            # Create new segmenter instance and cache it
-            self.segmenter = self._create_segmenter_instance(segmenter_name)
-            if self.segmenter:
-                self.segmenter_cache[segmenter_name] = self.segmenter
+        # Use model to get (and cache) segmenter instances
+        self.segmenter = self.image_data_model.get_segmenter(segmenter_name)
 
         if self.segmenter:
             # Update parameter form with segmenter instance
