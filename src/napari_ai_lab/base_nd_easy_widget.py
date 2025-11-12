@@ -302,7 +302,13 @@ class BaseNDEasyWidget(QWidget):
                 and self.image_data_model.parent_directory
                 and self.annotation_layer
             ):
-                self._save_current_annotations()
+                # Delegate saving to the model; pass explicit image index
+                try:
+                    self.image_data_model.save_annotations(
+                        self.annotation_layer.data, self.current_image_index
+                    )
+                except (OSError, ValueError, RuntimeError) as e:
+                    print(f"Failed to save annotations via model: {e}")
             else:
                 print("No current labels to save (first image or no context)")
 
@@ -353,38 +359,6 @@ class BaseNDEasyWidget(QWidget):
             self._processing_image_change = False
             print("Finished processing image change")
             print("==============================")
-
-    def _save_current_annotations(self):
-        """Save the current labels using the configured writer."""
-        # Get annotation directory from model
-        annotation_dir = self.image_data_model.get_base_annotations_directory(
-            "class_0"
-        )
-        annotation_dir.mkdir(parents=True, exist_ok=True)
-
-        # Get current image name from model using current_image_index
-        image_paths = self.image_data_model.get_image_paths()
-        if self.current_image_index < len(image_paths):
-            image_name = image_paths[self.current_image_index].stem
-        else:
-            # Fallback to current_image_path if index is invalid
-            from pathlib import Path
-
-            image_name = (
-                Path(self.current_image_path).stem
-                if self.current_image_path
-                else "unknown"
-            )
-
-        # Convert to uint16 before saving
-        import numpy as np
-
-        labels_data = self.annotation_layer.data.astype(np.uint16)
-
-        # Save using simplified writer interface
-        return self.label_writer.save(
-            str(annotation_dir), image_name, labels_data
-        )
 
     def _on_parameters_changed(self, parameters):
         """Handle changes to segmenter parameters."""

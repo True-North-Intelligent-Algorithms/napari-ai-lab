@@ -250,5 +250,39 @@ class ImageDataModel:
 
         return data
 
+    def save_annotations(
+        self, labels_array, image_index: int, subdirectory: str = "class_0"
+    ):
+        """
+        Save the provided labels array for the image at image_index under the
+        annotations/subdirectory directory.
+
+        Args:
+            labels_array: numpy array containing labels to save.
+            image_index: Index of the image to associate the labels with.
+            subdirectory: Subdirectory under annotations to save into (default: class_0).
+
+        Returns:
+            The result of the writer.save(...) call.
+        """
+        # Defer heavy imports
+        import numpy as np
+
+        annotation_dir = self.get_base_annotations_directory(subdirectory)
+        annotation_dir.mkdir(parents=True, exist_ok=True)
+
+        image_paths = self.get_image_paths()
+        if 0 <= image_index < len(image_paths):
+            image_name = image_paths[image_index].stem
+        else:
+            image_name = "unknown"
+
+        writer = self.get_annotations_writer()
+
+        # Ensure uint16 to match previous behavior
+        labels_to_save = np.asarray(labels_array).astype(np.uint16)
+
+        return writer.save(str(annotation_dir), image_name, labels_to_save)
+
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"
