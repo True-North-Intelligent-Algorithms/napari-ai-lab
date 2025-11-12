@@ -302,7 +302,7 @@ class BaseNDEasyWidget(QWidget):
                 and self.image_data_model.parent_directory
                 and self.annotation_layer
             ):
-                self._save_current_labels()
+                self._save_current_annotations()
             else:
                 print("No current labels to save (first image or no context)")
 
@@ -354,7 +354,7 @@ class BaseNDEasyWidget(QWidget):
             print("Finished processing image change")
             print("==============================")
 
-    def _save_current_labels(self):
+    def _save_current_annotations(self):
         """Save the current labels using the configured writer."""
         # Get annotation directory from model
         annotation_dir = self.image_data_model.get_base_annotations_directory(
