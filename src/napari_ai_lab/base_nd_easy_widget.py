@@ -64,7 +64,7 @@ class BaseNDEasyWidget(QWidget):
         self._processing_image_change = False
 
         # Initialize label writer from model (common to both widgets)
-        self.label_writer = self.image_data_model.get_label_writer()
+        self.label_writer = self.image_data_model.get_annotations_writer()
 
         # Segmenter management (common to both widgets)
         self.segmenter = None
@@ -353,27 +353,6 @@ class BaseNDEasyWidget(QWidget):
             self._processing_image_change = False
             print("Finished processing image change")
             print("==============================")
-
-    def _load_existing_annotations(self, image_shape):
-        """Load existing labels or create empty ones."""
-        # Get annotation directory from model
-        annotation_dir = self.image_data_model.get_base_annotations_directory(
-            "class_0"
-        )
-
-        image_paths = self.image_data_model.get_image_paths()
-        image_name = image_paths[self.current_image_index].stem
-
-        # Load using simplified writer interface
-        data = self.label_writer.load(str(annotation_dir), image_name)
-
-        # If empty or no data, create empty labels
-        if data.size == 0:
-            import numpy as np
-
-            return np.zeros(image_shape, dtype=np.uint16)
-
-        return data
 
     def _save_current_labels(self):
         """Save the current labels using the configured writer."""

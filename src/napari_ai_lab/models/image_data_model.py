@@ -155,7 +155,7 @@ class ImageDataModel:
         # for future use where we might create subfolders per algorithm.
         return self.parent_directory / "predictions"
 
-    def get_label_writer(self):
+    def get_annotations_writer(self):
         """
         Get a label writer for this model.
 
@@ -165,6 +165,90 @@ class ImageDataModel:
         from ..writers import get_writer
 
         return get_writer("numpy")
+
+    def load_existing_annotations(
+        self, image_shape, image_index: int = 0, subdirectory: str = "class_0"
+    ):
+        """
+        Load existing annotation array for the image at image_index, or return an
+        empty array matching image_shape if no saved data exists.
+
+        Args:
+            image_shape: Shape of the image to match for empty array creation.
+            image_index: Index of the image in the model's image list.
+            subdirectory: Subdirectory under 'annotations' to look in (default: class_0).
+
+        Returns:
+            numpy ndarray containing annotation labels (dtype preserved by writer or uint16 zeros).
+        """
+        # Defer imports to here to avoid bringing numpy/writer into top-level module load
+        import numpy as np
+
+        annotation_dir = self.get_base_annotations_directory(subdirectory)
+
+        image_paths = self.get_image_paths()
+        if 0 <= image_index < len(image_paths):
+            image_name = image_paths[image_index].stem
+        else:
+            image_name = "unknown"
+
+        writer = self.get_annotations_writer()
+        data = writer.load(str(annotation_dir), image_name)
+
+        # If nothing saved, return zeros
+        if data is None or getattr(data, "size", 0) == 0:
+            return np.zeros(image_shape, dtype=np.uint16)
+
+        return data
+
+    def get_predictions_writer(self):
+        """
+        Get a writer for prediction outputs (currently same as annotations writer).
+
+        Returns:
+            BaseWriter: A numpy writer instance for prediction persistence
+        """
+        from ..writers import get_writer
+
+        return get_writer("numpy")
+
+    def load_existing_predictions(
+        self,
+        image_shape,
+        image_index: int = 0,
+        subdirectory: str = "predictions",
+    ):
+        """
+        Load existing prediction array for the image at image_index, or return an
+        empty array matching image_shape if no saved data exists.
+
+        Args:
+            image_shape: Shape of the image to match for empty array creation.
+            image_index: Index of the image in the model's image list.
+            subdirectory: Subdirectory under 'predictions' to look in (default: 'predictions').
+
+        Returns:
+            numpy ndarray containing prediction labels (dtype preserved by writer or uint16 zeros).
+        """
+        import numpy as np
+
+        preds_dir = self.get_predictions_directory(
+            subdirectory if subdirectory else "predictions"
+        )
+
+        image_paths = self.get_image_paths()
+        if 0 <= image_index < len(image_paths):
+            image_name = image_paths[image_index].stem
+        else:
+            image_name = "unknown"
+
+        writer = self.get_predictions_writer()
+        data = writer.load(str(preds_dir), image_name)
+
+        if data is None or getattr(data, "size", 0) == 0:
+            return np.zeros(image_shape, dtype=np.uint16)
+
+        return data
 
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"

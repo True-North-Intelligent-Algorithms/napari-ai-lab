@@ -194,8 +194,10 @@ class NDEasyLabel(BaseNDEasyWidget):
             # Get image data from the layer
             image_data = image_layer.data
 
-            # Load existing labels or create empty ones
-            labels_data = self._load_existing_annotations(image_data.shape)
+            # Load existing labels or create empty ones (delegated to model)
+            labels_data = self.image_data_model.load_existing_annotations(
+                image_data.shape, self.current_image_index
+            )
 
             # Add labels layer and store reference
             self.annotation_layer = self.viewer.add_labels(

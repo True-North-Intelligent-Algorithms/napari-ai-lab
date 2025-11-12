@@ -282,11 +282,11 @@ class NDEasySegment(BaseNDEasyWidget):
             if self.annotation_layer is not None:
                 selected_axis = self.parameter_form.get_selected_axis()
                 indices = self._get_current_slice_indices(selected_axis)
-                self.annotation_layer.data[indices] = (
+                self.prediction_layer.data[indices] = (
                     mask  # self.current_label_num
                 )
                 self.current_label_num += 1
-                self.annotation_layer.refresh()
+                self.prediction_layer.refresh()
                 print("Automatic segmentation completed")
             else:
                 print("No label layer available")
@@ -313,9 +313,21 @@ class NDEasySegment(BaseNDEasyWidget):
             image_data = image_layer.data
 
             # Load existing labels or create empty ones
-            labels_data = self._load_existing_annotations(image_data.shape)
+            # Load existing labels or create empty ones (delegated to model)
+            labels_data = self.image_data_model.load_existing_annotations(
+                image_data.shape, self.current_image_index
+            )
+
+            predictions_data = self.image_data_model.load_existing_predictions(
+                image_data.shape, self.current_image_index
+            )
+
             self.annotation_layer = self.viewer.add_labels(
                 labels_data, name="Labels (Persistent)"
+            )
+
+            self.prediction_layer = self.viewer.add_labels(
+                predictions_data, name="Predictions (Persistent)"
             )
 
             # Only create interactive layers if in interactive mode
