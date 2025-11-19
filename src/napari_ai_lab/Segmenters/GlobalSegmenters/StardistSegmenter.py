@@ -15,7 +15,7 @@ from .GlobalSegmenterBase import GlobalSegmenterBase
 # Try to import stardist at module level
 try:
     import stardist
-    from stardist.models import StarDist2D
+    from stardist.models import StarDist2D, StarDist3D
 
     _is_stardist_available = True
 except ImportError:
@@ -115,69 +115,53 @@ StarDist Automatic Segmentation (2D):
             )  # Debug print
             self._on_model_path_changed(value)
 
-    def _on_model_path_changed(self, new_path: str):
+    def _on_model_path_changed(self, stardist_path: str):
         """Handle model path changes - load custom model and check if 2D or 3D."""
-        if new_path and new_path.strip():
-            print(f"📁 Loading custom StarDist model from: {new_path}")
+        print(f"📁 Loading custom StarDist model from: {stardist_path}")
 
-            try:
-                # Try to load as StarDist2D first
-                from stardist.models import StarDist2D, StarDist3D
+        self.model_path = stardist_path
+        model_base_path = os.path.dirname(stardist_path)
+        model_name = os.path.basename(stardist_path)
 
-                self.model_path = new_path
-                model_base_path = os.path.dirname(new_path)
-                model_name = os.path.basename(new_path)
-                # Attempt to load the model from the directory
-                try:
-                    model_2d = StarDist2D(
-                        None, name=model_name, basedir=model_base_path
-                    )
-                    print(
-                        f"✅ Successfully loaded 2D StarDist model from: {new_path}"
-                    )
-                    print(f"   Model config: {model_2d.config}")
-                    self.custom_model = model_2d
-                    self.is_3d_model = False
-                    return
-                except (ValueError, FileNotFoundError, RuntimeError) as e2d:
-                    print(f"   ❌ Failed to load as 2D model: {e2d}")
-
-                # If 2D failed, try 3D
-                try:
-                    model_3d = StarDist3D(
-                        None, name=model_name, basedir=model_base_path
-                    )
-                    print(
-                        f"✅ Successfully loaded 3D StarDist model from: {new_path}"
-                    )
-                    print(f"   Model config: {model_3d.config}")
-                    self.custom_model = model_3d
-                    self.is_3d_model = True
-                    print(
-                        "   ⚠️  Warning: This segmenter is designed for 2D - 3D model may not work properly"
-                    )
-                    return
-                except (ValueError, FileNotFoundError, RuntimeError) as e3d:
-                    print(f"   ❌ Failed to load as 3D model: {e3d}")
-
-                # Both failed
-                print(
-                    f"   ❌ Could not load model from {new_path} as either 2D or 3D StarDist model"
-                )
-                self.custom_model = None
-                self.is_3d_model = False
-
-            except ImportError:
-                print(
-                    "   ❌ StarDist not available - cannot load custom model"
-                )
-                self.custom_model = None
-                self.is_3d_model = False
-
-        else:
-            print("🔄 Cleared custom model path, will use preset model")
-            self.custom_model = None
+        # Try to load as StarDist2D first
+        try:
+            model_2d = StarDist2D(
+                None, name=model_name, basedir=model_base_path
+            )
+            print(
+                f"✅ Successfully loaded 2D StarDist model from: {stardist_path}"
+            )
+            print(f"   Model config: {model_2d.config}")
+            self.custom_model = model_2d
             self.is_3d_model = False
+            return
+        except (ValueError, FileNotFoundError, RuntimeError) as e2d:
+            print(f"   ❌ Failed to load as 2D model: {e2d}")
+
+        # If 2D failed, try 3D
+        try:
+            model_3d = StarDist3D(
+                None, name=model_name, basedir=model_base_path
+            )
+            print(
+                f"✅ Successfully loaded 3D StarDist model from: {stardist_path}"
+            )
+            print(f"   Model config: {model_3d.config}")
+            self.custom_model = model_3d
+            self.is_3d_model = True
+            print(
+                "   ⚠️  Warning: This segmenter is designed for 2D - 3D model may not work properly"
+            )
+            return
+        except (ValueError, FileNotFoundError, RuntimeError) as e3d:
+            print(f"   ❌ Failed to load as 3D model: {e3d}")
+
+        # Both failed
+        print(
+            f"   ❌ Could not load model from {stardist_path} as either 2D or 3D StarDist model"
+        )
+        self.custom_model = None
+        self.is_3d_model = False
 
     @property
     def supported_axes(self):
@@ -271,7 +255,7 @@ StarDist Automatic Segmentation (2D):
                 x,
                 prob_thresh=self.prob_thresh,
                 nms_thresh=self.nms_thresh,
-                n_tiles=(1, 2, 2),
+                n_tiles=(1, 2),
             )
             print(
                 f"StarDist: Found {len(np.unique(labels)) - 1} objects (prob_thresh={self.prob_thresh}, nms_thresh={self.nms_thresh})"
@@ -304,6 +288,44 @@ model_preset = "{self.model_preset}"
 prob_thresh = {self.prob_thresh}
 nms_thresh = {self.nms_thresh}
 
+def _normalize(img):
+    img = img.astype(np.float32, copy=False)
+    vmin = float(np.min(img))
+    vmax = float(np.max(img))
+    if vmax > vmin:
+        img = (img - vmin) / (vmax - vmin)
+    else:
+        img = np.zeros_like(img, dtype=np.float32)
+    return img
+
+def stardist_segment_remote(image):
+    x = _normalize(image)
+    model = StarDist2D.from_pretrained(model_preset)
+    labels, details = model.predict_instances(x, prob_thresh=prob_thresh, nms_thresh=nms_thresh)
+    return labels.astype(np.uint16)
+
+# Execute segmentation
+print('Executing StarDist...')
+result = stardist_segment_remote(image.ndarray())
+
+# Convert result to appose format for output
+import appose
+
+ndarr_mask = appose.NDArray(dtype=str(result.dtype), shape=result.shape)
+ndarr_mask.ndarray()[:] = result
+
+task.outputs["mask"] = ndarr_mask
+
+        """
+
+        execution_code_ = f"""
+from stardist.models import StarDist2D
+
+# Parameters from segmenter
+model_preset = "{self.model_preset}"
+prob_thresh = {self.prob_thresh}
+nms_thresh = {self.nms_thresh}
+
 # Image will be provided as 'image' variable
 # image.shape = {image_shape}
 # image.dtype = {image_dtype}
@@ -325,7 +347,7 @@ def stardist_segment_remote(image):
     return labels.astype(np.uint16)
 
 # Execute segmentation
-result = stardist_segment_remote(image.ndarray())
+#result = stardist_segment_remote(image.ndarray())
 
 # Convert result to appose format for output
 import appose
@@ -339,7 +361,12 @@ task.outputs["mask"] = ndarr_mask
         print(
             "StarDist not available locally - generated execution string for remote processing"
         )
-        return execution_code
+        method = 1
+
+        if method == 1:
+            return execution_code
+        else:
+            return execution_code_
 
     def get_parameters_dict(self):
         """
