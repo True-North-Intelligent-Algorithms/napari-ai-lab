@@ -246,11 +246,19 @@ def cellpose_segment_remote(image):
 
     print(f"Cellpose: Segmenting image, diameter={{diameter_value}}, flow_threshold={{flow_threshold}}")
 
-    masks, flows, styles, diams = model.eval(
-        image.ndarray(),
-        diameter=diameter_value,
-        flow_threshold=flow_threshold,
-        niter=cellpose_iterations
+    if major_number == '3':
+        masks, flows, styles, diams = model.eval(
+            image.ndarray(),
+            diameter=diameter_value,
+            flow_threshold=flow_threshold,
+            niter=cellpose_iterations
+            )
+    else:
+        masks, flows, styles = model.eval(
+            image.ndarray(),
+            diameter=diameter_value,
+            flow_threshold=flow_threshold,
+            niter=cellpose_iterations
     )
 
     print(f"Cellpose: Found {{len(np.unique(masks)) - 1}} cells")
