@@ -27,18 +27,18 @@ except ImportError:
 @dataclass
 class StardistSegmenter(GlobalSegmenterBase):
     """
-    StarDist global segmenter (2D).
+    StarDist global segmenter
 
-    Uses a pretrained StarDist2D model to segment entire images automatically.
+    Uses a pretrained StarDist model to segment entire images automatically.
     """
 
     instructions = """
-StarDist Automatic Segmentation (2D):
-• Automatically segments objects in the entire 2D image
+StarDist Automatic Segmentation:
+• Automatically segments objects in the entire image
 • Model Preset: choose a pretrained model (e.g., 2D_versatile_fluo, 2D_versatile_he)
+• Alternatively, provide a custom model path
 • Probability Threshold (prob_thresh): minimum object probability
 • NMS Threshold (nms_thresh): non-maximum suppression IoU threshold
-• Best for: nuclei, cells, star-convex objects in microscopy images
     """
 
     # Parameters for StarDist segmentation
