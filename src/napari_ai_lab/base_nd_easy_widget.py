@@ -65,9 +65,6 @@ class BaseNDEasyWidget(QWidget):
         # Signal processing state protection (common to both widgets)
         self._processing_image_change = False
 
-        # Initialize label writer from model (common to both widgets)
-        self.label_writer = self.image_data_model.get_annotations_writer()
-
         # Segmenter management (common to both widgets)
         self.segmenter = None
 
@@ -393,7 +390,6 @@ class BaseNDEasyWidget(QWidget):
     # - self.current_label_num
     # - self.current_image_path (parent_directory managed by image_data_model)
     # - self._processing_image_change
-    # - self.label_writer
     # - self.segmenter
 
     # === WIDGET-SPECIFIC ATTRIBUTES ===
