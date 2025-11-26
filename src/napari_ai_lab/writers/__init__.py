@@ -7,13 +7,15 @@ in various formats (numpy, zarr, tiff, etc.) with a common interface.
 
 from .base_writer import BaseWriter
 from .numpy_writer import NumpyWriter
+from .tiff_writer import TiffWriter
 
 # Export available writers for easy selection
-__all__ = ["BaseWriter", "NumpyWriter"]
+__all__ = ["BaseWriter", "NumpyWriter", "TiffWriter"]
 
 # Registry of available writers for easy access
 AVAILABLE_WRITERS = {
     "numpy": NumpyWriter,
+    "tiff": TiffWriter,
     # Future writers can be added here:
     # "zarr": ZarrWriter,
     # "tiff": TiffWriter,

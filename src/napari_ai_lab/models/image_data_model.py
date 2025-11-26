@@ -166,7 +166,8 @@ class ImageDataModel:
         """
         from ..writers import get_writer
 
-        return get_writer("numpy")
+        # return get_writer("numpy")
+        return get_writer("tiff")
 
     def load_existing_annotations(
         self, image_shape, image_index: int = 0, subdirectory: str = "class_0"
