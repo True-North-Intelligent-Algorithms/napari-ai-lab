@@ -11,6 +11,7 @@ import napari
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
+    QPushButton,
     QWidget,
 )
 from superqt.utils import ensure_main_thread
@@ -67,6 +68,41 @@ class BaseNDEasyWidget(QWidget):
 
         # Segmenter management (common to both widgets)
         self.segmenter = None
+
+        # Create save annotations button
+        self.save_annotations_btn = QPushButton("Save Annotations")
+        self.save_annotations_btn.clicked.connect(self._on_save_annotations)
+
+        # Connect to viewer close event
+        try:
+            self.viewer.window._qt_window.destroyed.connect(
+                self._on_viewer_closing
+            )
+        except (AttributeError, RuntimeError) as e:
+            print(f"Could not connect to viewer closing: {e}")
+
+    def _on_viewer_closing(self):
+        """Handle napari viewer closing."""
+        print("Viewer closing detected")
+        QMessageBox.information(None, "Closing", "Closing widget")
+
+    def _on_save_annotations(self):
+        """Save current annotations explicitly."""
+        if self.annotation_layer and self.current_image_path:
+            try:
+                self.image_data_model.save_annotations(
+                    self.annotation_layer.data, self.current_image_index
+                )
+                print(
+                    f"Saved annotations for image index {self.current_image_index}"
+                )
+            except (OSError, ValueError, RuntimeError) as e:
+                print(f"Failed to save annotations: {e}")
+                QMessageBox.warning(
+                    self, "Save Error", f"Failed to save annotations: {e}"
+                )
+        else:
+            print("No annotations to save")
 
     # === COMMON METHODS TO BE IMPLEMENTED ===
     # These methods exist in both NDEasyLabel and NDEasySegment with similar/identical implementations

@@ -91,6 +91,8 @@ class NDEasySegment(BaseNDEasyWidget):
 
         main_layout.addWidget(self.auto_controls_group)
 
+        main_layout.addWidget(self.save_annotations_btn)
+
         # Interactive mode info (no additional controls needed - uses napari layers)
         self.interactive_info_group = QGroupBox("Interactive Segmentation")
         interactive_layout = QVBoxLayout(self.interactive_info_group)
