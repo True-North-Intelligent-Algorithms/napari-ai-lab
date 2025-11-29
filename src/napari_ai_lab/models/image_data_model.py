@@ -213,7 +213,7 @@ class ImageDataModel:
         """
         from ..writers import get_writer
 
-        return get_writer("numpy")
+        return get_writer("tiff")
 
     def load_existing_predictions(
         self,
