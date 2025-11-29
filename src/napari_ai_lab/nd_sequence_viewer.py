@@ -1,11 +1,12 @@
 import contextlib
 
 import napari
-from qtpy.QtCore import Qt, Signal
+from qtpy.QtCore import QEvent, Qt, Signal
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollBar,
@@ -53,6 +54,17 @@ class NDSequenceViewer(QWidget):
         )  # Ensure minimum space for info
         self.layout().addWidget(self.image_info_label)
 
+        # Add jump to image input
+        self.jump_label = QLabel("Jump to:")
+        self.layout().addWidget(self.jump_label)
+
+        self.jump_input = QLineEdit()
+        self.jump_input.setMaximumWidth(80)
+        self.jump_input.setPlaceholderText("Image #")
+        self.jump_input.returnPressed.connect(self._on_jump_to_image)
+        self.jump_input.installEventFilter(self)
+        self.layout().addWidget(self.jump_input)
+
         # Add scroll bar for browsing images (wider)
         self.image_scrollbar = QScrollBar(Qt.Horizontal)
         self.image_scrollbar.setMinimum(0)
@@ -64,6 +76,37 @@ class NDSequenceViewer(QWidget):
         self.layout().addWidget(self.image_scrollbar, 1)
 
         print("NDSeriesViewer initialized")
+
+    def eventFilter(self, obj, event):
+        """Handle Tab key press in jump input."""
+        if (
+            obj == self.jump_input
+            and event.type() == QEvent.KeyPress
+            and event.key() == Qt.Key_Tab
+        ):
+            self._on_jump_to_image()
+            return True
+        return super().eventFilter(obj, event)
+
+    def _on_jump_to_image(self):
+        """Jump to specific image number entered by user."""
+        try:
+            image_num = int(self.jump_input.text())
+            if self.image_data_model:
+                max_images = self.image_data_model.get_image_count()
+                if 1 <= image_num <= max_images:
+                    self.image_scrollbar.setValue(image_num - 1)
+                    self.jump_input.clear()
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Image",
+                        f"Please enter a number between 1 and {max_images}",
+                    )
+        except ValueError:
+            QMessageBox.warning(
+                self, "Invalid Input", "Please enter a valid image number"
+            )
 
     def _on_open_directory(self):
         """Open a file dialog to select an image directory."""
