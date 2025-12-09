@@ -135,12 +135,18 @@ Instructions:
 
         self.state = AnnotatorState()
         self.state.reset_state()
-        self.state.initialize_predictor(
-            image,
-            model_type=self.model_type,
-            ndim=len(image.shape),
-            save_path=self.embedding_save_path,
-        )
+        try:
+            self.state.initialize_predictor(
+                image,
+                model_type=self.model_type,
+                ndim=len(image.shape),
+                save_path=self.embedding_save_path,
+            )
+        except Exception as e:  # noqa
+            print(f"Error initializing predictor: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     @property
     def supported_axes(self):
