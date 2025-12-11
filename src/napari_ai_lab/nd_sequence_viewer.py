@@ -12,7 +12,6 @@ from qtpy.QtWidgets import (
     QScrollBar,
     QWidget,
 )
-from skimage import io
 
 from .models import ImageDataModel
 
@@ -216,20 +215,17 @@ class NDSequenceViewer(QWidget):
                 self.viewer.layers.remove(self.current_image_layer)
                 self.current_image_layer = None
 
-            # Load new image
+            # Load image data from model
+            image_data = self.image_data_model.load_image(self.current_index)
+
+            # Get image path for display name
             image_paths = self.image_data_model.get_image_paths()
             image_path = image_paths[self.current_index]
-            print(f"Loading image: {image_path}")
-
-            # Read image using skimage
-            image_data = io.imread(str(image_path))
 
             # Add image to viewer
             self.current_image_layer = self.viewer.add_image(
                 image_data, name=f"Series Image: {image_path.name}"
             )
-
-            print(f"Loaded image shape: {image_data.shape}")
 
             # Emit signal that image has changed with image layer and index
             self.image_changed.emit(
@@ -237,12 +233,18 @@ class NDSequenceViewer(QWidget):
                 self.current_index,
             )
 
-        except (OSError, ValueError, TypeError, RuntimeError) as e:
-            print(f"Error loading image {image_path}: {e}")
+        except (OSError, ValueError, TypeError, RuntimeError, IndexError) as e:
+            image_paths = self.image_data_model.get_image_paths()
+            image_name = (
+                image_paths[self.current_index].name
+                if self.current_index < len(image_paths)
+                else "unknown"
+            )
+            print(f"Error loading image: {e}")
             QMessageBox.warning(
                 self,
                 "Image Load Error",
-                f"Could not load image: {image_path.name}\nError: {str(e)}",
+                f"Could not load image: {image_name}\nError: {str(e)}",
             )
 
     def _reset_display(self):

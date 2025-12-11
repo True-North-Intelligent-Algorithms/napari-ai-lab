@@ -21,7 +21,15 @@ class ImageDataModel:
     """
 
     # Supported image extensions
-    IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+    IMAGE_EXTENSIONS = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".tif",
+        ".tiff",
+        ".bmp",
+        ".czi",
+    }
 
     def __init__(self, parent_directory: str):
         """
@@ -99,6 +107,52 @@ class ImageDataModel:
     def get_image_count(self) -> int:
         """Get total number of images in directory."""
         return len(self.get_image_paths())
+
+    def load_image(self, image_index: int) -> np.ndarray:
+        """
+        Load image data at the specified index.
+
+        Args:
+            image_index: Index of the image to load
+
+        Returns:
+            numpy array with image data, squeezed to remove singleton dimensions
+
+        Raises:
+            IndexError: If image_index is out of range
+            OSError: If image cannot be loaded
+        """
+        from skimage import io
+
+        image_paths = self.get_image_paths()
+        if not 0 <= image_index < len(image_paths):
+            raise IndexError(
+                f"Image index {image_index} out of range (0-{len(image_paths)-1})"
+            )
+
+        image_path = image_paths[image_index]
+        print(f"Loading image: {image_path}")
+
+        try:
+            # Try skimage first
+            image_data = io.imread(str(image_path))
+        except Exception as e:  # noqa: BLE001
+            # Fallback to czifile for .czi format
+            try:
+                from czifile import CziFile
+
+                with CziFile(str(image_path)) as czi:
+                    image_data = czi.asarray()
+            except Exception as czi_error:  # noqa: BLE001
+                raise OSError(
+                    f"Failed to load image: {e}, CZI fallback also failed: {czi_error}"
+                ) from e
+
+        # Squeeze to remove singleton dimensions
+        image_data = np.squeeze(image_data)
+        print(f"Loaded image shape: {image_data.shape}")
+
+        return image_data
 
     def _load_image_list(self, directory: str):
         """
