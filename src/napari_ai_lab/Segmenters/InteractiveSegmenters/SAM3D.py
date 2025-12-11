@@ -156,7 +156,7 @@ Instructions:
         Returns:
             list: Supported axis configurations for 3D SAM segmentation.
         """
-        return ["YX", "ZYX", "ZYXC"]
+        return ["ZYX", "YX", "ZYXC"]
 
     def are_dependencies_available(self):
         """
