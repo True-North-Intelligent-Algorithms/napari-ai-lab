@@ -17,10 +17,12 @@ try:
     from cellpose import models
 
     _is_cellpose_available = True
+    _cellpose_major_version = cellpose.version.split(".")[0]
 except ImportError:
     cellpose = None
     models = None
     _is_cellpose_available = False
+    _cellpose_major_version = None
 
 
 @dataclass

@@ -131,6 +131,18 @@ class SegmenterBase:
             image_name (str): Name of the image (without extension)
         """
 
+    def get_version(self):
+        """
+        Get the version of the segmentation framework.
+
+        This method can be overridden by derived classes to return version
+        information for the underlying segmentation library.
+
+        Returns:
+            str or None: Version string if available, None otherwise.
+        """
+        return None
+
     def __str__(self):
         """String representation of the segmenter."""
         return f"{self.__class__.__name__}(name='{self.name}')"
