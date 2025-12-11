@@ -120,6 +120,12 @@ Cellpose Automatic Cell Segmentation:
         """
         return _is_cellpose_available
 
+    def get_version(self):
+        """Get the cellpose version."""
+        if _is_cellpose_available:
+            return "cellpose" + str(cellpose.version)
+        return None
+
     def segment(self, image, **kwargs):
         """
         Perform Cellpose segmentation on entire image.
@@ -140,48 +146,44 @@ Cellpose Automatic Cell Segmentation:
                 f"CellposeSegmenter requires at least 2D images. Got shape: {image.shape}"
             )
 
-        # Get cellpose version and create appropriate model
-        major_number = cellpose.version.split(".")[0]
-        print(
-            f"Cellpose version: {cellpose.version} (major number: {major_number})"
-        )
-
+        # Create model using cached major version
         try:
-            if major_number == "4":
+            if _cellpose_major_version == "4":
                 model = models.CellposeModel(
                     gpu=self.use_gpu, model_type=self.model_type
                 )
             else:
-                # For version 3 and all other versions, use the older API
                 model = models.Cellpose(
                     gpu=self.use_gpu, model_type=self.model_type
                 )
+        except (AttributeError, ValueError, TypeError) as e:
+            print(f"Error creating model with GPU, falling back to CPU: {e}")
+            if _cellpose_major_version == "4":
+                model = models.CellposeModel(
+                    gpu=False, model_type=self.model_type
+                )
+            else:
+                model = models.Cellpose(gpu=False, model_type=self.model_type)
 
-            print(
-                f"Created Cellpose model: {self.model_type}, GPU: {self.use_gpu}"
+        # Perform segmentation
+        diameter = None if self.diameter == 0 else self.diameter
+
+        if _cellpose_major_version == "3":
+            masks, flows, styles, diams = model.eval(
+                image,
+                diameter=diameter,
+                flow_threshold=self.flow_threshold,
+                niter=self.cellpose_iterations,
+            )
+        else:
+            masks, flows, styles = model.eval(
+                image,
+                diameter=diameter,
+                flow_threshold=self.flow_threshold,
+                niter=self.cellpose_iterations,
             )
 
-        except (AttributeError, ValueError, TypeError) as e:
-            print(f"Error creating Cellpose model: {e}")
-            print("Falling back to CPU mode...")
-            try:
-                if major_number == "4":
-                    model = models.CellposeModel(
-                        gpu=False, model_type=self.model_type
-                    )
-                else:
-                    # For version 3 and all other versions, use the older API
-                    model = models.Cellpose(
-                        gpu=False, model_type=self.model_type
-                    )
-            except (AttributeError, ValueError, TypeError) as fallback_error:
-                raise RuntimeError(
-                    f"Could not create Cellpose model: {fallback_error}"
-                ) from fallback_error
-
-        # Use 2D segmentation - Cellpose handles multichannel images directly
-        processed_image = self._segment_2d(model, image)
-        return processed_image
+        return masks.astype(np.uint16)
 
     def get_execution_string(self, image, **kwargs):
         """
@@ -281,35 +283,7 @@ ndarr_mask.ndarray()[:] = result
 task.outputs["mask"] = ndarr_mask
 '''
 
-        print(
-            "Cellpose not available locally - generated execution string for remote processing"
-        )
-        print(
-            "This string can be sent to a cellpose-enabled environment for execution"
-        )
-
         return execution_code
-
-    def _segment_2d(self, model, image):
-        """Segment a 2D image (grayscale or multichannel)."""
-        diameter_value = None if self.diameter == 0 else self.diameter
-
-        print(
-            f"Cellpose: Segmenting 2D image, diameter={diameter_value}, flow_threshold={self.flow_threshold}"
-        )
-
-        masks, flows, styles, diams = model.eval(
-            image,
-            diameter=diameter_value,
-            flow_threshold=self.flow_threshold,
-            niter=self.cellpose_iterations,
-        )
-
-        print(f"Cellpose: Found {len(np.unique(masks)) - 1} cells")
-        if diameter_value is None:
-            print(f"Cellpose: Auto-detected diameter: {diams}")
-
-        return masks.astype(np.uint16)
 
     def get_parameters_dict(self):
         """
