@@ -104,6 +104,25 @@ class BaseNDEasyWidget(QWidget):
         else:
             print("No annotations to save")
 
+    def _get_current_slice_indices(self, selected_axis):
+        """Get indices for current slice based on selected axis mode."""
+        if selected_axis == "YX":
+            return self.viewer.dims.current_step[:-2] + (
+                slice(None),
+                slice(None),
+            )
+        elif selected_axis == "ZYX":
+            return self.viewer.dims.current_step[:-3] + (
+                slice(None),
+                slice(None),
+                slice(None),
+            )
+        else:
+            return self.viewer.dims.current_step[:-2] + (
+                slice(None),
+                slice(None),
+            )
+
     # === COMMON METHODS TO BE IMPLEMENTED ===
     # These methods exist in both NDEasyLabel and NDEasySegment with similar/identical implementations
 

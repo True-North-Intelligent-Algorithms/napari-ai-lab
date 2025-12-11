@@ -196,25 +196,6 @@ class NDEasySegment(BaseNDEasyWidget):
             ) as e:
                 print(f"Error during segmentation: {e}")
 
-    def _get_current_slice_indices(self, selected_axis):
-        """Get indices for current slice based on selected axis mode."""
-        if selected_axis == "YX":
-            return self.viewer.dims.current_step[:-2] + (
-                slice(None),
-                slice(None),
-            )
-        elif selected_axis == "ZYX":
-            return self.viewer.dims.current_step[:-3] + (
-                slice(None),
-                slice(None),
-                slice(None),
-            )
-        else:
-            return self.viewer.dims.current_step[:-2] + (
-                slice(None),
-                slice(None),
-            )
-
     # === Automatic Mode Methods ===
     def _on_segment_current(self):
         """Segment the current image automatically."""
