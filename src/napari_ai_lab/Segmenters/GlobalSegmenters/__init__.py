@@ -17,12 +17,13 @@ imported explicitly based on your environment and available dependencies.
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # List of available segmenters - only import on demand to avoid dependency issues
-__all__ = ["GlobalSegmenterBase"]
+__all__ = ["GlobalSegmenterBase", "MicroSamSegmenter"]
 
 # Optional segmenters - only imported if their dependencies are available
 _OPTIONAL_SEGMENTERS = {
     "CellposeSegmenter": ".CellposeSegmenter",
     "StardistSegmenter": ".StardistSegmenter",
+    "MicroSamSegmenter": ".MicroSamSegmenter",
     "OtsuSegmenter": ".OtsuSegmenter",
     "ThresholdSegmenter": ".ThresholdSegmenter",
 }
