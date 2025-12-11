@@ -206,8 +206,7 @@ StarDist Automatic Segmentation:
             **kwargs: Additional keyword arguments.
 
         Returns:
-            numpy.ndarray or str: Labeled segmentation mask if dependencies available,
-                                 otherwise execution string for remote processing.
+            numpy.ndarray: Labeled segmentation mask.
 
         Raises:
             ValueError: If image dimensions are not supported.
@@ -216,9 +215,6 @@ StarDist Automatic Segmentation:
             raise ValueError(
                 f"StardistSegmenter requires at least 2D images. Got shape: {image.shape}"
             )
-
-        if not self.are_dependencies_available():
-            return self.get_execution_string(image)
 
         # Use custom model if loaded, otherwise use preset
         model = None
@@ -255,7 +251,7 @@ StarDist Automatic Segmentation:
                 x,
                 prob_thresh=self.prob_thresh,
                 nms_thresh=self.nms_thresh,
-                n_tiles=(1, 2),
+                n_tiles=(1, 2, 2),
             )
             print(
                 f"StarDist: Found {len(np.unique(labels)) - 1} objects (prob_thresh={self.prob_thresh}, nms_thresh={self.nms_thresh})"
