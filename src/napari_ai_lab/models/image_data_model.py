@@ -314,7 +314,11 @@ class ImageDataModel:
         return data
 
     def save_annotations(
-        self, labels_array, image_index: int, subdirectory: str = "class_0"
+        self,
+        labels_array,
+        image_index: int,
+        subdirectory: str = "class_0",
+        current_step: tuple = None,
     ):
         """
         Save the provided labels array for the image at image_index under the
@@ -324,6 +328,7 @@ class ImageDataModel:
             labels_array: numpy array containing labels to save.
             image_index: Index of the image to associate the labels with.
             subdirectory: Subdirectory under annotations to save into (default: class_0).
+            current_step: Viewer dimension position (for stacked mode).
 
         Returns:
             The result of the writer.save(...) call.
@@ -340,13 +345,16 @@ class ImageDataModel:
         # Ensure uint16 to match previous behavior
         labels_to_save = np.asarray(labels_array).astype(np.uint16)
 
-        return writer.save(str(annotation_dir), dataset_name, labels_to_save)
+        return writer.save(
+            str(annotation_dir), dataset_name, labels_to_save, current_step
+        )
 
     def save_predictions(
         self,
         predictions_array,
         image_index: int,
         subdirectory: str = "predictions",
+        current_step: tuple = None,
     ):
         """
         Save prediction array for the image at image_index under predictions/subdirectory.
@@ -355,6 +363,7 @@ class ImageDataModel:
             preds_array: numpy array with predictions to save.
             image_index: Index of the associated image.
             subdirectory: Subdirectory under predictions to save into.
+            current_step: Viewer dimension position (for stacked mode).
 
         Returns:
             Result of writer.save(...)
@@ -375,7 +384,10 @@ class ImageDataModel:
         predictions_to_save = np.asarray(predictions_array)
 
         return writer.save(
-            str(predictions_dir), dataset_name, predictions_to_save
+            str(predictions_dir),
+            dataset_name,
+            predictions_to_save,
+            current_step,
         )
 
     def get_global_frameworks(self):

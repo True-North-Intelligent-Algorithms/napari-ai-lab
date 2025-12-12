@@ -37,22 +37,32 @@ class StackedSequenceWriter(BaseWriter):
         self._normalize = False
 
     def save(
-        self, save_directory: str, dataset_name: str, data: np.ndarray
+        self,
+        save_directory: str,
+        dataset_name: str,
+        data: np.ndarray,
+        current_step: tuple = None,
     ) -> bool:
         """Save data as individual TIFF, cropped to original size."""
         try:
-            print(f"Looking for: '{dataset_name}'")
-            print(f"In list: {self._image_names}")
-            print(f"Found: {dataset_name in self._image_names}")
-
-            idx = self._image_names.index(dataset_name)
+            # Use current_step[0] to get index in stack
+            if current_step:
+                idx = current_step[0]
+                # Get actual dataset name from index
+                dataset_name = self._image_names[idx]
+            else:
+                idx = self._image_names.index(dataset_name)
 
             original_shape = self._original_shapes[idx]
-            slices = tuple(slice(0, s) for s in original_shape)
-            data = data[slices]
+            cropped_data = data[idx, ...]
+            cropped_data = np.squeeze(cropped_data)
+            if cropped_data.shape != original_shape:
+                cropped_data = cropped_data[
+                    tuple(slice(0, s) for s in original_shape)
+                ]
 
             path = Path(save_directory) / f"{dataset_name}.tif"
-            io.imsave(str(path), data.astype(np.uint16))
+            io.imsave(str(path), cropped_data.astype(np.uint16))
             return True
 
         except Exception as e:  # noqa: BLE001

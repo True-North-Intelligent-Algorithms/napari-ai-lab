@@ -91,7 +91,9 @@ class BaseNDEasyWidget(QWidget):
         if self.annotation_layer and self.current_image_path:
             try:
                 self.image_data_model.save_annotations(
-                    self.annotation_layer.data, self.current_image_index
+                    self.annotation_layer.data,
+                    self.current_image_index,
+                    current_step=self.viewer.dims.current_step,
                 )
                 print(
                     f"Saved annotations for image index {self.current_image_index}"
@@ -353,7 +355,9 @@ class BaseNDEasyWidget(QWidget):
                 # Delegate saving to the model; pass explicit image index
                 try:
                     self.image_data_model.save_annotations(
-                        self.annotation_layer.data, self.current_image_index
+                        self.annotation_layer.data,
+                        self.current_image_index,
+                        current_step=self.viewer.dims.current_step,
                     )
                 except (OSError, ValueError, RuntimeError) as e:
                     print(f"Failed to save annotations via model: {e}")

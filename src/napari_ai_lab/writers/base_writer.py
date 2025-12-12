@@ -33,7 +33,11 @@ class BaseWriter(ABC):
 
     @abstractmethod
     def save(
-        self, save_directory: str, dataset_name: str, data: np.ndarray
+        self,
+        save_directory: str,
+        dataset_name: str,
+        data: np.ndarray,
+        current_step: tuple = None,
     ) -> bool:
         """
         Save data to storage.
@@ -42,6 +46,7 @@ class BaseWriter(ABC):
             save_directory: Directory where data should be saved
             dataset_name: Name of the dataset (without extension)
             data: Array to save
+            current_step: Viewer dimension position (for stacked mode)
 
         Returns:
             True if successful, False otherwise

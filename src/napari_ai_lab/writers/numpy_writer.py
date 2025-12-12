@@ -28,7 +28,11 @@ class NumpyWriter(BaseWriter):
         super().__init__(subdirectory)
 
     def save(
-        self, save_directory: str, dataset_name: str, data: np.ndarray
+        self,
+        save_directory: str,
+        dataset_name: str,
+        data: np.ndarray,
+        current_step: tuple = None,
     ) -> bool:
         """
         Save data as a numpy .npy file.
@@ -37,6 +41,7 @@ class NumpyWriter(BaseWriter):
             save_directory: Directory where data should be saved
             dataset_name: Name of the dataset (without extension)
             data: Array to save
+            current_step: Viewer dimension position (unused in numpy_writer)
 
         Returns:
             True if successful, False otherwise

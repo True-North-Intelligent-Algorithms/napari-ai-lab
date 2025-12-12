@@ -264,7 +264,9 @@ class NDEasySegment(BaseNDEasyWidget):
 
             # save predictions via model
             self.image_data_model.save_predictions(
-                mask, self.current_image_index
+                mask,
+                self.current_image_index,
+                current_step=self.viewer.dims.current_step,
             )
 
         except (
