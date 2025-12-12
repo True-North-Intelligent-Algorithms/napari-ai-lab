@@ -41,12 +41,11 @@ class ImageDataModel:
         self.parent_directory = Path(parent_directory).resolve()
         self.results_directory = self.parent_directory / "results"
         self._image_paths: list[Path] | None = None
-        # Cache for created segmenter instances (name -> instance)
         self.segmenter_cache: dict = {}
-        # Annotation writer type ("tiff", "stacked_sequence", "numpy", etc.)
         self.annotation_writer_type: str = "tiff"
-        # Prediction writer type ("tiff", "stacked_sequence", "numpy", etc.)
         self.prediction_writer_type: str = "tiff"
+        self._annotations_writer = None
+        self._predictions_writer = None
 
         # Load image list on initialization
         self._load_image_list(str(self.parent_directory))
@@ -216,24 +215,17 @@ class ImageDataModel:
         return self.parent_directory / "predictions"
 
     def get_annotations_writer(self):
-        """
-        Get a label writer for this model.
+        """Get annotation writer."""
+        if self._annotations_writer is None:
+            from ..writers import get_writer
 
-        Returns:
-            BaseWriter: A writer instance for label persistence
-        """
-        from ..writers import get_writer
-
-        return get_writer(self.annotation_writer_type)
+            self._annotations_writer = get_writer(self.annotation_writer_type)
+        return self._annotations_writer
 
     def set_annotation_writer_type(self, writer_type: str):
-        """
-        Set the annotation writer type.
-
-        Args:
-            writer_type: Type of writer ("tiff", "stacked_sequence", "numpy", etc.)
-        """
+        """Set annotation writer type."""
         self.annotation_writer_type = writer_type
+        self._annotations_writer = None
 
     def load_existing_annotations(
         self, image_shape, image_index: int = 0, subdirectory: str = "class_0"
@@ -271,24 +263,17 @@ class ImageDataModel:
         return data
 
     def get_predictions_writer(self):
-        """
-        Get a writer for prediction outputs.
+        """Get prediction writer."""
+        if self._predictions_writer is None:
+            from ..writers import get_writer
 
-        Returns:
-            BaseWriter: A writer instance for prediction persistence
-        """
-        from ..writers import get_writer
-
-        return get_writer(self.prediction_writer_type)
+            self._predictions_writer = get_writer(self.prediction_writer_type)
+        return self._predictions_writer
 
     def set_prediction_writer_type(self, writer_type: str):
-        """
-        Set the prediction writer type.
-
-        Args:
-            writer_type: Type of writer ("tiff", "stacked_sequence", "numpy", etc.)
-        """
+        """Set prediction writer type."""
         self.prediction_writer_type = writer_type
+        self._predictions_writer = None
 
     def load_existing_predictions(
         self,
