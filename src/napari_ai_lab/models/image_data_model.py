@@ -43,6 +43,10 @@ class ImageDataModel:
         self._image_paths: list[Path] | None = None
         # Cache for created segmenter instances (name -> instance)
         self.segmenter_cache: dict = {}
+        # Annotation writer type ("tiff", "stacked_sequence", "numpy", etc.)
+        self.annotation_writer_type: str = "tiff"
+        # Prediction writer type ("tiff", "stacked_sequence", "numpy", etc.)
+        self.prediction_writer_type: str = "tiff"
 
         # Load image list on initialization
         self._load_image_list(str(self.parent_directory))
@@ -216,12 +220,20 @@ class ImageDataModel:
         Get a label writer for this model.
 
         Returns:
-            BaseWriter: A numpy writer instance for label persistence
+            BaseWriter: A writer instance for label persistence
         """
         from ..writers import get_writer
 
-        # return get_writer("numpy")
-        return get_writer("tiff")
+        return get_writer(self.annotation_writer_type)
+
+    def set_annotation_writer_type(self, writer_type: str):
+        """
+        Set the annotation writer type.
+
+        Args:
+            writer_type: Type of writer ("tiff", "stacked_sequence", "numpy", etc.)
+        """
+        self.annotation_writer_type = writer_type
 
     def load_existing_annotations(
         self, image_shape, image_index: int = 0, subdirectory: str = "class_0"
@@ -260,14 +272,23 @@ class ImageDataModel:
 
     def get_predictions_writer(self):
         """
-        Get a writer for prediction outputs (currently same as annotations writer).
+        Get a writer for prediction outputs.
 
         Returns:
-            BaseWriter: A numpy writer instance for prediction persistence
+            BaseWriter: A writer instance for prediction persistence
         """
         from ..writers import get_writer
 
-        return get_writer("tiff")
+        return get_writer(self.prediction_writer_type)
+
+    def set_prediction_writer_type(self, writer_type: str):
+        """
+        Set the prediction writer type.
+
+        Args:
+            writer_type: Type of writer ("tiff", "stacked_sequence", "numpy", etc.)
+        """
+        self.prediction_writer_type = writer_type
 
     def load_existing_predictions(
         self,
