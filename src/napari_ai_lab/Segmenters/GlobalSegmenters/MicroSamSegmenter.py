@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ...utility import get_ndim
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import micro_sam at module level
@@ -170,8 +171,7 @@ MicroSam Automatic Instance Segmentation:
             is_tiled=(tile_shape is not None),
         )
 
-        # Determine ndim
-        ndim = 2 if len(image.shape) == 2 else len(image.shape)
+        ndim = get_ndim(image.shape)
 
         # Perform automatic instance segmentation
         print(f"MicroSam: Running segmentation (ndim={ndim})...")
