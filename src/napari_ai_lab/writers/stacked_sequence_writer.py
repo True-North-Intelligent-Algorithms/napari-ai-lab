@@ -37,39 +37,39 @@ class StackedSequenceWriter(BaseWriter):
         self._normalize = False
 
     def save(
-        self, save_directory: str, image_name: str, data: np.ndarray
+        self, save_directory: str, dataset_name: str, data: np.ndarray
     ) -> bool:
         """Save data as individual TIFF, cropped to original size."""
         try:
-            print(f"Looking for: '{image_name}'")
+            print(f"Looking for: '{dataset_name}'")
             print(f"In list: {self._image_names}")
-            print(f"Found: {image_name in self._image_names}")
+            print(f"Found: {dataset_name in self._image_names}")
 
-            idx = self._image_names.index(image_name)
+            idx = self._image_names.index(dataset_name)
 
             original_shape = self._original_shapes[idx]
             slices = tuple(slice(0, s) for s in original_shape)
             data = data[slices]
 
-            path = Path(save_directory) / f"{image_name}.tif"
+            path = Path(save_directory) / f"{dataset_name}.tif"
             io.imsave(str(path), data.astype(np.uint16))
             return True
 
         except Exception as e:  # noqa: BLE001
             # Catch all errors (IO, index, type conversion)
-            print(f"Error saving {image_name}: {e}")
+            print(f"Error saving {dataset_name}: {e}")
             return False
 
-    def load(self, load_directory: str, image_name: str) -> np.ndarray:
+    def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         """
-        Load entire directory as stack, return slice matching image_name.
+        Load entire directory as stack, return slice matching dataset_name.
 
         Args:
             load_directory: Directory where TIFFs are stored
-            image_name: Name of the image (used to find correct index)
+            dataset_name: Name of the dataset (used to find correct index)
 
         Returns:
-            Array data for the specified image (empty if no saved data exists)
+            Array data for the specified dataset (empty if no saved data exists)
         """
         try:
             self._load_directory_as_stack(load_directory)

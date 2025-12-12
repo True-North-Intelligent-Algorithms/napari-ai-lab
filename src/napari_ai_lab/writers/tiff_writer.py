@@ -29,40 +29,40 @@ class TiffWriter(BaseWriter):
         super().__init__(subdirectory)
 
     def save(
-        self, save_directory: str, image_name: str, data: np.ndarray
+        self, save_directory: str, dataset_name: str, data: np.ndarray
     ) -> bool:
         """
         Save data as a TIFF file.
 
         Args:
             save_directory: Directory where data should be saved
-            image_name: Name of the image (without extension)
+            dataset_name: Name of the dataset (without extension)
             data: Array to save
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            path = Path(save_directory) / f"{image_name}.tif"
+            path = Path(save_directory) / f"{dataset_name}.tif"
             io.imsave(str(path), data.astype(np.uint16))
             return True
         except (OSError, ValueError, PermissionError) as e:
             print(f"✗ Error saving: {e}")
             return False
 
-    def load(self, load_directory: str, image_name: str) -> np.ndarray:
+    def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         """
         Load data from TIFF file.
 
         Args:
             load_directory: Directory where data is stored
-            image_name: Name of the image (without extension)
+            dataset_name: Name of the dataset (without extension)
 
         Returns:
             Array data (empty if no saved data exists)
         """
         try:
-            path = Path(load_directory) / f"{image_name}.tif"
+            path = Path(load_directory) / f"{dataset_name}.tif"
             if path.exists():
                 return io.imread(str(path)).astype(np.uint16)
             else:

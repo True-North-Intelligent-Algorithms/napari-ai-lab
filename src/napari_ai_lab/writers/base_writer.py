@@ -33,14 +33,14 @@ class BaseWriter(ABC):
 
     @abstractmethod
     def save(
-        self, save_directory: str, image_name: str, data: np.ndarray
+        self, save_directory: str, dataset_name: str, data: np.ndarray
     ) -> bool:
         """
         Save data to storage.
 
         Args:
             save_directory: Directory where data should be saved
-            image_name: Name of the image (without extension)
+            dataset_name: Name of the dataset (without extension)
             data: Array to save
 
         Returns:
@@ -48,13 +48,13 @@ class BaseWriter(ABC):
         """
 
     @abstractmethod
-    def load(self, load_directory: str, image_name: str) -> np.ndarray:
+    def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         """
         Load data from storage.
 
         Args:
             load_directory: Directory where data is stored
-            image_name: Name of the image (without extension)
+            dataset_name: Name of the dataset (without extension)
 
         Returns:
             Array data (empty if no saved data exists)
@@ -70,14 +70,14 @@ class BaseWriter(ABC):
         if labels_path:
             labels_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def get_image_name(self, image_path: str) -> str:
+    def get_dataset_name(self, dataset_path: str) -> str:
         """
-        Get the base name of an image (without extension).
+        Get the base name of a dataset (without extension).
 
         Args:
-            image_path: Path to the image file
+            dataset_path: Path to the dataset file
 
         Returns:
             Base name without extension
         """
-        return Path(image_path).stem
+        return Path(dataset_path).stem

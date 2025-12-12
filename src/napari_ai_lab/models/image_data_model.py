@@ -249,12 +249,12 @@ class ImageDataModel:
 
         image_paths = self.get_image_paths()
         if 0 <= image_index < len(image_paths):
-            image_name = image_paths[image_index].stem
+            dataset_name = image_paths[image_index].stem
         else:
-            image_name = "unknown"
+            dataset_name = "unknown"
 
         writer = self.get_annotations_writer()
-        data = writer.load(str(annotation_dir), image_name)
+        data = writer.load(str(annotation_dir), dataset_name)
 
         # If nothing saved, return zeros
         if data is None or getattr(data, "size", 0) == 0:
@@ -301,12 +301,12 @@ class ImageDataModel:
 
         image_paths = self.get_image_paths()
         if 0 <= image_index < len(image_paths):
-            image_name = image_paths[image_index].stem
+            dataset_name = image_paths[image_index].stem
         else:
-            image_name = "unknown"
+            dataset_name = "unknown"
 
         writer = self.get_predictions_writer()
-        data = writer.load(str(preds_dir), image_name)
+        data = writer.load(str(preds_dir), dataset_name)
 
         if data is None or getattr(data, "size", 0) == 0:
             return np.zeros(image_shape, dtype=np.uint16)
@@ -333,14 +333,14 @@ class ImageDataModel:
 
         image_paths = self.get_image_paths()
 
-        image_name = image_paths[image_index].stem
+        dataset_name = image_paths[image_index].stem
 
         writer = self.get_annotations_writer()
 
         # Ensure uint16 to match previous behavior
         labels_to_save = np.asarray(labels_array).astype(np.uint16)
 
-        return writer.save(str(annotation_dir), image_name, labels_to_save)
+        return writer.save(str(annotation_dir), dataset_name, labels_to_save)
 
     def save_predictions(
         self,
@@ -366,16 +366,16 @@ class ImageDataModel:
 
         image_paths = self.get_image_paths()
         if 0 <= image_index < len(image_paths):
-            image_name = image_paths[image_index].stem
+            dataset_name = image_paths[image_index].stem
         else:
-            image_name = "unknown"
+            dataset_name = "unknown"
 
         writer = self.get_predictions_writer()
 
         predictions_to_save = np.asarray(predictions_array)
 
         return writer.save(
-            str(predictions_dir), image_name, predictions_to_save
+            str(predictions_dir), dataset_name, predictions_to_save
         )
 
     def get_global_frameworks(self):
