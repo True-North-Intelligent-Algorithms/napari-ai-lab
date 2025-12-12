@@ -32,43 +32,33 @@ class StackedSequenceWriter(BaseWriter):
         super().__init__(subdirectory)
         self._cached_stack = None
         self._cached_directory = None
-        self._image_names = None
-        self._normalize = False  # Whether to normalize images
+        self._image_names = []
+        self._original_shapes = []
+        self._normalize = False
 
     def save(
         self, save_directory: str, image_name: str, data: np.ndarray
     ) -> bool:
-        """
-        Save data as individual TIFF file.
+        """Save data as individual TIFF, cropped to original size."""
+        try:
+            print(f"Looking for: '{image_name}'")
+            print(f"In list: {self._image_names}")
+            print(f"Found: {image_name in self._image_names}")
 
-        NOTE: Save functionality disabled for now - not ready yet.
+            idx = self._image_names.index(image_name)
 
-        Args:
-            save_directory: Directory where data should be saved
-            image_name: Name of the image (without extension)
-            data: Array to save (single slice)
+            original_shape = self._original_shapes[idx]
+            slices = tuple(slice(0, s) for s in original_shape)
+            data = data[slices]
 
-        Returns:
-            True if successful, False otherwise
-        """
-        print(
-            "StackedSequenceWriter.save() - Save functionality disabled for now"
-        )
-        return False
+            path = Path(save_directory) / f"{image_name}.tif"
+            io.imsave(str(path), data.astype(np.uint16))
+            return True
 
-        # TODO: Implement proper save for stacked sequence
-        # try:
-        #     path = Path(save_directory) / f"{image_name}.tif"
-        #     io.imsave(str(path), data.astype(np.uint16))
-        #
-        #     # Invalidate cache since we saved new data
-        #     self._cached_stack = None
-        #     self._cached_directory = None
-        #
-        #     return True
-        # except (OSError, ValueError, PermissionError) as e:
-        #     print(f"✗ Error saving: {e}")
-        #     return False
+        except Exception as e:  # noqa: BLE001
+            # Catch all errors (IO, index, type conversion)
+            print(f"Error saving {image_name}: {e}")
+            return False
 
     def load(self, load_directory: str, image_name: str) -> np.ndarray:
         """
@@ -101,6 +91,7 @@ class StackedSequenceWriter(BaseWriter):
             print(f"Directory does not exist: {directory}")
             self._cached_stack = np.array([])
             self._image_names = []
+            self._original_shapes = []
             self._cached_directory = directory
             return
 
@@ -113,6 +104,7 @@ class StackedSequenceWriter(BaseWriter):
             print(f"No TIFF files found in {directory}")
             self._cached_stack = np.array([])
             self._image_names = []
+            self._original_shapes = []
             self._cached_directory = directory
             return
 
@@ -122,6 +114,7 @@ class StackedSequenceWriter(BaseWriter):
         images = []
         axis_infos = []
         self._image_names = []
+        self._original_shapes = []
 
         for tiff_path in tiff_files:
             try:
@@ -130,15 +123,10 @@ class StackedSequenceWriter(BaseWriter):
                 images.append(img)
                 axis_infos.append(axis_info)
                 self._image_names.append(tiff_path.stem)
+                self._original_shapes.append(img.shape)  # Track original shape
             except (OSError, ValueError) as e:
                 print(f"Error loading {tiff_path}: {e}")
                 continue
-
-        if not images:
-            self._cached_stack = np.array([])
-            self._image_names = []
-            self._cached_directory = directory
-            return
 
         # Normalize each image individually if requested
         if self._normalize:
