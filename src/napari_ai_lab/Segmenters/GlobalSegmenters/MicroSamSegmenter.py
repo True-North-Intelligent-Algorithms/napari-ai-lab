@@ -14,6 +14,7 @@ from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import micro_sam at module level
 try:
+    import micro_sam
     import torch
     from micro_sam.automatic_segmentation import (
         automatic_instance_segmentation,
@@ -22,6 +23,7 @@ try:
 
     _is_microsam_available = True
 except ImportError:
+    micro_sam = None
     _is_microsam_available = False
 
 
@@ -128,6 +130,14 @@ MicroSam Automatic Instance Segmentation:
             bool: True if micro_sam can be imported, False otherwise.
         """
         return _is_microsam_available
+
+    def get_version(self):
+        """Get the micro_sam version."""
+        if _is_microsam_available:
+            if hasattr(micro_sam, "__version__"):
+                return "micro_sam" + str(micro_sam.__version__)
+            return "micro_sam (version unknown)"
+        return None
 
     def segment(self, image, **kwargs):
         """
