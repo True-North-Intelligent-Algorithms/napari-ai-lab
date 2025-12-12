@@ -98,6 +98,23 @@ def get_axis_info(image):
         return "U" * len(image.shape)
 
 
+def get_ndim(shape):
+    """
+    Determine spatial dimensionality from image shape.
+
+    Args:
+        shape (tuple): Image shape
+
+    Returns:
+        int: 2 for 2D images, 3 for 3D images
+    """
+    if len(shape) == 2:
+        return 2
+    if len(shape) == 3:
+        return 2 if shape[-1] < 5 else 3
+    return len(shape)
+
+
 def pad_to_largest(
     images, axis_infos, force8bit=False, normalize_per_channel=False
 ):
