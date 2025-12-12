@@ -92,17 +92,37 @@ class NDEasyLabel(BaseNDEasyWidget):
     def _post_segmenter_selection(self):
         """Initialize predictor if image is loaded."""
         if self.image_layer is not None:
-            image_data = self.image_layer.data
 
             # Get embedding directory and image name for predictor initialization
             embedding_dir = (
                 self.image_data_model.get_base_embeddings_directory()
             )
+
             image_paths = self.image_data_model.get_image_paths()
-            if self.current_image_index < len(image_paths):
-                image_name = image_paths[self.current_image_index].stem
+
+            image_name = image_paths[self.current_image_index].stem
+
+            selected_axis = self.parameter_form.get_selected_axis()
+
+            indices = self._get_current_slice_indices(selected_axis)
+
+            image_data = self.image_layer.data[indices]
+
+            # Get current step tuple
+            step = self.viewer.dims.current_step
+
+            # Determine how many trailing dimensions to exclude based on axis
+            if selected_axis == "YX":
+                non_spatial_dims = step[:-2]  # Exclude last 2 (Y, X)
+            elif selected_axis == "ZYX":
+                non_spatial_dims = step[:-3]  # Exclude last 3 (Z, Y, X)
             else:
-                image_name = "unknown"
+                non_spatial_dims = step[:-2]  # Default: exclude last 2
+
+            # Create name from remaining dimensions
+            image_name = (
+                image_name + "_" + "_".join(str(d) for d in non_spatial_dims)
+            )
 
             # Initialize predictor before segmentation
             self.segmenter.initialize_predictor(
@@ -128,13 +148,25 @@ class NDEasyLabel(BaseNDEasyWidget):
                 print("No image layer available")
                 return
 
-            image_data = self.image_layer.data
+            selected_axis = self.parameter_form.get_selected_axis()
+
+            if selected_axis == "YX":
+                latest_point = latest_point[
+                    -2:
+                ]  # Use last two coordinates for 2D YX
+            elif selected_axis == "ZYX":
+                latest_point = latest_point[
+                    -3:
+                ]  # Use last three coordinates for 3D ZYX
+
+            indices = self._get_current_slice_indices(selected_axis)
+
+            image_data = self.image_layer.data[indices]
 
             # Ensure segmenter is synced with current parameters before use
-            if hasattr(self, "segmenter") and self.segmenter is not None:
-                self.segmenter = self.parameter_form.sync_segmenter_instance(
-                    self.segmenter
-                )
+            self.segmenter = self.parameter_form.sync_segmenter_instance(
+                self.segmenter
+            )
 
             # Call segmenter with the latest point
             try:
@@ -144,8 +176,12 @@ class NDEasyLabel(BaseNDEasyWidget):
                     shapes=None,
                 )
 
+                # self.predictions_layer.data[indices] = (
+                #    mask  # self.current_label_num
+                # )
+
                 # Apply the mask to the labels layer
-                self.annotation_layer.data[mask != 0] = (
+                self.annotation_layer.data[indices][mask != 0] = (
                     mask[mask != 0] * self.current_label_num
                 )
 
