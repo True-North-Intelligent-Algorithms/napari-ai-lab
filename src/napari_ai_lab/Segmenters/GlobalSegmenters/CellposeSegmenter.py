@@ -75,6 +75,18 @@ Cellpose Automatic Cell Segmentation:
         },
     )
 
+    # Probability threshold (cell probability)
+    prob_threshold: float = field(
+        default=0.0,
+        metadata={
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.0,
+        },
+    )
+
     flow_threshold: float = field(
         default=0.4,
         metadata={
@@ -172,6 +184,7 @@ Cellpose Automatic Cell Segmentation:
             masks, flows, styles, diams = model.eval(
                 image,
                 diameter=diameter,
+                cellprob_threshold=self.prob_threshold,
                 flow_threshold=self.flow_threshold,
                 niter=self.cellpose_iterations,
             )
@@ -179,6 +192,7 @@ Cellpose Automatic Cell Segmentation:
             masks, flows, styles = model.eval(
                 image,
                 diameter=diameter,
+                cellprob_threshold=self.prob_threshold,
                 flow_threshold=self.flow_threshold,
                 niter=self.cellpose_iterations,
             )
@@ -199,6 +213,11 @@ Cellpose Automatic Cell Segmentation:
         # Get image properties
         image_shape = image.shape
         image_dtype = str(image.dtype)
+        # Create the execution string
+        execution_code = """
+import numpy as np
+task.outputs["hello"] = "Hello from CellposeSegmenter!"
+"""
 
         # Create the execution string
         execution_code = f'''
@@ -211,6 +230,7 @@ model_type = "{self.model_type}"
 use_gpu = {self.use_gpu}
 diameter = {self.diameter if self.diameter != 0 else "None"}
 flow_threshold = {self.flow_threshold}
+prob_threshold = {self.prob_threshold}
 cellpose_iterations = {self.cellpose_iterations}
 
 # Image will be provided as 'image' variable
@@ -248,12 +268,13 @@ def cellpose_segment_remote(image):
     # Perform segmentation
     diameter_value = None if diameter == "None" else diameter
 
-    print(f"Cellpose: Segmenting image, diameter={{diameter_value}}, flow_threshold={{flow_threshold}}")
+    print(f"Cellpose: Segmenting image, diameter={{diameter_value}}, prob_threshold={{prob_threshold}}, flow_threshold={{flow_threshold}}")
 
     if major_number == '3':
         masks, flows, styles, diams = model.eval(
             image.ndarray(),
             diameter=diameter_value,
+            cellprob_threshold=prob_threshold,
             flow_threshold=flow_threshold,
             niter=cellpose_iterations
             )
@@ -261,6 +282,7 @@ def cellpose_segment_remote(image):
         masks, flows, styles = model.eval(
             image.ndarray(),
             diameter=diameter_value,
+            cellprob_threshold=prob_threshold,
             flow_threshold=flow_threshold,
             niter=cellpose_iterations
     )
@@ -296,6 +318,7 @@ task.outputs["mask"] = ndarr_mask
             "model_type": self.model_type,
             "diameter": self.diameter,
             "use_gpu": self.use_gpu,
+            "prob_threshold": self.prob_threshold,
             "flow_threshold": self.flow_threshold,
             "cellpose_iterations": self.cellpose_iterations,
         }
