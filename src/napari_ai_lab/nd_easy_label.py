@@ -10,6 +10,7 @@ from qtpy.QtWidgets import (
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .models import ImageDataModel
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
+from .utility import create_artifact_name, get_current_slice_indices
 
 
 class NDEasyLabel(BaseNDEasyWidget):
@@ -104,25 +105,17 @@ class NDEasyLabel(BaseNDEasyWidget):
 
             selected_axis = self.parameter_form.get_selected_axis()
 
-            indices = self._get_current_slice_indices(selected_axis)
+            indices = get_current_slice_indices(
+                self.viewer.dims.current_step, selected_axis
+            )
 
             image_data = self.image_layer.data[indices]
 
             # Get current step tuple
             step = self.viewer.dims.current_step
 
-            # Determine how many trailing dimensions to exclude based on axis
-            if selected_axis == "YX":
-                non_spatial_dims = step[:-2]  # Exclude last 2 (Y, X)
-            elif selected_axis == "ZYX":
-                non_spatial_dims = step[:-3]  # Exclude last 3 (Z, Y, X)
-            else:
-                non_spatial_dims = step[:-2]  # Default: exclude last 2
-
-            # Create name from remaining dimensions
-            image_name = (
-                image_name + "_" + "_".join(str(d) for d in non_spatial_dims)
-            )
+            # Create artifact name from non-spatial dims
+            image_name = create_artifact_name(image_name, step, selected_axis)
 
             # Initialize predictor before segmentation
             self.segmenter.initialize_predictor(
@@ -159,7 +152,9 @@ class NDEasyLabel(BaseNDEasyWidget):
                     -3:
                 ]  # Use last three coordinates for 3D ZYX
 
-            indices = self._get_current_slice_indices(selected_axis)
+            indices = get_current_slice_indices(
+                self.viewer.dims.current_step, selected_axis
+            )
 
             image_data = self.image_layer.data[indices]
 

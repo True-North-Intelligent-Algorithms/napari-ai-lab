@@ -277,3 +277,61 @@ def pad_to_largest(
         result = result.astype(np.uint8)
 
     return result
+
+
+def get_current_slice_indices(current_step: tuple, selected_axis: str):
+    """Compute indices for the current slice based on the selected axis.
+
+    Args:
+        current_step: The napari viewer dims.current_step tuple.
+        selected_axis: Axis mode string, e.g. "YX" or "ZYX".
+
+    Returns:
+        tuple: A tuple of indices/slices to extract the current 2D/3D region.
+    """
+    if selected_axis == "YX":
+        return current_step[:-2] + (slice(None), slice(None))
+    elif selected_axis == "ZYX":
+        return current_step[:-3] + (
+            slice(None),
+            slice(None),
+            slice(None),
+        )
+    else:
+        # Default to 2D YX slice
+        return current_step[:-2] + (slice(None), slice(None))
+
+
+def create_artifact_name(
+    artifact_base: str, step: tuple, selected_axis: str
+) -> str:
+    """Create an artifact name based on current dims step and selected axis.
+
+    The name is built from the base plus non-spatial dimension indices from
+    the current viewer step. Spatial dims are determined from the selected_axis:
+    - endswith("ZYX"): 3 spatial dims (Z, Y, X)
+    - endswith("YX"): 2 spatial dims (Y, X)
+    - default: 2 spatial dims
+
+    Args:
+        artifact_base: Base name (e.g., image stem or artifact id)
+        step: napari viewer dims.current_step tuple
+        selected_axis: Axis string like "YX", "ZYX", "YXC", etc.
+
+    Returns:
+        str: Artifact name with non-spatial dimension indices appended.
+    """
+    if selected_axis.endswith("ZYX"):
+        spatial = 3
+    elif selected_axis.endswith("YX"):
+        spatial = 2
+    else:
+        spatial = 2
+
+    non_spatial_dims = step[:-spatial]
+
+    if len(non_spatial_dims) == 0:
+        return artifact_base
+
+    suffix = "_".join(str(d) for d in non_spatial_dims)
+    return f"{artifact_base}_{suffix}"
