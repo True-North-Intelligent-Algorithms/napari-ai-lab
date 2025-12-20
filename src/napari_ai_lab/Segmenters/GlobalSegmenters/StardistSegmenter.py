@@ -272,8 +272,6 @@ StarDist Automatic Segmentation:
         Returns:
             str: Python code string that can be executed in a StarDist-enabled environment.
         """
-        image_shape = image.shape
-        image_dtype = str(image.dtype)
 
         execution_code = f"""
 import numpy as np
@@ -313,56 +311,11 @@ ndarr_mask.ndarray()[:] = result
 task.outputs["mask"] = ndarr_mask
 
         """
-
-        execution_code_ = f"""
-from stardist.models import StarDist2D
-
-# Parameters from segmenter
-model_preset = "{self.model_preset}"
-prob_thresh = {self.prob_thresh}
-nms_thresh = {self.nms_thresh}
-
-# Image will be provided as 'image' variable
-# image.shape = {image_shape}
-# image.dtype = {image_dtype}
-
-def _normalize(img):
-    img = img.astype(np.float32, copy=False)
-    vmin = float(np.min(img))
-    vmax = float(np.max(img))
-    if vmax > vmin:
-        img = (img - vmin) / (vmax - vmin)
-    else:
-        img = np.zeros_like(img, dtype=np.float32)
-    return img
-
-def stardist_segment_remote(image):
-    x = _normalize(image)
-    model = StarDist2D.from_pretrained(model_preset)
-    labels, details = model.predict_instances(x, prob_thresh=prob_thresh, nms_thresh=nms_thresh)
-    return labels.astype(np.uint16)
-
-# Execute segmentation
-#result = stardist_segment_remote(image.ndarray())
-
-# Convert result to appose format for output
-import appose
-
-ndarr_mask = appose.NDArray(dtype=str(result.dtype), shape=result.shape)
-ndarr_mask.ndarray()[:] = result
-
-task.outputs["mask"] = ndarr_mask
-"""
-
         print(
             "StarDist not available locally - generated execution string for remote processing"
         )
-        method = 1
 
-        if method == 1:
-            return execution_code
-        else:
-            return execution_code_
+        return execution_code
 
     def get_parameters_dict(self):
         """
