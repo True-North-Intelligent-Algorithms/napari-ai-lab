@@ -91,14 +91,20 @@ class NDEasyLabel(BaseNDEasyWidget):
             self.segmenter_combo.setEnabled(False)
 
     def _post_segmenter_selection(self):
-        """Initialize predictor if image is loaded."""
-        if self.image_layer is not None:
+        # Delegate the real work to the initializer
+        self._initialize_segmenter()
 
+    def _initialize_segmenter(self):
+        """Initialize predictor if an image is loaded and a segmenter exists."""
+        if self.image_layer is None:
+            # Nothing to initialize yet
+            return
+
+        try:
             # Get embedding directory and image name for predictor initialization
             parent_dir = self.image_data_model.get_parent_directory()
 
             image_paths = self.image_data_model.get_image_paths()
-
             image_name = image_paths[self.current_image_index].stem
 
             selected_axis = self.parameter_form.get_selected_axis()
@@ -115,10 +121,23 @@ class NDEasyLabel(BaseNDEasyWidget):
             # Create artifact name from non-spatial dims
             image_name = create_artifact_name(image_name, step, selected_axis)
 
-            # Initialize predictor before segmentation
+            self.segmenter = self.parameter_form.sync_segmenter_instance(
+                getattr(self, "segmenter", None)
+            )
+
             self.segmenter.initialize_predictor(
                 image_data, str(parent_dir), image_name
             )
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            IndexError,
+            OSError,
+        ) as e:
+            # Keep behavior similar to previous implementation
+            print(f"Error during segmenter initialization: {e}")
 
     def _on_points_changed(self, event):
         """Handle points layer data changes - creates segmentation around point using current segmenter."""
@@ -276,6 +295,9 @@ class NDEasyLabel(BaseNDEasyWidget):
             print(
                 "Added shapes layer for region annotation. Draw shapes to define regions!"
             )
+
+            # Initialize or reinitialize segmenter for the new image layer
+            self._initialize_segmenter()
 
         except (
             AttributeError,
