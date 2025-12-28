@@ -95,9 +95,7 @@ class NDEasyLabel(BaseNDEasyWidget):
         if self.image_layer is not None:
 
             # Get embedding directory and image name for predictor initialization
-            embedding_dir = (
-                self.image_data_model.get_base_embeddings_directory()
-            )
+            parent_dir = self.image_data_model.get_parent_directory()
 
             image_paths = self.image_data_model.get_image_paths()
 
@@ -119,7 +117,7 @@ class NDEasyLabel(BaseNDEasyWidget):
 
             # Initialize predictor before segmentation
             self.segmenter.initialize_predictor(
-                image_data, str(embedding_dir), image_name
+                image_data, str(parent_dir), image_name
             )
 
     def _on_points_changed(self, event):
