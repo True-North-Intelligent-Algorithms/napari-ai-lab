@@ -110,13 +110,12 @@ Instructions:
             image_name (str): Name of the image (without extension)
         """
         # Create embedding directory path using Path
-        parent_directory = Path(save_path).parent
-        embedding_directory = parent_directory / "embeddings"
+        embedding_parent_path = Path(save_path).parent / "embeddings"
         embedding_save_path = (
-            embedding_directory / image_name / self.model_type
+            embedding_parent_path / image_name / self.model_type
         )
 
-        self.embedding_directory = str(embedding_directory)
+        self.embedding_parent_path = str(embedding_parent_path)
         self.embedding_save_path = str(embedding_save_path)
 
     def initialize_predictor(self, image, save_path: str, image_name: str):
@@ -196,8 +195,7 @@ Instructions:
 
         # Check if predictor has been initialized
         if (
-            not hasattr(self, "embedding_directory")
-            or self.embedding_directory is None
+            self.embedding_parent_path is None
             or self.state is None
             or self.state.image_embeddings is None
         ):
