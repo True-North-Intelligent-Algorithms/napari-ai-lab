@@ -85,17 +85,21 @@ def get_axis_info(image):
     Returns:
         str: Axis string describing the dimension order ('U' = unknown)
     """
-    if len(image.shape) == 2:
+    return get_axis_info_from_shape(image.shape)
+
+
+def get_axis_info_from_shape(image_shape):
+    if len(image_shape) == 2:
         return "YX"
-    if len(image.shape) == 3:
+    if len(image_shape) == 3:
         # Heuristic: if the last dimension is 3 or 4, assume it's color channels
-        if image.shape[2] in [3, 4]:
+        if image_shape[2] in [3, 4]:
             return "YXC"
         else:
             return "ZYX"
     else:
         # Return string of 'U' (unknown) same length as number of dimensions
-        return "U" * len(image.shape)
+        return "U" * len(image_shape)
 
 
 def get_ndim(shape):
