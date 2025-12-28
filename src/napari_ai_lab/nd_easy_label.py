@@ -241,9 +241,7 @@ class NDEasyLabel(BaseNDEasyWidget):
 
             # For annotation layers, we want ndim to match the displayed dimensions
             # This prevents issues with 4D data slice comparisons
-            annotation_ndim = min(
-                len(image_data.shape), 3
-            )  # Cap at 3D for annotation layers
+            annotation_ndim = len(self.annotation_layer.data.shape)
 
             # Add points layer and store reference
             self.points_layer = self.viewer.add_points(
@@ -255,7 +253,7 @@ class NDEasyLabel(BaseNDEasyWidget):
                 face_color="transparent",
                 border_width=0.5,
                 size=1,
-                ndim=len(image_data.shape),
+                ndim=annotation_ndim,
             )
 
             # Connect point event handler

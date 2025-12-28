@@ -10,6 +10,8 @@ from pathlib import Path
 
 import numpy as np
 
+from napari_ai_lab.utility import get_ndim
+
 from .InteractiveSegmenterBase import InteractiveSegmenterBase
 
 try:
@@ -135,11 +137,14 @@ Instructions:
 
         self.state = AnnotatorState()
         self.state.reset_state()
+
+        ndim = get_ndim(image.shape)
+
         try:
             self.state.initialize_predictor(
                 image,
                 model_type=self.model_type,
-                ndim=len(image.shape),
+                ndim=ndim,
                 save_path=self.embedding_save_path,
             )
         except Exception as e:  # noqa

@@ -11,6 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
+from napari_ai_lab.utility import get_axis_info_from_shape
+
 
 class ImageDataModel:
     """
@@ -258,7 +260,14 @@ class ImageDataModel:
 
         # If nothing saved, return zeros
         if data is None or getattr(data, "size", 0) == 0:
-            return np.zeros(image_shape, dtype=np.uint16)
+
+            axis_info = get_axis_info_from_shape(image_shape)
+
+            if axis_info == "YXC":
+                # Color image case - return zeros matching YX shape
+                return np.zeros(image_shape[:2], dtype=np.uint16)
+            else:
+                return np.zeros(image_shape, dtype=np.uint16)
 
         return data
 
