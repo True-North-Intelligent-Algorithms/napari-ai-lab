@@ -192,6 +192,15 @@ class ImageDataModel:
 
         return annotation_dir
 
+    def get_parent_directory(self) -> Path:
+        """
+        Get the parent directory containing images.
+
+        Returns:
+            Path to parent directory
+        """
+        return self.parent_directory
+
     def get_base_embeddings_directory(self) -> Path:
         """
         Get the base directory for storing embeddings.
