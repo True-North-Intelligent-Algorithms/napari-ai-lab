@@ -12,7 +12,7 @@ from qtpy.QtWidgets import (
 )
 
 from .models import ImageDataModel
-from .writers import StackedSequenceWriter
+from .writers import StackedSequenceIO
 
 
 class NDStackedSequenceViewer(QWidget):
@@ -78,11 +78,11 @@ class NDStackedSequenceViewer(QWidget):
             if image_paths:
                 print(f"Found {len(image_paths)} image files")
                 print(
-                    "Loading all images into stack using StackedSequenceWriter..."
+                    "Loading all images into stack using StackedSequenceIO..."
                 )
 
-                # Use StackedSequenceWriter to load directory as stack with normalization
-                writer = StackedSequenceWriter()
+                # Use StackedSequenceIO to load directory as stack with normalization
+                writer = StackedSequenceIO()
                 stacked_images = writer.load_full_stack(
                     str(model.parent_directory), normalize=True
                 )

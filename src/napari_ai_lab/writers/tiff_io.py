@@ -1,5 +1,5 @@
 """
-TIFF writer for label storage.
+TIFF I/O for label storage.
 
 This module implements label storage using TIFF files.
 """
@@ -9,22 +9,17 @@ from pathlib import Path
 import numpy as np
 from skimage import io
 
-from .base_writer import BaseWriter
+from .base_io import BaseIO
 
 
-class TiffWriter(BaseWriter):
+class TiffIO(BaseIO):
     """
-    Writer that stores labels as TIFF files.
-
-    Labels are stored in: parent_directory/annotations/{subdirectory}/{image_name}.tif
+    I/O implementation that stores labels as TIFF files.
     """
 
     def __init__(self, subdirectory: str = "class_0"):
         """
-        Initialize the TIFF writer.
-
-        Args:
-            subdirectory: Subdirectory name under 'annotations' (default: "class_0")
+        Initialize the TIFF I/O.
         """
         super().__init__(subdirectory)
 
@@ -35,18 +30,6 @@ class TiffWriter(BaseWriter):
         data: np.ndarray,
         current_step: tuple = None,
     ) -> bool:
-        """
-        Save data as a TIFF file.
-
-        Args:
-            save_directory: Directory where data should be saved
-            dataset_name: Name of the dataset (without extension)
-            data: Array to save
-            current_step: Viewer dimension position (unused in tiff_writer)
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             path = Path(save_directory) / f"{dataset_name}.tif"
             io.imsave(str(path), data.astype(np.uint16))
@@ -56,16 +39,6 @@ class TiffWriter(BaseWriter):
             return False
 
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
-        """
-        Load data from TIFF file.
-
-        Args:
-            load_directory: Directory where data is stored
-            dataset_name: Name of the dataset (without extension)
-
-        Returns:
-            Array data (empty if no saved data exists)
-        """
         try:
             path = Path(load_directory) / f"{dataset_name}.tif"
             if path.exists():

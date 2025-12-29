@@ -1,5 +1,5 @@
 """
-Numpy writer for label storage.
+Numpy I/O for label storage.
 
 This module implements label storage using numpy .npy files.
 """
@@ -8,19 +8,19 @@ from pathlib import Path
 
 import numpy as np
 
-from .base_writer import BaseWriter
+from .base_io import BaseIO
 
 
-class NumpyWriter(BaseWriter):
+class NumpyIO(BaseIO):
     """
-    Writer that stores labels as numpy .npy files.
+    I/O implementation that stores labels as numpy .npy files.
 
     Labels are stored in: parent_directory/annotations/{subdirectory}/{image_name}.npy
     """
 
     def __init__(self, subdirectory: str = "class_0"):
         """
-        Initialize the numpy writer.
+        Initialize the numpy I/O.
 
         Args:
             subdirectory: Subdirectory name under 'annotations' (default: "class_0")
@@ -36,15 +36,6 @@ class NumpyWriter(BaseWriter):
     ) -> bool:
         """
         Save data as a numpy .npy file.
-
-        Args:
-            save_directory: Directory where data should be saved
-            dataset_name: Name of the dataset (without extension)
-            data: Array to save
-            current_step: Viewer dimension position (unused in numpy_writer)
-
-        Returns:
-            True if successful, False otherwise
         """
         try:
             path = Path(save_directory) / f"{dataset_name}.npy"
@@ -57,13 +48,6 @@ class NumpyWriter(BaseWriter):
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         """
         Load data from numpy .npy file.
-
-        Args:
-            load_directory: Directory where data is stored
-            dataset_name: Name of the dataset (without extension)
-
-        Returns:
-            Array data (empty if no saved data exists)
         """
         try:
             path = Path(load_directory) / f"{dataset_name}.npy"

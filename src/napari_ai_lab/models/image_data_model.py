@@ -215,9 +215,9 @@ class ImageDataModel:
     def get_annotations_writer(self):
         """Get annotation writer."""
         if self._annotations_writer is None:
-            from ..writers import get_writer
+            from ..writers import get_io
 
-            self._annotations_writer = get_writer(self.annotation_writer_type)
+            self._annotations_writer = get_io(self.annotation_writer_type)
         return self._annotations_writer
 
     def set_annotation_writer_type(self, writer_type: str):
@@ -270,9 +270,9 @@ class ImageDataModel:
     def get_predictions_writer(self):
         """Get prediction writer."""
         if self._predictions_writer is None:
-            from ..writers import get_writer
+            from ..writers import get_io
 
-            self._predictions_writer = get_writer(self.prediction_writer_type)
+            self._predictions_writer = get_io(self.prediction_writer_type)
         return self._predictions_writer
 
     def set_prediction_writer_type(self, writer_type: str):

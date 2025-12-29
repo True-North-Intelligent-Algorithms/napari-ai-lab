@@ -1,11 +1,7 @@
 """
-Base writer abstract class for label stora    def load_labels(
-        self,
-        image_path: str,
-        parent_directory: str,
-        image_shape: tuple[int, ...]
-    ) -> np.ndarray:
-This module defines the common interface that all label writers must implement.
+Base I/O abstract class for label storage.
+
+This module defines the common interface that all label I/O implementations must implement.
 """
 
 from abc import ABC, abstractmethod
@@ -14,17 +10,17 @@ from pathlib import Path
 import numpy as np
 
 
-class BaseWriter(ABC):
+class BaseIO(ABC):
     """
-    Abstract base class for label writers.
+    Abstract base class for I/O (read/write).
 
-    All label writers must implement this interface to provide consistent
-    save/load functionality across different storage formats.
+    All concrete I/O implementations must implement this interface to provide
+    consistent save/load functionality across different storage formats.
     """
 
     def __init__(self, subdirectory: str = "class_0"):
         """
-        Initialize the writer.
+        Initialize the I/O implementation.
 
         Args:
             subdirectory: Subdirectory name under 'annotations' (default: "class_0")

@@ -1,8 +1,8 @@
 """
-Stacked Sequence Writer for label storage.
+Stacked Sequence I/O for label storage.
 
-This writer loads a directory of TIFFs as a stacked array (for viewing),
-but saves individual TIFF files (maintaining directory structure).
+This I/O loads a directory of images as a stacked array (for viewing),
+but saves individual image files (maintaining directory structure).
 """
 
 from pathlib import Path
@@ -11,24 +11,17 @@ import numpy as np
 from skimage import io
 
 from ..utility import collect_all_image_names, get_axis_info, pad_to_largest
-from .base_writer import BaseWriter
+from .base_io import BaseIO
 
 
-class StackedSequenceWriter(BaseWriter):
+class StackedSequenceIO(BaseIO):
     """
-    Writer that loads directory as stack but saves individual TIFFs.
-
-    This maintains the same file storage (individual TIFF files) while
+    I/O implementation that loads a directory as a stacked array but saves
+    individual image files. This preserves file-per-frame storage while
     providing a stacked view for the napari viewer.
     """
 
     def __init__(self, subdirectory: str = "class_0"):
-        """
-        Initialize the stacked sequence writer.
-
-        Args:
-            subdirectory: Subdirectory name under 'annotations' (default: "class_0")
-        """
         super().__init__(subdirectory)
         self._cached_stack = None
         self._cached_directory = None
@@ -43,12 +36,9 @@ class StackedSequenceWriter(BaseWriter):
         data: np.ndarray,
         current_step: tuple = None,
     ) -> bool:
-        """Save data as individual TIFF, cropped to original size."""
         try:
-            # Use current_step[0] to get index in stack
             if current_step:
                 idx = current_step[0]
-                # Get actual dataset name from index
                 dataset_name = self._image_names[idx]
             else:
                 idx = self._image_names.index(dataset_name)
@@ -64,23 +54,11 @@ class StackedSequenceWriter(BaseWriter):
             path = Path(save_directory) / f"{dataset_name}.tif"
             io.imsave(str(path), cropped_data.astype(np.uint16))
             return True
-
         except Exception as e:  # noqa: BLE001
-            # Catch all errors (IO, index, type conversion)
             print(f"Error saving {dataset_name}: {e}")
             return False
 
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
-        """
-        Load entire directory as stack, return slice matching dataset_name.
-
-        Args:
-            load_directory: Directory where TIFFs are stored
-            dataset_name: Name of the dataset (used to find correct index)
-
-        Returns:
-            Array data for the specified dataset (empty if no saved data exists)
-        """
         image_names = collect_all_image_names(load_directory)
         self.load_image_collection_as_stack(load_directory, image_names)
         return self._cached_stack
@@ -88,12 +66,6 @@ class StackedSequenceWriter(BaseWriter):
     def load_image_collection_as_stack(
         self, directory: str, image_names: list
     ):
-        """
-        Load images listed in `image_names` from `directory` as a padded stack.
-
-        This function loads files exactly as named in `image_names` using
-        skimage.io.imread. It does not try to add or change extensions.
-        """
         dir_path = Path(directory)
 
         if not dir_path.exists():
@@ -110,8 +82,6 @@ class StackedSequenceWriter(BaseWriter):
             self._original_shapes = []
             self._cached_directory = directory
             return
-
-        print(f"Loading {len(image_names)} files as stack...")
 
         images = []
         axis_infos = []
@@ -146,20 +116,6 @@ class StackedSequenceWriter(BaseWriter):
     def load_full_stack(
         self, load_directory: str, normalize: bool = False
     ) -> np.ndarray:
-        """
-        Load entire directory as a stacked array.
-
-        This is a convenience method for getting the full stack.
-
-        Args:
-            load_directory: Directory where TIFFs are stored
-            normalize: Whether to normalize each image to same scale (0-1).
-                      Use True for images, False for labels/predictions.
-
-        Returns:
-            Full stacked array
-        """
-        # Check if we need to reload due to normalize flag change
         if (
             self._cached_directory != load_directory
             or self._normalize != normalize

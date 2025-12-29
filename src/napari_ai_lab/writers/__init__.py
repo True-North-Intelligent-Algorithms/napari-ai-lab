@@ -5,42 +5,40 @@ This package provides a flexible architecture for saving and loading labels
 in various formats (numpy, zarr, tiff, etc.) with a common interface.
 """
 
-from .base_writer import BaseWriter
-from .numpy_writer import NumpyWriter
-from .stacked_sequence_writer import StackedSequenceWriter
-from .tiff_writer import TiffWriter
+from .base_io import BaseIO
+from .numpy_io import NumpyIO
+from .stacked_sequence_io import StackedSequenceIO
+from .tiff_io import TiffIO
 
-# Export available writers for easy selection
-__all__ = ["BaseWriter", "NumpyWriter", "TiffWriter", "StackedSequenceWriter"]
+# Export available I/O classes for easy selection
+__all__ = ["BaseIO", "NumpyIO", "TiffIO", "StackedSequenceIO"]
 
-# Registry of available writers for easy access
-AVAILABLE_WRITERS = {
-    "numpy": NumpyWriter,
-    "tiff": TiffWriter,
-    "stacked_sequence": StackedSequenceWriter,
-    # Future writers can be added here:
-    # "zarr": ZarrWriter,
+# Registry of available I/O implementations for easy access
+AVAILABLE_IO = {
+    "numpy": NumpyIO,
+    "tiff": TiffIO,
+    "stacked_sequence": StackedSequenceIO,
 }
 
 
-def get_writer(writer_type: str, **kwargs) -> BaseWriter:
+def get_io(io_type: str, **kwargs) -> BaseIO:
     """
-    Factory function to create a writer instance.
+    Factory function to create a I/O instance.
 
     Args:
-        writer_type: Type of writer ("numpy", "zarr", "tiff", etc.)
-        **kwargs: Additional arguments passed to the writer constructor
+        io_type: Type of I/O ("numpy", "zarr", "tiff", etc.)
+        **kwargs: Additional arguments passed to the I/O constructor
 
     Returns:
-        Writer instance
+        I/O instance
 
     Raises:
-        ValueError: If writer_type is not available
+        ValueError: If io_type is not available
     """
-    if writer_type not in AVAILABLE_WRITERS:
-        available = ", ".join(AVAILABLE_WRITERS.keys())
+    if io_type not in AVAILABLE_IO:
+        available = ", ".join(AVAILABLE_IO.keys())
         raise ValueError(
-            f"Writer '{writer_type}' not available. Available writers: {available}"
+            f"I/O '{io_type}' not available. Available I/Os: {available}"
         )
 
-    return AVAILABLE_WRITERS[writer_type](**kwargs)
+    return AVAILABLE_IO[io_type](**kwargs)
