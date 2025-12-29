@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from skimage import io
 
-from ..utility import get_axis_info, pad_to_largest
+from ..utility import collect_all_image_names, get_axis_info, pad_to_largest
 from .base_writer import BaseWriter
 
 
@@ -81,19 +81,18 @@ class StackedSequenceWriter(BaseWriter):
         Returns:
             Array data for the specified dataset (empty if no saved data exists)
         """
-        try:
-            self._load_directory_as_stack(load_directory)
-            return self._cached_stack
-        except (OSError, ValueError, FileNotFoundError) as e:
-            print(f"✗ Error loading stack: {e}")
-            return np.array([])
+        image_names = collect_all_image_names(load_directory)
+        self.load_image_collection_as_stack(load_directory, image_names)
+        return self._cached_stack
 
-    def _load_directory_as_stack(self, directory: str):
+    def load_image_collection_as_stack(
+        self, directory: str, image_names: list
+    ):
         """
-        Load all TIFF files in directory as a padded stack.
+        Load images listed in `image_names` from `directory` as a padded stack.
 
-        Args:
-            directory: Directory containing TIFF files
+        This function loads files exactly as named in `image_names` using
+        skimage.io.imread. It does not try to add or change extensions.
         """
         dir_path = Path(directory)
 
@@ -105,42 +104,30 @@ class StackedSequenceWriter(BaseWriter):
             self._cached_directory = directory
             return
 
-        # Find all TIFF files
-        tiff_files = sorted(
-            list(dir_path.glob("*.tif")) + list(dir_path.glob("*.tiff"))
-        )
-
-        if not tiff_files:
-            print(f"No TIFF files found in {directory}")
+        if not image_names:
             self._cached_stack = np.array([])
             self._image_names = []
             self._original_shapes = []
             self._cached_directory = directory
             return
 
-        print(f"Loading {len(tiff_files)} annotation files as stack...")
+        print(f"Loading {len(image_names)} files as stack...")
 
-        # Load all images
         images = []
         axis_infos = []
         self._image_names = []
         self._original_shapes = []
 
-        for tiff_path in tiff_files:
-            try:
-                img = io.imread(str(tiff_path))
-                axis_info = get_axis_info(img)
-                images.append(img)
-                axis_infos.append(axis_info)
-                self._image_names.append(tiff_path.stem)
-                self._original_shapes.append(img.shape)  # Track original shape
-            except (OSError, ValueError) as e:
-                print(f"Error loading {tiff_path}: {e}")
-                continue
+        for name in image_names:
+            path = dir_path / name
+            img = io.imread(str(path))
+            axis_info = get_axis_info(img)
+            images.append(img)
+            axis_infos.append(axis_info)
+            self._image_names.append(path.stem)
+            self._original_shapes.append(img.shape)
 
-        # Normalize each image individually if requested
         if self._normalize:
-            print("Normalizing images to same scale...")
             normalized_images = []
             for img in images:
                 min_val = np.min(img)
@@ -152,7 +139,6 @@ class StackedSequenceWriter(BaseWriter):
                     normalized_images.append(img)
             images = normalized_images
 
-        # Pad and stack images
         self._cached_stack = pad_to_largest(images, axis_infos)
         self._cached_directory = directory
         print(f"Cached stack shape: {self._cached_stack.shape}")
@@ -179,7 +165,8 @@ class StackedSequenceWriter(BaseWriter):
             or self._normalize != normalize
         ):
             self._normalize = normalize
-            self._load_directory_as_stack(load_directory)
+            image_names = collect_all_image_names(load_directory)
+            self.load_image_collection_as_stack(load_directory, image_names)
 
         return (
             self._cached_stack

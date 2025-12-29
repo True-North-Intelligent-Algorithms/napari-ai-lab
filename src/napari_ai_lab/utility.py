@@ -3,29 +3,41 @@ from pathlib import Path
 import numpy as np
 from skimage import io
 
+# Central list of supported image extensions (lowercase, with leading dot)
+IMAGE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tif",
+    ".tiff",
+    ".bmp",
+    ".czi",
+}
 
-def collect_all_image_names(image_path, extensions=None):
+
+def collect_all_image_names(image_path):
     """
-    Collects all image names
+    Collect all image file paths in a directory using the canonical
+    IMAGE_EXTENSIONS set. Returns a sorted list of Path objects.
 
     Args:
-        image_path (Path): directory to look for files
-        extensions (list): list of extensions to look for
+        image_path (str or Path): directory to look for files
 
     Returns:
-        list: list of image file names
+        list[Path]: sorted list of image file paths (may be empty)
     """
-    if extensions is None:
-        extensions = ["jpg", "jpeg", "tif", "tiff", "png"]
-
     image_path = Path(image_path)
 
-    image_file_list = []
+    if not image_path.exists() or not image_path.is_dir():
+        return []
 
-    for extension in extensions:
-        image_file_list = image_file_list + list(
-            image_path.glob("*." + extension)
-        )
+    image_file_list = [
+        p
+        for p in image_path.iterdir()
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+    ]
+
+    image_file_list.sort(key=lambda x: x.name.lower())
 
     return image_file_list
 
@@ -143,24 +155,50 @@ def pad_to_largest(
     # conversion for display.
 
     # =============================================================================
-    # STEP 1: Find maximum dimensions across all images
+    # STEP 1: Find maximum dimensions across all images (robust to axis ordering)
     # =============================================================================
-    # Find max Y and X dimensions (always present)
-    max_rows = max(image.shape[-2] for image in images)  # Y dimension
-    max_cols = max(image.shape[-1] for image in images)  # X dimension
 
-    # Find max Z dimension for 3D images (ZYX)
+    # Determine presence of Z (3D) and C (color) from axis_infos
+    has_3d_images = any(("Z" in ai) for ai in axis_infos)
+    has_color_images = any(("C" in ai) for ai in axis_infos)
+
+    def _rows_cols_for_image(image_shape, axis_info):
+        """Return (rows, cols) for the image shape using axis_info or fallbacks."""
+        # Prefer explicit positions if present
+        if "Y" in axis_info:
+            row = image_shape[axis_info.index("Y")]
+        else:
+            row = image_shape[-2] if len(image_shape) >= 2 else image_shape[0]
+
+        if "X" in axis_info:
+            col = image_shape[axis_info.index("X")]
+        else:
+            col = image_shape[-1] if len(image_shape) >= 1 else image_shape[0]
+
+        return row, col
+
+    def _depth_for_image(image_shape, axis_info):
+        """Return depth (Z) size for the image or 0 if none."""
+        if "Z" in axis_info:
+            return image_shape[axis_info.index("Z")]
+        return 0
+
+    # Compute maximum rows/cols/depth across all images using per-image axis info
+    max_rows = max(
+        _rows_cols_for_image(img.shape, ai)[0]
+        for img, ai in zip(images, axis_infos, strict=False)
+    )
+    max_cols = max(
+        _rows_cols_for_image(img.shape, ai)[1]
+        for img, ai in zip(images, axis_infos, strict=False)
+    )
     max_depth = 0
-    has_3d_images = any(axis_info == "ZYX" for axis_info in axis_infos)
     if has_3d_images:
         max_depth = max(
-            image.shape[0]
-            for image, axis_info in zip(images, axis_infos, strict=False)
-            if axis_info == "ZYX"
+            _depth_for_image(img.shape, ai)
+            for img, ai in zip(images, axis_infos, strict=False)
+            if "Z" in ai
         )
-
-    # Check if we have any color images (YXC) - if so, convert grayscale to RGB
-    has_color_images = any(axis_info == "YXC" for axis_info in axis_infos)
 
     # =============================================================================
     # STEP 2: Process each image (pad + convert channels + normalize)
@@ -183,65 +221,65 @@ def pad_to_largest(
             if axis_info == "YX":
                 axis_info = "ZYX"
             elif axis_info == "YXC":
-                axis_info = "ZYXC"  # This would be 4D, handle carefully
+                axis_info = "ZYXC"
 
-        # Calculate padding for each dimension based on axis type
-        if axis_info == "YXC":
-            # 3D image with channels: pad Y,X dimensions
-            pad_rows = max_rows - image.shape[0]  # Y
-            pad_cols = max_cols - image.shape[1]  # X
-            # Clip to first 3 channels if RGBA
-            image = image[:, :, :3]
-            padded_image = np.pad(
-                image,
-                ((0, pad_rows), (0, pad_cols), (0, 0)),
-                mode="constant",
-                constant_values=0,
-            )
-        elif axis_info == "YX":
-            # 2D grayscale image: pad Y,X dimensions
-            pad_rows = max_rows - image.shape[0]  # Y
-            pad_cols = max_cols - image.shape[1]  # X
-            padded_image = np.pad(
-                image,
-                ((0, pad_rows), (0, pad_cols)),
-                mode="constant",
-                constant_values=0,
-            )
-        elif axis_info == "ZYX":
-            # 3D spatial image: pad Z,Y,X dimensions
-            pad_depth = max_depth - image.shape[0]  # Z
-            pad_rows = max_rows - image.shape[1]  # Y
-            pad_cols = max_cols - image.shape[2]  # X
-            padded_image = np.pad(
-                image,
-                ((0, pad_depth), (0, pad_rows), (0, pad_cols)),
-                mode="constant",
-                constant_values=0,
-            )
-        elif axis_info == "ZYXC":
-            # 4D image with Z,Y,X,C: pad Z,Y,X dimensions
-            pad_depth = max_depth - image.shape[0]  # Z
-            pad_rows = max_rows - image.shape[1]  # Y
-            pad_cols = max_cols - image.shape[2]  # X
-            # Clip to first 3 channels if RGBA
-            image = image[:, :, :, :3]
-            padded_image = np.pad(
-                image,
-                ((0, pad_depth), (0, pad_rows), (0, pad_cols), (0, 0)),
-                mode="constant",
-                constant_values=0,
-            )
+        sh = image.shape
+        ndim = len(sh)
+
+        # Build a pad_width list sized to the image ndim
+        pad_width = [(0, 0)] * ndim
+
+        # Determine indices for Y, X, and Z axes (fall back to last axes if not present)
+        if "Y" in axis_info:
+            y_idx = axis_info.index("Y")
         else:
-            # Fallback: treat as 2D and pad Y,X dimensions
-            pad_rows = max_rows - image.shape[-2]  # Y (second to last)
-            pad_cols = max_cols - image.shape[-1]  # X (last)
-            padded_image = np.pad(
-                image,
-                ((0, pad_rows), (0, pad_cols)),
-                mode="constant",
-                constant_values=0,
-            )
+            y_idx = ndim - 2 if ndim >= 2 else 0
+
+        if "X" in axis_info:
+            x_idx = axis_info.index("X")
+        else:
+            x_idx = ndim - 1 if ndim >= 1 else 0
+
+        if max_depth > 0:
+            # If the image doesn't have Z but global max_depth > 0, we already
+            # expanded it earlier for has_3d_images, so fall back to first dim.
+            z_idx = axis_info.index("Z") if "Z" in axis_info else 0
+
+        # Compute padding amounts from mapped indices
+        pad_rows = max_rows - sh[y_idx]
+        if pad_rows < 0:
+            pad_rows = 0
+        pad_width[y_idx] = (0, pad_rows)
+
+        pad_cols = max_cols - sh[x_idx]
+        if pad_cols < 0:
+            pad_cols = 0
+        pad_width[x_idx] = (0, pad_cols)
+
+        if max_depth > 0:
+            pad_depth = max_depth - sh[z_idx]
+            if pad_depth < 0:
+                pad_depth = 0
+            pad_width[z_idx] = (0, pad_depth)
+
+        # Handle channel clipping (keep first 3 channels if more are present)
+        if "C" in axis_info:
+            c_idx = axis_info.index("C")
+            if sh[c_idx] > 3:
+                # build slicer to clip channels
+                slicer = [slice(None)] * ndim
+                slicer[c_idx] = slice(0, 3)
+                image = image[tuple(slicer)]
+                sh = image.shape
+                # Keep pad_width length consistent; no change required
+
+        # Apply padding with the computed pad_width
+        padded_image = np.pad(
+            image,
+            pad_width,
+            mode="constant",
+            constant_values=0,
+        )
 
         # TODO: Implement remove_alpha_channel function
         # if len(padded_image.shape) > 2 and padded_image.shape[2] != 3:

@@ -11,7 +11,10 @@ from pathlib import Path
 
 import numpy as np
 
-from napari_ai_lab.utility import get_axis_info_from_shape
+from napari_ai_lab.utility import (
+    collect_all_image_names,
+    get_axis_info_from_shape,
+)
 
 
 class ImageDataModel:
@@ -21,17 +24,6 @@ class ImageDataModel:
     Handles image directory scanning and provides organized paths
     for saving different types of results (segmentations, embeddings, etc.).
     """
-
-    # Supported image extensions
-    IMAGE_EXTENSIONS = {
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".tif",
-        ".tiff",
-        ".bmp",
-        ".czi",
-    }
 
     def __init__(self, parent_directory: str):
         """
@@ -64,13 +56,8 @@ class ImageDataModel:
             raise FileNotFoundError(
                 f"Directory not found: {self.parent_directory}"
             )
-
-        self._image_paths = [
-            f
-            for f in self.parent_directory.iterdir()
-            if f.is_file() and f.suffix.lower() in self.IMAGE_EXTENSIONS
-        ]
-        self._image_paths.sort(key=lambda x: x.name.lower())
+        # Centralized image name collection
+        self._image_paths = collect_all_image_names(self.parent_directory)
 
     def get_result_path(
         self, result_type: str, algorithm: str, image_path: str
