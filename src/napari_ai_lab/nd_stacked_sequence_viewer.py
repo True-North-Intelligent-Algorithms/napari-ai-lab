@@ -11,8 +11,8 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from .io import StackedSequenceIO
 from .models import ImageDataModel
-from .writers import StackedSequenceIO
 
 
 class NDStackedSequenceViewer(QWidget):
@@ -82,14 +82,16 @@ class NDStackedSequenceViewer(QWidget):
                 )
 
                 # Use StackedSequenceIO to load directory as stack with normalization
-                writer = StackedSequenceIO()
-                stacked_images = writer.load_full_stack(
+                stacked_sequence_io = StackedSequenceIO()
+                stacked_images = stacked_sequence_io.load_full_stack(
                     str(model.parent_directory), normalize=True
                 )
 
-                # Store image names from writer
+                # Store image names from stacked_sequence_io
                 self.image_names = (
-                    writer._image_names if writer._image_names else []
+                    stacked_sequence_io._image_names
+                    if stacked_sequence_io._image_names
+                    else []
                 )
 
                 if stacked_images.size == 0:

@@ -36,10 +36,10 @@ class ImageDataModel:
         self.results_directory = self.parent_directory / "results"
         self._image_paths: list[Path] | None = None
         self.segmenter_cache: dict = {}
-        self.annotation_writer_type: str = "tiff"
-        self.prediction_writer_type: str = "tiff"
-        self._annotations_writer = None
-        self._predictions_writer = None
+        self.annotation_io_type: str = "tiff"
+        self.prediction_io_type: str = "tiff"
+        self._annotations_io = None
+        self._predictions_io = None
 
         # Load image list on initialization
         self._load_image_list(str(self.parent_directory))
@@ -212,18 +212,18 @@ class ImageDataModel:
         # for future use where we might create subfolders per algorithm.
         return self.parent_directory / "predictions"
 
-    def get_annotations_writer(self):
-        """Get annotation writer."""
-        if self._annotations_writer is None:
-            from ..writers import get_io
+    def get_annotations_io(self):
+        """Get annotation io."""
+        if self._annotations_io is None:
+            from ..io import get_io
 
-            self._annotations_writer = get_io(self.annotation_writer_type)
-        return self._annotations_writer
+            self._annotations_io = get_io(self.annotation_io_type)
+        return self._annotations_io
 
-    def set_annotation_writer_type(self, writer_type: str):
-        """Set annotation writer type."""
-        self.annotation_writer_type = writer_type
-        self._annotations_writer = None
+    def set_annotation_io_type(self, io_type: str):
+        """Set annotation io type."""
+        self.annotation_io_type = io_type
+        self._annotations_io = None
 
     def load_existing_annotations(
         self, image_shape, image_index: int = 0, subdirectory: str = "class_0"
@@ -238,9 +238,9 @@ class ImageDataModel:
             subdirectory: Subdirectory under 'annotations' to look in (default: class_0).
 
         Returns:
-            numpy ndarray containing annotation labels (dtype preserved by writer or uint16 zeros).
+            numpy ndarray containing annotation labels (dtype preserved by io or uint16 zeros).
         """
-        # Defer imports to here to avoid bringing numpy/writer into top-level module load
+        # Defer imports to here to avoid bringing numpy/io into top-level module load
         import numpy as np
 
         annotation_dir = self.get_annotations_directory(subdirectory)
@@ -251,8 +251,8 @@ class ImageDataModel:
         else:
             dataset_name = "unknown"
 
-        writer = self.get_annotations_writer()
-        data = writer.load(str(annotation_dir), dataset_name)
+        io = self.get_annotations_io()
+        data = io.load(str(annotation_dir), dataset_name)
 
         # If nothing saved, return zeros
         if data is None or getattr(data, "size", 0) == 0:
@@ -267,18 +267,18 @@ class ImageDataModel:
 
         return data
 
-    def get_predictions_writer(self):
-        """Get prediction writer."""
-        if self._predictions_writer is None:
-            from ..writers import get_io
+    def get_predictions_io(self):
+        """Get prediction io."""
+        if self._predictions_io is None:
+            from ..io import get_io
 
-            self._predictions_writer = get_io(self.prediction_writer_type)
-        return self._predictions_writer
+            self._predictions_io = get_io(self.prediction_io_type)
+        return self._predictions_io
 
-    def set_prediction_writer_type(self, writer_type: str):
-        """Set prediction writer type."""
-        self.prediction_writer_type = writer_type
-        self._predictions_writer = None
+    def set_prediction_io_type(self, io_type: str):
+        """Set prediction io type."""
+        self.prediction_io_type = io_type
+        self._predictions_io = None
 
     def load_existing_predictions(
         self,
@@ -296,7 +296,7 @@ class ImageDataModel:
             subdirectory: Subdirectory under 'predictions' to look in (default: 'predictions').
 
         Returns:
-            numpy ndarray containing prediction labels (dtype preserved by writer or uint16 zeros).
+            numpy ndarray containing prediction labels (dtype preserved by io or uint16 zeros).
         """
         import numpy as np
 
@@ -310,8 +310,8 @@ class ImageDataModel:
         else:
             dataset_name = "unknown"
 
-        writer = self.get_predictions_writer()
-        data = writer.load(str(preds_dir), dataset_name)
+        io = self.get_predictions_io()
+        data = io.load(str(preds_dir), dataset_name)
 
         if data is None or getattr(data, "size", 0) == 0:
             return np.zeros(image_shape, dtype=np.uint16)
@@ -336,7 +336,7 @@ class ImageDataModel:
             current_step: Viewer dimension position (for stacked mode).
 
         Returns:
-            The result of the writer.save(...) call.
+            The result of the io.save(...) call.
         """
         annotation_dir = self.get_annotations_directory(subdirectory)
         annotation_dir.mkdir(parents=True, exist_ok=True)
@@ -345,12 +345,12 @@ class ImageDataModel:
 
         dataset_name = image_paths[image_index].stem
 
-        writer = self.get_annotations_writer()
+        io = self.get_annotations_io()
 
         # Ensure uint16 to match previous behavior
         labels_to_save = np.asarray(labels_array).astype(np.uint16)
 
-        return writer.save(
+        return io.save(
             str(annotation_dir), dataset_name, labels_to_save, current_step
         )
 
@@ -371,7 +371,7 @@ class ImageDataModel:
             current_step: Viewer dimension position (for stacked mode).
 
         Returns:
-            Result of writer.save(...)
+            Result of io.save(...)
         """
         import numpy as np
 
@@ -384,11 +384,11 @@ class ImageDataModel:
         else:
             dataset_name = "unknown"
 
-        writer = self.get_predictions_writer()
+        io = self.get_predictions_io()
 
         predictions_to_save = np.asarray(predictions_array)
 
-        return writer.save(
+        return io.save(
             str(predictions_dir),
             dataset_name,
             predictions_to_save,

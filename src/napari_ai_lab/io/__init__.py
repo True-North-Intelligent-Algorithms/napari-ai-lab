@@ -1,7 +1,7 @@
 """
-Label writers for different storage formats.
+io for different storage formats.
 
-This package provides a flexible architecture for saving and loading labels
+This package provides a flexible architecture for saving and loading
 in various formats (numpy, zarr, tiff, etc.) with a common interface.
 """
 
