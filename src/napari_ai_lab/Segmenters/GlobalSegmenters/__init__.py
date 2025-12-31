@@ -24,6 +24,7 @@ _OPTIONAL_SEGMENTERS = {
     "CellposeSegmenter": ".CellposeSegmenter",
     "StardistSegmenter": ".StardistSegmenter",
     "MicroSamSegmenter": ".MicroSamSegmenter",
+    "MicroSamYoloSegmenter": ".MicroSamYoloSegmenter",
     "OtsuSegmenter": ".OtsuSegmenter",
     "ThresholdSegmenter": ".ThresholdSegmenter",
 }
