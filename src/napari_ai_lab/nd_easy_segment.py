@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
 
 from .base_nd_easy_widget import BaseNDEasyWidget
 from .models import ImageDataModel
+from .utility import get_current_slice_indices
 
 
 class NDEasySegment(BaseNDEasyWidget):
@@ -210,7 +211,9 @@ class NDEasySegment(BaseNDEasyWidget):
         print(f"User selected axis mode: {selected_axis}")
 
         # Extract current slice based on selected axis mode
-        indices = self._get_current_slice_indices(selected_axis)
+        indices = get_current_slice_indices(
+            self.viewer.dims.current_step, selected_axis
+        )
         current_yx_slice = self.image_layer.data[indices]
 
         print(f"Current YX slice shape: {current_yx_slice.shape}")
@@ -251,8 +254,26 @@ class NDEasySegment(BaseNDEasyWidget):
 
             # Copy mask to predictions layer
             if self.predictions_layer is not None:
-                selected_axis = self.parameter_form.get_selected_axis()
-                indices = self._get_current_slice_indices(selected_axis)
+                input_axis = self.parameter_form.get_selected_axis()
+
+                # Result axis can be smaller than the input axis (ie YXC input, YX output),
+                # keep only
+                # the spatial characters (Z, Y, X) from selected_axis. If
+                # that produces an empty string, fall back to 'YX'. Keep
+                # this small and direct; if the axis string is malformed
+                # we'll handle it later.
+                if len(input_axis) > len(mask.shape):
+                    temp_axis = "".join(
+                        [c for c in input_axis if c in ("Z", "Y", "X")]
+                    )
+                    if temp_axis == "":
+                        temp_axis = "YX"
+                else:
+                    temp_axis = input_axis
+
+                indices = get_current_slice_indices(
+                    self.viewer.dims.current_step, temp_axis
+                )
                 self.predictions_layer.data[indices] = (
                     mask  # self.current_label_num
                 )
@@ -337,6 +358,8 @@ class NDEasySegment(BaseNDEasyWidget):
         self._point_choices = ["positive", "negative"]
         LABEL_COLOR_CYCLE = ["red", "blue"]
 
+        annotation_ndim = len(self.annotation_layer.data.shape)
+
         self.points_layer = self.viewer.add_points(
             name="Point Layer",
             property_choices={"label": self._point_choices},
@@ -346,7 +369,7 @@ class NDEasySegment(BaseNDEasyWidget):
             face_color="transparent",
             border_width=0.5,
             size=1,
-            ndim=len(image_data.shape),
+            ndim=annotation_ndim,
         )
         self.points_layer.events.data.connect(self._on_points_changed)
 
