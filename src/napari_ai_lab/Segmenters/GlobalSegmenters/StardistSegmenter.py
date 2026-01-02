@@ -21,6 +21,7 @@ try:
 except ImportError:
     stardist = None
     StarDist2D = None
+    StarDist3D = None
     _is_stardist_available = False
 
 
@@ -135,7 +136,7 @@ StarDist Automatic Segmentation:
             self.custom_model = model_2d
             self.is_3d_model = False
             return
-        except (ValueError, FileNotFoundError, RuntimeError) as e2d:
+        except (ValueError, FileNotFoundError, RuntimeError, TypeError) as e2d:
             print(f"   ❌ Failed to load as 2D model: {e2d}")
 
         # If 2D failed, try 3D
@@ -153,7 +154,7 @@ StarDist Automatic Segmentation:
                 "   ⚠️  Warning: This segmenter is designed for 2D - 3D model may not work properly"
             )
             return
-        except (ValueError, FileNotFoundError, RuntimeError) as e3d:
+        except (ValueError, FileNotFoundError, RuntimeError, TypeError) as e3d:
             print(f"   ❌ Failed to load as 3D model: {e3d}")
 
         # Both failed
