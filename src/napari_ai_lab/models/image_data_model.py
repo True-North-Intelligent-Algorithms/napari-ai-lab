@@ -13,7 +13,7 @@ import numpy as np
 
 from napari_ai_lab.utility import (
     collect_all_image_names,
-    get_axis_info_from_shape,
+    create_empty_instance_image,
 )
 
 
@@ -125,6 +125,7 @@ class ImageDataModel:
         image_path = image_paths[image_index]
         print(f"Loading image: {image_path}")
 
+        # TODO: refactor to use io classes and eventually ndev-io
         try:
             # Try skimage first
             image_data = io.imread(str(image_path))
@@ -256,14 +257,9 @@ class ImageDataModel:
 
         # If nothing saved, return zeros
         if data is None or getattr(data, "size", 0) == 0:
-
-            axis_info = get_axis_info_from_shape(image_shape)
-
-            if axis_info == "YXC":
-                # Color image case - return zeros matching YX shape
-                return np.zeros(image_shape[:2], dtype=np.uint16)
-            else:
-                return np.zeros(image_shape, dtype=np.uint16)
+            # Create an empty instance image using centralized helper so
+            # annotations and predictions share the same shape rules.
+            return create_empty_instance_image(image_shape, dtype=np.uint16)
 
         return data
 
@@ -314,7 +310,7 @@ class ImageDataModel:
         data = io.load(str(preds_dir), dataset_name)
 
         if data is None or getattr(data, "size", 0) == 0:
-            return np.zeros(image_shape, dtype=np.uint16)
+            return create_empty_instance_image(image_shape, dtype=np.uint16)
 
         return data
 

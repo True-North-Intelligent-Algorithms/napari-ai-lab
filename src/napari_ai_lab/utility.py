@@ -339,6 +339,8 @@ def get_current_slice_indices(current_step: tuple, selected_axis: str):
             slice(None),
             slice(None),
         )
+    if selected_axis == "YXC":
+        return current_step[:-3] + (slice(None), slice(None), slice(None))
     else:
         # Default to 2D YX slice
         return current_step[:-2] + (slice(None), slice(None))
@@ -377,3 +379,24 @@ def create_artifact_name(
 
     suffix = "_".join(str(d) for d in non_spatial_dims)
     return f"{artifact_base}_{suffix}"
+
+
+def create_empty_instance_image(image_shape, dtype=np.uint16):
+    """
+    Create an empty instance-label image matching the provided image_shape.
+
+    For color images (axis info 'YXC') we return a 2D YX zeros array. For
+    other shapes we return zeros with the same shape.
+
+    Args:
+        image_shape (tuple): Shape of the reference image
+        dtype: numpy dtype for the returned array (default: np.uint16)
+
+    Returns:
+        numpy.ndarray: Zero-filled array suitable for annotations/predictions
+    """
+    axis_info = get_axis_info_from_shape(image_shape)
+
+    if axis_info == "YXC":
+        return np.zeros(image_shape[:2], dtype=dtype)
+    return np.zeros(image_shape, dtype=dtype)
