@@ -14,6 +14,7 @@ import numpy as np
 from napari_ai_lab.utility import (
     collect_all_image_names,
     create_empty_instance_image,
+    get_axis_info_from_shape,
 )
 
 
@@ -40,6 +41,7 @@ class ImageDataModel:
         self.prediction_io_type: str = "tiff"
         self._annotations_io = None
         self._predictions_io = None
+        self.axis_types: str | None = None
 
         # Load image list on initialization
         self._load_image_list(str(self.parent_directory))
@@ -129,6 +131,7 @@ class ImageDataModel:
         try:
             # Try skimage first
             image_data = io.imread(str(image_path))
+            self.axis_types = get_axis_info_from_shape(image_data.shape)
         except Exception as e:  # noqa: BLE001
             # Fallback to czifile for .czi format
             try:
@@ -136,14 +139,29 @@ class ImageDataModel:
 
                 with CziFile(str(image_path)) as czi:
                     image_data = czi.asarray()
+                    self.axis_types = czi.axes
             except Exception as czi_error:  # noqa: BLE001
                 raise OSError(
                     f"Failed to load image: {e}, CZI fallback also failed: {czi_error}"
                 ) from e
 
         # Squeeze to remove singleton dimensions
+        if self.axis_types and len(self.axis_types) == len(image_data.shape):
+            # Remove axis characters corresponding to trivial dimensions
+            non_trivial_axes = "".join(
+                [
+                    axis
+                    for axis, size in zip(
+                        self.axis_types, image_data.shape, strict=False
+                    )
+                    if size != 1
+                ]
+            )
+            self.axis_types = non_trivial_axes
+
         image_data = np.squeeze(image_data)
         print(f"Loaded image shape: {image_data.shape}")
+        print(f"Axis types: {self.axis_types}")
 
         return image_data
 
