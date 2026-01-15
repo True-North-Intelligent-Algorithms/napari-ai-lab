@@ -362,11 +362,6 @@ class BaseNDEasyWidget(QWidget):
                 self.current_image_path = image_path
                 # parent_directory is managed by image_data_model, no need to store locally
 
-                # Small delay to let Napari properly release layer resources
-                import time
-
-                time.sleep(0.05)  # 50ms delay
-
                 print("Creating new layers with fresh labels...")
                 self._set_image_layer(image_layer)
             else:
