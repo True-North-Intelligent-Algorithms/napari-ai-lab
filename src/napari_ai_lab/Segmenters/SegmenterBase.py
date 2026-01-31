@@ -82,6 +82,21 @@ class SegmenterBase:
         """
         return []
 
+    @property
+    def potential_axes(self):
+        """
+        Get the list of all axis configurations this algorithm could potentially support.
+
+        This represents the full capability of the algorithm, regardless of current
+        data limitations. For example, an algorithm might support 'ZYX' even if the
+        current data only has 'YX' dimensions.
+
+        Returns:
+            list: List of potential axis strings the algorithm could handle.
+                 Empty list in base class - should be overridden by derived classes.
+        """
+        return []
+
     def supports_axis(self, axis_info):
         """
         Check if this segmenter supports the given axis configuration.
