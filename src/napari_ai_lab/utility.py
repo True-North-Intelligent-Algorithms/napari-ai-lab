@@ -114,6 +114,37 @@ def get_axis_info_from_shape(image_shape):
         return "U" * len(image_shape)
 
 
+def get_supported_axes_from_shape(image_shape, supported_axis):
+    """
+    Filter supported axis strings to only those compatible with the given shape.
+
+    Args:
+        image_shape (tuple): Shape of the image
+        supported_axis (list): List of axis strings to filter
+
+    Returns:
+        list: Filtered list of axis strings that are compatible with the shape
+    """
+    # Deduce axis info from shape
+    deduced_axis = get_axis_info_from_shape(image_shape)
+
+    # Determine which axes are present in the deduced axis info
+    has_z = "Z" in deduced_axis
+    has_c = "C" in deduced_axis
+
+    compatible_axes = []
+    for axis in supported_axis:
+        # Check if this axis string requires Z or C that aren't in the shape
+        requires_z = "Z" in axis
+        requires_c = "C" in axis
+
+        # Include this axis only if shape supports all required dimensions
+        if (not requires_z or has_z) and (not requires_c or has_c):
+            compatible_axes.append(axis)
+
+    return compatible_axes
+
+
 def get_ndim(shape):
     """
     Determine spatial dimensionality from image shape.
