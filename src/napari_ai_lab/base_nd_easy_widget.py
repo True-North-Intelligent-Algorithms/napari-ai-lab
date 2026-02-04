@@ -79,15 +79,62 @@ class BaseNDEasyWidget(QWidget):
 
         # Connect to viewer close event
         try:
-            self.viewer.window._qt_window.destroyed.connect(
-                self._on_viewer_closing
+            self.viewer.window._qt_window.closeEvent = (
+                self._create_close_event_handler(
+                    self.viewer.window._qt_window.closeEvent
+                )
             )
+            print("Connected to viewer close event")
         except (AttributeError, RuntimeError) as e:
             print(f"Could not connect to viewer closing: {e}")
 
+    def _create_close_event_handler(self, original_close_event):
+        """Create a close event handler that wraps the original."""
+
+        def close_event_handler(event):
+            """Handle viewer window close event."""
+            print("Viewer closing detected via closeEvent")
+
+            # Ask user if they want to save annotations
+            if self.annotation_layer and self.current_image_path:
+                reply = QMessageBox.question(
+                    self,
+                    "Save Annotations?",
+                    "Do you want to save annotations before closing?",
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                    QMessageBox.Yes,
+                )
+
+                if reply == QMessageBox.Cancel:
+                    # User cancelled, don't close
+                    event.ignore()
+                    return
+                elif reply == QMessageBox.Yes:
+                    # Save annotations
+                    try:
+                        self.image_data_model.save_annotations(
+                            self.annotation_layer.data,
+                            self.current_image_index,
+                            current_step=self.viewer.dims.current_step,
+                        )
+                        print("Annotations saved before closing")
+                    except (OSError, ValueError, RuntimeError) as e:
+                        print(f"Failed to save annotations: {e}")
+                        QMessageBox.warning(
+                            self,
+                            "Save Error",
+                            f"Failed to save annotations: {e}",
+                        )
+
+            # Call original close event handler
+            if original_close_event:
+                original_close_event(event)
+
+        return close_event_handler
+
     def _on_viewer_closing(self):
-        """Handle napari viewer closing."""
-        print("Viewer closing detected")
+        """Handle napari viewer closing - deprecated, using closeEvent now."""
+        print("Viewer closing detected via destroyed signal")
         QMessageBox.information(None, "Closing", "Closing widget")
 
     def _on_save_annotations(self):
