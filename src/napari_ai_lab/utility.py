@@ -114,7 +114,7 @@ def get_axis_info_from_shape(image_shape):
         return "U" * len(image_shape)
 
 
-def get_supported_axes_from_shape(image_shape, supported_axis):
+def get_supported_axes_from_shape(image_shape, supported_axis, image_axis="U"):
     """
     Filter supported axis strings to only those compatible with the given shape.
 
@@ -126,11 +126,12 @@ def get_supported_axes_from_shape(image_shape, supported_axis):
         list: Filtered list of axis strings that are compatible with the shape
     """
     # Deduce axis info from shape
-    deduced_axis = get_axis_info_from_shape(image_shape)
+    if image_axis == "U":
+        image_axis = get_axis_info_from_shape(image_shape)
 
     # Determine which axes are present in the deduced axis info
-    has_z = "Z" in deduced_axis
-    has_c = "C" in deduced_axis
+    has_z = "Z" in image_axis
+    has_c = "C" in image_axis
 
     compatible_axes = []
     for axis in supported_axis:
