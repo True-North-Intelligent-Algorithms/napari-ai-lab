@@ -353,16 +353,23 @@ def pad_to_largest(
     return result
 
 
-def get_current_slice_indices(current_step: tuple, selected_axis: str):
+def get_current_slice_indices(
+    current_step: tuple, selected_axis: str, ignore_channel: bool = False
+):
     """Compute indices for the current slice based on the selected axis.
 
     Args:
         current_step: The napari viewer dims.current_step tuple.
         selected_axis: Axis mode string, e.g. "YX" or "ZYX".
+        ignore_channel: If True, remove 'C' from selected_axis before processing.
 
     Returns:
         tuple: A tuple of indices/slices to extract the current 2D/3D region.
     """
+    # Remove channel dimension if requested
+    if ignore_channel and "C" in selected_axis:
+        selected_axis = selected_axis.replace("C", "")
+
     if selected_axis == "YX":
         return current_step[:-2] + (slice(None), slice(None))
     elif selected_axis == "ZYX":
