@@ -52,6 +52,9 @@ class NDEasyLabel(BaseNDEasyWidget):
         # Parameter form widget for segmenter parameters (from base)
         self.layout().addWidget(self._create_parameter_form())
 
+        # Connect to axis changes to reinitialize segmenter
+        self.parameter_form.axis_changed.connect(self._on_axis_changed)
+
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
 
@@ -92,6 +95,12 @@ class NDEasyLabel(BaseNDEasyWidget):
 
     def _post_segmenter_selection(self):
         # Delegate the real work to the initializer
+        self._initialize_segmenter()
+
+    def _on_axis_changed(self, new_axis):
+        """Handle axis selection changes - reinitialize segmenter for new axis."""
+        print(f"Axis changed to: {new_axis}")
+        # Reinitialize segmenter with new axis configuration
         self._initialize_segmenter()
 
     def _initialize_segmenter(self):
