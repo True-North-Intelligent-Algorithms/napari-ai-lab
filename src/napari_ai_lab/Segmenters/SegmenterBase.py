@@ -70,6 +70,8 @@ class SegmenterBase:
     def __init__(self):
         """Initialize the segmenter."""
         self.name = self.__class__.__name__
+        self._supported_axes = []
+        self._potential_axes = []
 
     @property
     def supported_axes(self):
@@ -80,17 +82,22 @@ class SegmenterBase:
             list: List of supported axis strings (e.g., ['YX', 'YXC', 'ZYX']).
                  Empty list in base class - should be overridden by derived classes.
         """
-        return []
+        return self._supported_axes
 
     @supported_axes.setter
     def supported_axes(self, value):
         """
         Set the list of axis configurations this segmenter supports.
 
+        This setter works even when derived classes override the getter property,
+        by storing the value in the base class's _supported_axes attribute.
+        Derived classes that override the getter can still benefit from dynamic
+        axis filtering by accessing _supported_axes if needed.
+
         Args:
             value (list): List of supported axis strings.
         """
-        # Default implementation does nothing - derived classes should override
+        self._supported_axes = value
 
     @property
     def potential_axes(self):
@@ -105,7 +112,12 @@ class SegmenterBase:
             list: List of potential axis strings the algorithm could handle.
                  Empty list in base class - should be overridden by derived classes.
         """
-        return []
+        return self._potential_axes
+
+    @potential_axes.setter
+    def potential_axes(self, value):
+        """Set the potential axes."""
+        self._potential_axes = value
 
     def supports_axis(self, axis_info):
         """

@@ -43,16 +43,7 @@ class Square2D(InteractiveSegmenterBase):
 
     def __init__(self):
         super().__init__()
-
-    @property
-    def supported_axes(self) -> list[str]:
-        """Return the supported axes for this segmenter."""
-        return [
-            "YX",
-            "ZYX",
-            "TYX",
-            "TZYX",
-        ]  # Supports 2D with optional leading dimensions
+        self._supported_axes = ["YX", "ZYX", "TYX", "TZYX"]
 
     def segment(
         self,

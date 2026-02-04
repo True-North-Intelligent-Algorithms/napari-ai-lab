@@ -65,16 +65,8 @@ Instructions for Otsu 3D Segmentation:
     def __init__(self):
         """Initialize the Otsu3D segmenter."""
         super().__init__()
-
-    @property
-    def supported_axes(self):
-        """
-        Get the list of axis configurations this segmenter supports.
-
-        Returns:
-            list: Supported axis configurations for 3D Otsu segmentation.
-        """
-        return ["ZYX", "ZYXC"]
+        self._supported_axes = ["ZYX", "ZYXC"]
+        self._potential_axes = ["ZYX"]
 
     def segment(self, image, points=None, shapes=None, **kwargs):
         """
