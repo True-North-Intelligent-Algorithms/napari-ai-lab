@@ -7,7 +7,7 @@ This module implements label storage using TIFF files.
 from pathlib import Path
 
 import numpy as np
-from skimage import io
+import tifffile
 
 from .base_io import BaseIO
 
@@ -32,7 +32,7 @@ class TiffIO(BaseIO):
     ) -> bool:
         try:
             path = Path(save_directory) / f"{dataset_name}.tif"
-            io.imsave(str(path), data.astype(np.uint16))
+            tifffile.imwrite(str(path), data)
             return True
         except (OSError, ValueError, PermissionError) as e:
             print(f"✗ Error saving: {e}")
@@ -42,7 +42,7 @@ class TiffIO(BaseIO):
         try:
             path = Path(load_directory) / f"{dataset_name}.tif"
             if path.exists():
-                return io.imread(str(path)).astype(np.uint16)
+                return tifffile.imread(str(path)).astype(np.uint16)
             else:
                 return np.array([])
         except (OSError, ValueError, PermissionError) as e:
