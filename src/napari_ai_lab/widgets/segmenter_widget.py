@@ -33,6 +33,9 @@ class SegmenterWidget(QWidget):
     # Signal emitted when any parameter value changes
     parameters_changed = Signal(dict)
 
+    # Signal emitted when axis selection changes
+    axis_changed = Signal(str)
+
     def __init__(self, segmenter=None, parent=None):
         """
         Initialize the segmenter widget.
@@ -179,6 +182,8 @@ class SegmenterWidget(QWidget):
         self.selected_axis = axis_text
         self.segmenter.selected_axis = axis_text
         print(f"Selected axis: {axis_text}")
+        # Emit signal so external code can react to axis changes
+        self.axis_changed.emit(axis_text)
 
     def _create_widget_for_field(self, field):
         """
