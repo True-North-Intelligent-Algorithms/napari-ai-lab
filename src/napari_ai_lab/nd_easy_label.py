@@ -160,11 +160,11 @@ class NDEasyLabel(BaseNDEasyWidget):
 
             selected_axis = self.parameter_form.get_selected_axis()
 
-            if selected_axis == "YX":
+            if selected_axis == "YX" or selected_axis == "YXC":
                 latest_point = latest_point[
                     -2:
                 ]  # Use last two coordinates for 2D YX
-            elif selected_axis == "ZYX":
+            elif selected_axis == "ZYX" or selected_axis == "ZYXC":
                 latest_point = latest_point[
                     -3:
                 ]  # Use last three coordinates for 3D ZYX
