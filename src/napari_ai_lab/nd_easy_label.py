@@ -110,7 +110,6 @@ class NDEasyLabel(BaseNDEasyWidget):
             return
 
         try:
-            # Get embedding directory and image name for predictor initialization
             parent_dir = self.image_data_model.get_parent_directory()
 
             image_paths = self.image_data_model.get_image_paths()
@@ -182,6 +181,17 @@ class NDEasyLabel(BaseNDEasyWidget):
                 self.viewer.dims.current_step, selected_axis
             )
 
+            # if image has more dims than annotation, adjust segmentation indices
+            if self.image_layer.data.ndim > self.annotation_layer.data.ndim:
+
+                segmentation_indices = get_current_slice_indices(
+                    self.viewer.dims.current_step,
+                    selected_axis,
+                    ignore_channel=True,
+                )
+            else:
+                segmentation_indices = indices
+
             image_data = self.image_layer.data[indices]
 
             # Ensure segmenter is synced with current parameters before use
@@ -202,7 +212,7 @@ class NDEasyLabel(BaseNDEasyWidget):
                 # )
 
                 # Apply the mask to the labels layer
-                self.annotation_layer.data[indices][mask != 0] = (
+                self.annotation_layer.data[segmentation_indices][mask != 0] = (
                     mask[mask != 0] * self.current_label_num
                 )
 
