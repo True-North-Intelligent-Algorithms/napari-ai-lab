@@ -19,7 +19,11 @@ from superqt.utils import ensure_main_thread
 from .models import ImageDataModel
 from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
-from .utility import load_images_from_directory, pad_to_largest
+from .utility import (
+    get_supported_axes_from_shape,
+    load_images_from_directory,
+    pad_to_largest,
+)
 from .widgets import SegmenterWidget
 
 
@@ -123,7 +127,7 @@ class BaseNDEasyWidget(QWidget):
         raise NotImplementedError("To be implemented in next step")
 
     def _on_segmenter_changed(self, segmenter_name):
-        """Handle changes to the segmenter selection."""
+        """Handle changes to segmenter selection."""
         if not segmenter_name or segmenter_name == "No segmenters available":
             self.parameter_form.clear_form()
             return
@@ -132,6 +136,40 @@ class BaseNDEasyWidget(QWidget):
         self.segmenter = self.image_data_model.get_segmenter(segmenter_name)
 
         if self.segmenter:
+            print(f"Potential axes: {self.segmenter.potential_axes}")
+            print(
+                f"Supported axes (before filtering): {self.segmenter.supported_axes}"
+            )
+
+            # Filter potential axes based on current image shape
+            if self.image_layer is not None:
+                image_shape = self.image_layer.data.shape
+                filtered_axes = get_supported_axes_from_shape(
+                    image_shape,
+                    self.segmenter.potential_axes,
+                    self.image_data_model.axis_types,
+                )
+                self.segmenter.supported_axes = filtered_axes
+                print(
+                    f"Updated supported axes based on image shape: {filtered_axes}"
+                )
+
+                # Ensure selected_axis is valid after filtering
+                if (
+                    hasattr(self.segmenter, "selected_axis")
+                    and self.segmenter.selected_axis not in filtered_axes
+                ):
+                    # Set to first available axis if current selection is invalid
+                    if filtered_axes:
+                        self.segmenter.selected_axis = filtered_axes[0]
+                        print(
+                            f"Updated selected_axis to: {self.segmenter.selected_axis}"
+                        )
+                    else:
+                        print(
+                            "Warning: No supported axes available for current image shape"
+                        )
+
             # Update parameter form with segmenter instance
             self._update_parameter_form(self.segmenter)
             print(f"Selected segmenter: {segmenter_name}")
@@ -408,7 +446,7 @@ class BaseNDEasyWidget(QWidget):
     # - _process_image_change()
     # - _on_click()
 
-    # NDEasySegment specific:
+    # NDEasySegment:
     # - _setup_ui()
     # - _on_mode_changed()
     # - _update_mode_ui()
@@ -433,6 +471,11 @@ class BaseNDEasyWidget(QWidget):
     # - self.segmenter_combo, self.segmenter_label
     # - self.dir_btn, btn
 
+    # NDEasySegment:
+    # - self.parameter_form (SegmenterWidget)
+    # - self.segmenter_combo, self.segmenter_label
+    # - self.dir_btn
+    # - Mode-specific UI elements (radio buttons, groups, etc.)
     # NDEasySegment:
     # - self.parameter_form (SegmenterWidget)
     # - self.segmenter_combo, self.segmenter_label

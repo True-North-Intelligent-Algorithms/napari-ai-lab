@@ -99,7 +99,9 @@ Instructions:
 
         self.state = None
 
-        self.selected_axis = self.supported_axes[0]
+        self._supported_axes = ["ZYX", "YX", "ZYXC", "YXC"]
+        self._potential_axes = ["ZYX", "YX", "ZYXC", "YXC"]
+        self.selected_axis = self._supported_axes[0]
 
     def initialize_embedding_save_path(self, save_path: str, image_name: str):
         """
@@ -160,7 +162,37 @@ Instructions:
         Returns:
             list: Supported axis configurations for 3D SAM segmentation.
         """
-        return ["ZYX", "YX", "ZYXC", "YXC"]
+        return self._supported_axes
+
+    @supported_axes.setter
+    def supported_axes(self, value):
+        """
+        Set the list of axis configurations this segmenter supports.
+
+        Args:
+            value (list): List of supported axis strings.
+        """
+        self._supported_axes = value
+
+    @property
+    def potential_axes(self):
+        """
+        Get the list of all axis configurations this algorithm could potentially support.
+
+        Returns:
+            list: Potential axis configurations for 3D SAM segmentation.
+        """
+        return self._potential_axes
+
+    @potential_axes.setter
+    def potential_axes(self, value):
+        """
+        Set the list of all axis configurations this algorithm could potentially support.
+
+        Args:
+            value (list): List of potential axis strings.
+        """
+        self._potential_axes = value
 
     def are_dependencies_available(self):
         """

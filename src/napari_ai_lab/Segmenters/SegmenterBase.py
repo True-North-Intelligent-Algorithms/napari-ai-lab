@@ -82,6 +82,16 @@ class SegmenterBase:
         """
         return []
 
+    @supported_axes.setter
+    def supported_axes(self, value):
+        """
+        Set the list of axis configurations this segmenter supports.
+
+        Args:
+            value (list): List of supported axis strings.
+        """
+        # Default implementation does nothing - derived classes should override
+
     @property
     def potential_axes(self):
         """
