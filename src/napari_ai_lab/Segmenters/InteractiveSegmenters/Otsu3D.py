@@ -37,6 +37,7 @@ Instructions for Otsu 3D Segmentation:
     """
 
     lateral_roi_size: int = field(
+        default=30,
         metadata={
             "type": "int",
             "harvest": True,
@@ -46,10 +47,11 @@ Instructions for Otsu 3D Segmentation:
             "max": 500,
             "default": 30,
             "step": 1,
-        }
+        },
     )
 
     axial_roi_size: int = field(
+        default=10,
         metadata={
             "type": "int",
             "harvest": True,
@@ -59,7 +61,7 @@ Instructions for Otsu 3D Segmentation:
             "max": 100,
             "default": 10,
             "step": 1,
-        }
+        },
     )
 
     def __init__(self):
@@ -68,79 +70,50 @@ Instructions for Otsu 3D Segmentation:
         self._supported_axes = ["ZYX", "ZYXC"]
         self._potential_axes = ["ZYX"]
 
-    def segment(self, image, points=None, shapes=None, **kwargs):
+    def segment(self, image, points=None, shapes=None):
         """
-        Perform Otsu thresholding segmentation on 3D image.
+        Perform Otsu thresholding segmentation on 3D ROI around point.
 
         Args:
-            image (numpy.ndarray): Input 3D image to segment.
-            points (list, optional): List of annotation points (ignored for Otsu).
-            shapes (list, optional): List of annotation shapes (ignored for Otsu).
-            **kwargs: Additional keyword arguments.
-                - use_multichannel (bool): If True and image is multichannel,
-                  convert to grayscale first. Default: True.
-                - slice_wise (bool): If True, apply Otsu slice by slice instead
-                  of globally. Default: False.
+            image (numpy.ndarray): Input 3D image (ZYX) to segment.
+            points (list, optional): List of points. Uses points[0] as ROI center.
+            shapes (list, optional): Ignored for Otsu.
 
         Returns:
-            numpy.ndarray: Binary segmentation mask (same shape as input image).
-
-        Raises:
-            ValueError: If image dimensions are not supported.
+            numpy.ndarray: Binary segmentation mask.
         """
-        if len(image.shape) not in [3, 4]:
+        if len(image.shape) != 3:
             raise ValueError(
-                f"Otsu3D only supports 3D images. Got shape: {image.shape}"
+                f"Otsu3D requires 3D image. Got shape: {image.shape}"
             )
 
-        # Handle multichannel images by converting to grayscale
-        use_multichannel = kwargs.get("use_multichannel", True)
-        slice_wise = kwargs.get("slice_wise", False)
+        mask = np.zeros(image.shape, dtype=np.uint8)
 
-        if len(image.shape) == 4 and use_multichannel:
-            # Convert ZYXC to ZYX using weighted average
-            if image.shape[3] == 3:  # RGB channels
-                # Use standard RGB to grayscale conversion weights
-                image_gray = np.dot(image[..., :3], [0.2989, 0.5870, 0.1140])
-            else:
-                # For other multichannel images, use simple average
-                image_gray = np.mean(image, axis=3)
-        else:
-            image_gray = image.copy()
+        if not points or len(points) == 0:
+            return mask
 
-        if slice_wise:
-            # Apply Otsu thresholding slice by slice (Z dimension)
-            binary_mask = np.zeros_like(image_gray, dtype=bool)
-            thresholds = []
+        # Use first point as center
+        z, y, x = int(points[0][0]), int(points[0][1]), int(points[0][2])
 
-            for z in range(image_gray.shape[0]):
-                slice_2d = image_gray[z]
-                threshold = filters.threshold_otsu(slice_2d)
-                binary_mask[z] = slice_2d > threshold
-                thresholds.append(threshold)
+        # Define ROI bounds
+        z_min = max(0, z - self.axial_roi_size // 2)
+        z_max = min(image.shape[0], z + self.axial_roi_size // 2)
+        y_min = max(0, y - self.lateral_roi_size // 2)
+        y_max = min(image.shape[1], y + self.lateral_roi_size // 2)
+        x_min = max(0, x - self.lateral_roi_size // 2)
+        x_max = min(image.shape[2], x + self.lateral_roi_size // 2)
 
-            print(
-                f"Otsu3D: Applied slice-wise thresholding with {len(thresholds)} thresholds"
-            )
-            print(
-                f"  Threshold range: {min(thresholds):.2f} - {max(thresholds):.2f}"
-            )
-            print(
-                f"  ROI Settings - Lateral: {self.lateral_roi_size}, Axial: {self.axial_roi_size}"
-            )
-        else:
-            # Apply global Otsu thresholding across entire 3D volume
-            threshold = filters.threshold_otsu(image_gray)
-            binary_mask = image_gray > threshold
+        # Extract ROI
+        roi = image[z_min:z_max, y_min:y_max, x_min:x_max]
 
-            print(
-                f"Otsu3D: Applied global threshold {threshold:.2f} to 3D volume"
-            )
-            print(
-                f"  ROI Settings - Lateral: {self.lateral_roi_size}, Axial: {self.axial_roi_size}"
-            )
+        # Apply Otsu to ROI
+        threshold = filters.threshold_otsu(roi)
+        roi_mask = roi > threshold
 
-        return binary_mask.astype(np.uint8)
+        # Put result back into mask
+        mask[z_min:z_max, y_min:y_max, x_min:x_max] = roi_mask.astype(np.uint8)
+
+        return mask
 
     @classmethod
     def register(cls):
