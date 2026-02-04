@@ -147,7 +147,7 @@ class SegmenterWidget(QWidget):
                 # Get supported axes directly from the segmenter instance
                 supported_axes = self.segmenter.supported_axes
 
-                if supported_axes and len(supported_axes) > 1:
+                if supported_axes and len(supported_axes) > 0:
                     from qtpy.QtWidgets import QComboBox
 
                     # Create axis selection combo box
