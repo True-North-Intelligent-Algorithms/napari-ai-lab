@@ -44,7 +44,7 @@ class ImageDataModel:
         self.axis_types: str | None = None
 
         # Load image list on initialization
-        self._load_image_list(str(self.parent_directory))
+        self._populate_image_list(str(self.parent_directory))
 
     def get_image_paths(self) -> list[Path]:
         """Get sorted list of image file paths in the directory."""
@@ -165,7 +165,7 @@ class ImageDataModel:
 
         return image_data
 
-    def _load_image_list(self, directory: str):
+    def _populate_image_list(self, directory: str):
         """
         Load image list from directory - compatible with sequence viewer interface.
 
