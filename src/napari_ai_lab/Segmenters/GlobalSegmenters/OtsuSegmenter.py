@@ -46,15 +46,27 @@ Otsu Automatic Segmentation:
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
 
-    @property
-    def supported_axes(self):
-        """
-        Get the list of axis configurations this segmenter supports.
-
-        Returns:
-            list: Supported axis configurations for Otsu segmentation.
-        """
-        return ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC", "TZYX", "TZYXC"]
+        # Set supported axes
+        self._supported_axes = [
+            "YX",
+            "YXC",
+            "ZYX",
+            "ZYXC",
+            "TYX",
+            "TYXC",
+            "TZYX",
+            "TZYXC",
+        ]
+        self._potential_axes = [
+            "YX",
+            "YXC",
+            "ZYX",
+            "ZYXC",
+            "TYX",
+            "TYXC",
+            "TZYX",
+            "TZYXC",
+        ]
 
     def segment(self, image, **kwargs):
         """

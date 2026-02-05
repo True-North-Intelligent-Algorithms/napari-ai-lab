@@ -112,15 +112,9 @@ MicroSam Automatic Instance Segmentation:
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
 
-    @property
-    def supported_axes(self):
-        """
-        Get the list of axis configurations this segmenter supports.
-
-        Returns:
-            list: Supported axis configurations for MicroSam segmentation.
-        """
-        return ["YX", "ZYX"]
+        # Set supported axes
+        self._supported_axes = ["YX", "ZYX"]
+        self._potential_axes = ["YX", "ZYX"]
 
     def are_dependencies_available(self):
         """

@@ -164,16 +164,9 @@ StarDist Automatic Segmentation:
         self.custom_model = None
         self.is_3d_model = False
 
-    @property
-    def supported_axes(self):
-        """
-        Supported axis configurations for StarDist2D.
-
-        Returns:
-            list: Supported axis configurations.
-        """
-        # StarDist2D supports YX and ZYX
-        return ["YX", "ZYX"]
+        # Set supported axes
+        self._supported_axes = ["YX", "ZYX"]
+        self._potential_axes = ["YX", "ZYX"]
 
     def are_dependencies_available(self):
         """

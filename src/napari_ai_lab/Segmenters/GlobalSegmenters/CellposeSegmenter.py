@@ -113,15 +113,9 @@ Cellpose Automatic Cell Segmentation:
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
 
-    @property
-    def supported_axes(self):
-        """
-        Get the list of axis configurations this segmenter supports.
-
-        Returns:
-            list: Supported axis configurations for Cellpose segmentation.
-        """
-        return ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC"]
+        # Set supported axes
+        self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC"]
+        self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC"]
 
     def are_dependencies_available(self):
         """

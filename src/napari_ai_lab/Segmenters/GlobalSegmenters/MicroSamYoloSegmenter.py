@@ -145,9 +145,9 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
     def __post_init__(self):
         super().__init__()
 
-    @property
-    def supported_axes(self):
-        return ["YXC", "YX", "ZYX"]
+        # Set supported axes
+        self._supported_axes = ["YXC", "YX", "ZYX"]
+        self._potential_axes = ["YXC", "YX", "ZYX"]
 
     def are_dependencies_available(self):
         return _is_seg_everything_available
