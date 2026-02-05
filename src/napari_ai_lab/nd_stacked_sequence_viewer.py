@@ -73,6 +73,8 @@ class NDStackedSequenceViewer(QWidget):
         """Set the image data model and load all images into a stack."""
         try:
             self.image_data_model = model
+
+            # Get all image paths from the model
             image_paths = model.get_image_paths()
 
             if image_paths:
@@ -82,6 +84,9 @@ class NDStackedSequenceViewer(QWidget):
                 )
 
                 # Use StackedSequenceIO to load directory as stack with normalization
+                # Note that the stacked_images are not loaded into the model itself
+                # because they are just a view of the data, the model still has file paths
+                # which can be used to access individual images.
                 stacked_sequence_io = StackedSequenceIO()
                 stacked_images = stacked_sequence_io.load_full_stack(
                     str(model.parent_directory), normalize=True
