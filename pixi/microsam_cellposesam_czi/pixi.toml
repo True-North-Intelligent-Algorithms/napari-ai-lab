@@ -47,6 +47,7 @@ napari-easy-augment-batch-dl = { git = "https://github.com/True-North-Intelligen
 napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 
 czifile = "*"
+bioio-czi = "*"
 
 pytest = "*"
 
