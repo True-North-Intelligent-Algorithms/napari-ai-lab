@@ -85,3 +85,6 @@ venv/
 
 # written by setuptools_scm
 **/_version.py
+
+# ignore test images
+tests/test_images/
