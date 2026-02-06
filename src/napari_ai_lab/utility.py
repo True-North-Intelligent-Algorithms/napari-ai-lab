@@ -114,6 +114,35 @@ def get_axis_info_from_shape(image_shape):
         return "U" * len(image_shape)
 
 
+def remove_trivial_axes(axis_types: str, shape: tuple) -> str:
+    """
+    Remove axis characters corresponding to trivial (singleton) dimensions.
+
+    Args:
+        axis_types: Axis string (e.g., "TCZYX")
+        shape: Shape tuple corresponding to the axes
+
+    Returns:
+        str: Axis string with trivial dimensions removed
+
+    Example:
+        >>> remove_trivial_axes("TCZYX", (1, 3, 1, 256, 256))
+        "CZYX"
+    """
+    if not axis_types or len(axis_types) != len(shape):
+        return axis_types
+
+    non_trivial_axes = "".join(
+        [
+            axis
+            for axis, size in zip(axis_types, shape, strict=False)
+            if size != 1
+        ]
+    )
+
+    return non_trivial_axes
+
+
 def get_supported_axes_from_shape(image_shape, supported_axis, image_axis="U"):
     """
     Filter supported axis strings to only those compatible with the given shape.

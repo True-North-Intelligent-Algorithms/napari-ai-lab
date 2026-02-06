@@ -15,6 +15,7 @@ from napari_ai_lab.utility import (
     collect_all_image_names,
     create_empty_instance_image,
     get_axis_info_from_shape,
+    remove_trivial_axes,
 )
 
 
@@ -148,16 +149,9 @@ class ImageDataModel:
         # Squeeze to remove singleton dimensions
         if self.axis_types and len(self.axis_types) == len(image_data.shape):
             # Remove axis characters corresponding to trivial dimensions
-            non_trivial_axes = "".join(
-                [
-                    axis
-                    for axis, size in zip(
-                        self.axis_types, image_data.shape, strict=False
-                    )
-                    if size != 1
-                ]
+            self.axis_types = remove_trivial_axes(
+                self.axis_types, image_data.shape
             )
-            self.axis_types = non_trivial_axes
 
         image_data = np.squeeze(image_data)
         print(f"Loaded image shape: {image_data.shape}")
