@@ -48,6 +48,10 @@ napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 
 czifile = "*"
 
+pytest = "*"
+
+ndevio = "*"
+
 [target.linux-64.dependencies]
 pytorch-gpu = "*"
 cudnn = "*"
