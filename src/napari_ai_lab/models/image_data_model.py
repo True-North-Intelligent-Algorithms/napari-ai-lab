@@ -10,6 +10,7 @@ This model handles:
 from pathlib import Path
 
 import numpy as np
+from skimage.io import imread
 
 from napari_ai_lab.utility import (
     collect_all_image_names,
@@ -117,7 +118,6 @@ class ImageDataModel:
             IndexError: If image_index is out of range
             OSError: If image cannot be loaded
         """
-        from skimage import io
 
         image_paths = self.get_image_paths()
         if not 0 <= image_index < len(image_paths):
@@ -131,7 +131,7 @@ class ImageDataModel:
         # TODO: refactor to use io classes and eventually ndev-io
         try:
             # Try skimage first
-            image_data = io.imread(str(image_path))
+            image_data = imread(str(image_path))
             self.axis_types = get_axis_info_from_shape(image_data.shape)
         except Exception as e:  # noqa: BLE001
             # Fallback to czifile for .czi format
