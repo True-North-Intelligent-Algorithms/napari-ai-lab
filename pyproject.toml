@@ -117,3 +117,16 @@ exclude = [
     "*_vendor*",
 ]
 fix = true
+
+[tool.pytest.ini_options]
+# Custom test configuration flags
+# Set to "false" to skip slow bioio tests
+addopts = [
+    "-v",
+]
+markers = [
+    "bioio: tests using bioio library (can be slow)",
+]
+
+# To skip bioio tests, run: pytest -m "not bioio"
+# To run only bioio tests, run: pytest -m bioio

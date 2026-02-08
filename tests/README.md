@@ -46,6 +46,15 @@ pytest tests/test_czi.py::test_load_czi_file -s -rs
 
 # Run tests with verbose output
 pytest -v -s -rs
+
+# Skip bioio tests (they can be slow)
+pytest -m "not bioio"
+
+# Run ONLY bioio tests
+pytest -m bioio
+
+# Run specific test file without bioio tests
+pytest tests/test_slicing.py -m "not bioio"
 ```
 
 ## Useful pytest Options
@@ -54,8 +63,18 @@ pytest -v -s -rs
 - `-rs` : Show reasons for skipped tests
 - `-v` : Verbose output (show individual test names)
 - `-x` : Stop after first failure
+- `-m "marker"` : Run tests with specific marker (e.g., `-m "not bioio"`)
 - `--tb=short` : Shorter traceback format
 - `-k "test_name"` : Run tests matching the given name pattern
+
+## Test Markers
+
+Tests are organized with markers for flexible execution:
+
+- `@pytest.mark.bioio` - Tests using the bioio library (can be slow/inefficient)
+
+Use `-m "not bioio"` to skip these tests for faster development iterations.
+Configure markers in `pyproject.toml` under `[tool.pytest.ini_options]`.
 
 ## Test Data
 
