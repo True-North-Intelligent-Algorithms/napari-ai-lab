@@ -1,8 +1,8 @@
 """
-Stacked Sequence I/O for label storage.
+Stacked Sequence artifact I/O for storing artifacts.
 
-This I/O loads a directory of images as a stacked array (for viewing),
-but saves individual image files (maintaining directory structure).
+This artifact I/O loads a directory of images as a stacked array (for viewing),
+but saves individual artifact files (maintaining directory structure).
 """
 
 from pathlib import Path
@@ -11,10 +11,10 @@ import numpy as np
 from skimage import io
 
 from ..utility import collect_all_image_names, get_axis_info, pad_to_largest
-from .base_io import BaseIO
+from .base_artifact_io import BaseArtifactIO
 
 
-class StackedSequenceIO(BaseIO):
+class StackedSequenceArtifactIO(BaseArtifactIO):
     """
     I/O implementation that loads a directory as a stacked array but saves
     individual image files. This preserves file-per-frame storage while

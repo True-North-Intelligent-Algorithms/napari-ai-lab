@@ -11,7 +11,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .io import StackedSequenceIO
+from .artifact_io import StackedSequenceArtifactIO
 from .models import ImageDataModel
 
 
@@ -80,14 +80,14 @@ class NDStackedSequenceViewer(QWidget):
             if image_paths:
                 print(f"Found {len(image_paths)} image files")
                 print(
-                    "Loading all images into stack using StackedSequenceIO..."
+                    "Loading all images into stack using StackedSequenceArtifactIO..."
                 )
 
-                # Use StackedSequenceIO to load directory as stack with normalization
+                # Use StackedSequenceArtifactIO to load directory as stack with normalization
                 # Note that the stacked_images are not loaded into the model itself
                 # because they are just a view of the data, the model still has file paths
                 # which can be used to access individual images.
-                stacked_sequence_io = StackedSequenceIO()
+                stacked_sequence_io = StackedSequenceArtifactIO()
                 stacked_images = stacked_sequence_io.load_full_stack(
                     str(model.parent_directory), normalize=True
                 )

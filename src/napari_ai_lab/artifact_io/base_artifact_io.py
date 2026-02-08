@@ -1,7 +1,9 @@
 """
-Base I/O abstract class for label storage.
+Base artifact I/O abstract class for storing artifacts associated with image data.
 
-This module defines the common interface that all label I/O implementations must implement.
+This module defines the common interface that all artifact I/O implementations must implement.
+Artifacts include labels, predictions, embeddings, and other data products generated from
+or associated with image datasets.
 """
 
 from abc import ABC, abstractmethod
@@ -10,11 +12,15 @@ from pathlib import Path
 import numpy as np
 
 
-class BaseIO(ABC):
+class BaseArtifactIO(ABC):
     """
-    Abstract base class for I/O (read/write).
+    Abstract base class for artifact I/O (read/write).
 
-    All concrete I/O implementations must implement this interface to provide
+    This class provides a unified interface for reading and writing artifacts associated
+    with image data. Artifacts can include labels, predictions, embeddings, features,
+    and other derived data products.
+
+    All concrete artifact I/O implementations must implement this interface to provide
     consistent save/load functionality across different storage formats.
     """
 

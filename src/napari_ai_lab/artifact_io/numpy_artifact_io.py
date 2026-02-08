@@ -1,17 +1,17 @@
 """
-Numpy I/O for label storage.
+Numpy artifact I/O for storing artifacts.
 
-This module implements label storage using numpy .npy files.
+This module implements artifact storage using numpy .npy files.
 """
 
 from pathlib import Path
 
 import numpy as np
 
-from .base_io import BaseIO
+from .base_artifact_io import BaseArtifactIO
 
 
-class NumpyIO(BaseIO):
+class NumpyArtifactIO(BaseArtifactIO):
     """
     I/O implementation that stores labels as numpy .npy files.
 

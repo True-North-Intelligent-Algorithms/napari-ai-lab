@@ -1,7 +1,7 @@
 """
-TIFF I/O for label storage.
+TIFF artifact I/O for storing artifacts.
 
-This module implements label storage using TIFF files.
+This module implements artifact storage using TIFF files.
 """
 
 from pathlib import Path
@@ -9,10 +9,10 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-from .base_io import BaseIO
+from .base_artifact_io import BaseArtifactIO
 
 
-class TiffIO(BaseIO):
+class TiffArtifactIO(BaseArtifactIO):
     """
     I/O implementation that stores labels as TIFF files.
     """

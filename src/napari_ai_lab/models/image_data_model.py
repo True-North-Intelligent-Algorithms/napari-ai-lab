@@ -226,15 +226,15 @@ class ImageDataModel:
         return self.parent_directory / "predictions"
 
     def get_annotations_io(self):
-        """Get annotation io."""
+        """Get annotation artifact io."""
         if self._annotations_io is None:
-            from ..io import get_io
+            from ..artifact_io import get_artifact_io
 
-            self._annotations_io = get_io(self.annotation_io_type)
+            self._annotations_io = get_artifact_io(self.annotation_io_type)
         return self._annotations_io
 
     def set_annotation_io_type(self, io_type: str):
-        """Set annotation io type."""
+        """Set annotation artifact io type."""
         self.annotation_io_type = io_type
         self._annotations_io = None
 
@@ -276,15 +276,15 @@ class ImageDataModel:
         return data
 
     def get_predictions_io(self):
-        """Get prediction io."""
+        """Get prediction artifact io."""
         if self._predictions_io is None:
-            from ..io import get_io
+            from ..artifact_io import get_artifact_io
 
-            self._predictions_io = get_io(self.prediction_io_type)
+            self._predictions_io = get_artifact_io(self.prediction_io_type)
         return self._predictions_io
 
     def set_prediction_io_type(self, io_type: str):
-        """Set prediction io type."""
+        """Set prediction artifact io type."""
         self.prediction_io_type = io_type
         self._predictions_io = None
 
