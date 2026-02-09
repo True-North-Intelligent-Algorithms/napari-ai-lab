@@ -129,22 +129,17 @@ class ImageDataModel:
         print(f"Loading image: {image_path}")
 
         # TODO: refactor to use io classes and eventually ndev-io
-        try:
-            # Try skimage first
+        if image_path.suffix.lower() == ".czi":
+            # Use czifile for .czi format
+            from czifile import CziFile
+
+            with CziFile(str(image_path)) as czi:
+                image_data = czi.asarray()
+                self.axis_types = czi.axes
+        else:
+            # Use skimage for other formats
             image_data = imread(str(image_path))
             self.axis_types = get_axis_info_from_shape(image_data.shape)
-        except Exception as e:  # noqa: BLE001
-            # Fallback to czifile for .czi format
-            try:
-                from czifile import CziFile
-
-                with CziFile(str(image_path)) as czi:
-                    image_data = czi.asarray()
-                    self.axis_types = czi.axes
-            except Exception as czi_error:  # noqa: BLE001
-                raise OSError(
-                    f"Failed to load image: {e}, CZI fallback also failed: {czi_error}"
-                ) from e
 
         # Squeeze to remove singleton dimensions
         if self.axis_types and len(self.axis_types) == len(image_data.shape):
