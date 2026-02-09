@@ -6,18 +6,6 @@ visibility: hidden
 # categories: []
 contributions:
   commands:
-    - id: napari-ai-lab.make_container_widget
-      python_name: napari_ai_lab:ImageThreshold
-      title: Make threshold Container widget
-    - id: napari-ai-lab.make_magic_widget
-      python_name: napari_ai_lab:threshold_magic_widget
-      title: Make threshold magic widget
-    - id: napari-ai-lab.make_function_widget
-      python_name: napari_ai_lab:threshold_autogenerate_widget
-      title: Make threshold function widget
-    - id: napari-ai-lab.make_qwidget
-      python_name: napari_ai_lab:ExampleQWidget
-      title: Make example QWidget
     - id: napari-ai-lab.napari_easy_augment_batch_dl
       python_name: napari_easy_augment_batch_dl.easy_augment_batch_dl:NapariEasyAugmentBatchDL
       title: Easy Augment Batch DL
@@ -28,15 +16,6 @@ contributions:
       python_name: napari_ai_lab.nd_easy_segmentation:NDEasySegmentation
       title: ND Easy Segmentation (Unified)
   widgets:
-    - command: napari-ai-lab.make_container_widget
-      display_name: Container Threshold
-    - command: napari-ai-lab.make_magic_widget
-      display_name: Magic Threshold
-    - command: napari-ai-lab.make_function_widget
-      autogenerate: true
-      display_name: Autogenerate Threshold
-    - command: napari-ai-lab.make_qwidget
-      display_name: Example QWidget
     - command: napari-ai-lab.napari_easy_augment_batch_dl
       display_name: Easy Augment Batch DL
     - command: napari-ai-lab.nd_easy_label
