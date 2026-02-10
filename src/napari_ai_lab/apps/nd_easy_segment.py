@@ -17,9 +17,9 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..models import ImageDataModel
+from ..utility import get_current_slice_indices
 from .base_nd_app import BaseNDApp
-from .models import ImageDataModel
-from .utility import get_current_slice_indices
 
 
 class NDEasySegment(BaseNDApp):

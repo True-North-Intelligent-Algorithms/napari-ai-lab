@@ -16,15 +16,15 @@ from qtpy.QtWidgets import (
 )
 from superqt.utils import ensure_main_thread
 
-from .models import ImageDataModel
-from .Segmenters.GlobalSegmenters import GlobalSegmenterBase
-from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
-from .utility import (
+from ..models import ImageDataModel
+from ..Segmenters.GlobalSegmenters import GlobalSegmenterBase
+from ..Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
+from ..utility import (
     get_supported_axes_from_shape,
     load_images_from_directory,
     pad_to_largest,
 )
-from .widgets import SegmenterWidget
+from ..widgets import SegmenterWidget
 
 
 class BaseNDApp(QWidget):
