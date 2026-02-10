@@ -20,6 +20,7 @@ class SimpleAugmenter(AugmenterBase):
         seed : Optional[int]
             Random seed for reproducibility. If None, uses random state.
         """
+        super().__init__()  # Initialize parent class to set up directories
         self.seed = seed
         if seed is not None:
             np.random.seed(seed)
@@ -96,45 +97,3 @@ class SimpleAugmenter(AugmenterBase):
         cropped_mask = mask[slices]
 
         return cropped_im, cropped_mask
-
-    def _get_random_crop_indices(
-        self,
-        im_shape: tuple[int, ...],
-        patch_size: tuple[int, ...],
-        axis: int | None = None,
-    ) -> tuple[int, ...]:
-        """
-        Generate random starting indices for cropping.
-
-        Parameters
-        ----------
-        im_shape : tuple[int, ...]
-            Shape of the input image
-        patch_size : tuple[int, ...]
-            Size of the patch to extract
-        axis : Optional[int]
-            Specific axis to crop along. If None, crop along all axes.
-
-        Returns
-        -------
-        tuple[int, ...]
-            Starting indices for cropping
-        """
-        start_indices = []
-
-        for i, (img_dim, patch_dim) in enumerate(
-            zip(im_shape, patch_size, strict=False)
-        ):
-            if axis is not None and i != axis:
-                # If axis is specified and this is not the axis, start at 0
-                # and use the full dimension
-                start_indices.append(0)
-            else:
-                # Random start position ensuring patch fits within image
-                max_start = img_dim - patch_dim
-                start = (
-                    np.random.randint(0, max_start + 1) if max_start > 0 else 0
-                )
-                start_indices.append(start)
-
-        return tuple(start_indices)
