@@ -10,10 +10,10 @@ contributions:
       python_name: napari_easy_augment_batch_dl.easy_augment_batch_dl:NapariEasyAugmentBatchDL
       title: Easy Augment Batch DL
     - id: napari-ai-lab.nd_easy_label
-      python_name: napari_ai_lab.nd_easy_label:NDEasyLabel
+      python_name: napari_ai_lab.apps.nd_easy_label:NDEasyLabel
       title: ND Easy Label
     - id: napari-ai-lab.nd_easy_segmentation
-      python_name: napari_ai_lab.nd_easy_segmentation:NDEasySegmentation
+      python_name: napari_ai_lab.apps.nd_easy_segmentation:NDEasySegmentation
       title: ND Easy Segmentation (Unified)
   widgets:
     - command: napari-ai-lab.napari_easy_augment_batch_dl

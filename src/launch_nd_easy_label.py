@@ -1,7 +1,7 @@
 import napari
 
+from napari_ai_lab.apps.nd_easy_label import NDEasyLabel
 from napari_ai_lab.models import ImageDataModel
-from napari_ai_lab.nd_easy_label import NDEasyLabel
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
 from napari_ai_lab.Segmenters.InteractiveSegmenters import (
     SAM3D,
@@ -20,7 +20,9 @@ viewer = napari.Viewer()
 
 parent_dir = (
     # r"D:\images\tnia-python-images\imagesc\2025_09_29_gray_scale_3d_test_set"
-    r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
+    # r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
+    # r"/home/bnorthan/images/tnia-python-images/imagesc/2025_12_08_ND_Segmentation/"
+    r"/home/bnorthan/images/tnia-python-images/imagesc/2026_02_07_vessels_czi/"
 )
 
 model = ImageDataModel(parent_dir)

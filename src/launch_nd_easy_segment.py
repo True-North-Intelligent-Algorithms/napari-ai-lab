@@ -1,7 +1,7 @@
 import napari
 
+from napari_ai_lab.apps.nd_easy_segment import NDEasySegment
 from napari_ai_lab.models import ImageDataModel
-from napari_ai_lab.nd_easy_segment import NDEasySegment
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
 from napari_ai_lab.nd_stacked_sequence_viewer import NDStackedSequenceViewer
 from napari_ai_lab.Segmenters.GlobalSegmenters import (
@@ -12,7 +12,7 @@ from napari_ai_lab.Segmenters.GlobalSegmenters import (
 )
 
 # Flag to control viewer type
-stacked = False
+stacked = True
 
 # Register all global segmenters
 CellposeSegmenter.register()
@@ -25,8 +25,8 @@ parent_dir = (
     # r"D:\images\tnia-python-images\imagesc\2025_09_29_gray_scale_3d_test_set"
     # r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
     # r"D:\deep-learning\test\dx4"
-    # r"/home/bnorthan/dplexbio/images/dx4_2/"
-    r"D:\dplexbio\Nov 2025\model_o_data\testing"
+    r"/home/bnorthan/dplexbio/images/dx4/"
+    # r"D:\dplexbio\Nov 2025\model_o_data\testing"
     # r'D:\images\tnia-python-images\imagesc\2025_12_08_ND_Segmentation'
 )
 
