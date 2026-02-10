@@ -7,13 +7,13 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
-from .base_nd_easy_widget import BaseNDEasyWidget
+from .base_nd_app import BaseNDApp
 from .models import ImageDataModel
 from .Segmenters.InteractiveSegmenters import InteractiveSegmenterBase
 from .utility import create_artifact_name, get_current_slice_indices
 
 
-class NDEasyLabel(BaseNDEasyWidget):
+class NDEasyLabel(BaseNDApp):
     # your QWidget.__init__ can optionally request the napari viewer instance
     # use a type annotation of 'napari.viewer.Viewer' for any parameter
     def __init__(
@@ -251,7 +251,7 @@ class NDEasyLabel(BaseNDEasyWidget):
             for i, shape in enumerate(shapes_layer.data):
                 print(f"  Shape {i+1}: {shape.shape} with {len(shape)} points")
 
-    # _on_open_directory and load_image_directory inherited from BaseNDEasyWidget
+    # _on_open_directory and load_image_directory inherited from BaseNDApp
     def _set_image_layer(self, image_layer):
         """Set up all annotation layers based on the provided image layer."""
         try:

@@ -1,5 +1,5 @@
 """
-Base class for NDEasy segmentation widgets.
+Base class for ND App widgets.
 
 This module provides a base class containing common functionality shared between
 NDEasyLabel and NDEasySegment widgets.
@@ -27,9 +27,9 @@ from .utility import (
 from .widgets import SegmenterWidget
 
 
-class BaseNDEasyWidget(QWidget):
+class BaseNDApp(QWidget):
     """
-    Base class for ND Easy segmentation widgets.
+    Base class for ND App widgets.
 
     This class contains common functionality shared between NDEasyLabel and NDEasySegment,
     including segmenter management, image loading, layer setup, and label persistence.

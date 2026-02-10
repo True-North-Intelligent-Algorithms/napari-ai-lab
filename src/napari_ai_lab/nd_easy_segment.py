@@ -17,12 +17,12 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
-from .base_nd_easy_widget import BaseNDEasyWidget
+from .base_nd_app import BaseNDApp
 from .models import ImageDataModel
 from .utility import get_current_slice_indices
 
 
-class NDEasySegment(BaseNDEasyWidget):
+class NDEasySegment(BaseNDApp):
     """
     Unified segmentation widget supporting both interactive and automatic modes.
 
@@ -303,7 +303,7 @@ class NDEasySegment(BaseNDEasyWidget):
             )
 
     # === Common Methods (from original nd_easy_label) ===
-    # _on_open_directory and load_image_directory inherited from BaseNDEasyWidget
+    # _on_open_directory and load_image_directory inherited from BaseNDApp
 
     def _set_image_layer(self, image_layer):
         """Set up annotation layers based on the provided image layer."""
