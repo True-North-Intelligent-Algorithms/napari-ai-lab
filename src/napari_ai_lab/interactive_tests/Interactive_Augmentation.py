@@ -10,6 +10,7 @@ This script demonstrates how to:
 
 import numpy as np
 
+from napari_ai_lab.Augmenters import SimpleAugmenter
 from napari_ai_lab.models import ImageDataModel
 
 
@@ -111,15 +112,117 @@ def main():
     except Exception as e:  # noqa
         print(f"Error loading annotations: {e}")
         print("Annotations may not exist yet.")
+        annotations = None
 
-    # Step 4: Future - Augmentation will go here
+    # Step 4: Augmentation using SimpleAugmenter
     print("\n" + "=" * 80)
-    print("Step 4: Augmentation (to be implemented)")
+    print("Step 4: Augmentation with SimpleAugmenter")
     print("=" * 80)
-    print("\nNext steps:")
-    print("  - Apply SimpleAugmenter to create random crops")
-    print("  - Save augmented patches for training")
-    print("  - Generate multiple augmented versions per image")
+
+    if annotations is None:
+        print("No annotations available. Skipping augmentation.")
+    else:
+        # Create a SimpleAugmenter with a random seed for reproducibility
+        augmenter = SimpleAugmenter(seed=42)
+        print("Created SimpleAugmenter with seed=42")
+
+        # 4a: Generate 5 ZYX patches (128x128x16)
+        print("\n--- ZYX Augmentation (3D patches) ---")
+
+        # Get patches directory for ZYX (assuming Z is axis 0)
+        # For ZYX, we want to crop along all axes, so axis=None
+        patches_dir_zyx = model.get_patches_directory(axis="zyx")
+        print(f"Patches directory (ZYX): {patches_dir_zyx}")
+
+        patch_size_zyx = (16, 128, 128)  # Z, Y, X
+        num_patches_zyx = 5
+
+        print(
+            f"Generating {num_patches_zyx} patches of size {patch_size_zyx}..."
+        )
+
+        # Check if the image is large enough for 3D patches
+        if len(image.shape) >= 3 and all(
+            img_dim >= patch_dim
+            for img_dim, patch_dim in zip(
+                image.shape, patch_size_zyx, strict=False
+            )
+        ):
+            for i in range(num_patches_zyx):
+                patch_base_name = "zyx_patch"
+                im_path, mask_path = augmenter.augment_and_save(
+                    image,
+                    annotations,
+                    str(patches_dir_zyx),
+                    patch_base_name,
+                    patch_size_zyx,
+                    axis=None,  # Crop along all axes
+                )
+                print(f"  Patch {i+1}/{num_patches_zyx} saved:")
+                print(f"    Image: {im_path}")
+                print(f"    Mask:  {mask_path}")
+        else:
+            print(
+                f"⚠ Image shape {image.shape} is too small for {patch_size_zyx} patches"
+            )
+
+        # 4b: Generate 5 YX patches (128x128)
+        print("\n--- YX Augmentation (2D patches) ---")
+
+        # Get patches directory for YX (we'll extract 2D slices)
+        # For 2D from 3D, we might want to specify an axis or handle differently
+        # Here we'll use axis=None for the directory but specify 2D patch size
+        patches_dir_yx = model.get_patches_directory(axis="yx")
+        print(f"Patches directory (YX): {patches_dir_yx}")
+
+        num_patches_yx = 5
+
+        # Determine the YX patch size based on image dimensions
+        if len(image.shape) == 3:
+            # 3D image: take single Z slice with YX dimensions
+            patch_size_yx = (1, 128, 128)  # Single Z slice
+            print(
+                f"Generating {num_patches_yx} 2D patches of size {patch_size_yx} (from 3D)..."
+            )
+        elif len(image.shape) == 2:
+            # 2D image: just YX
+            patch_size_yx = (128, 128)
+            print(
+                f"Generating {num_patches_yx} 2D patches of size {patch_size_yx}..."
+            )
+        else:
+            print(f"⚠ Unexpected image dimensions: {image.shape}")
+            patch_size_yx = None
+
+        if patch_size_yx and all(
+            img_dim >= patch_dim
+            for img_dim, patch_dim in zip(
+                image.shape, patch_size_yx, strict=False
+            )
+        ):
+            for i in range(num_patches_yx):
+                patch_base_name = "yx_patch"
+                im_path, mask_path = augmenter.augment_and_save(
+                    image,
+                    annotations,
+                    str(patches_dir_yx),
+                    patch_base_name,
+                    patch_size_yx,
+                    axis=None,  # Random crop across all dimensions
+                )
+
+                # If we extracted a 3D patch with Z=1, squeeze it for display
+                print(f"  Patch {i+1}/{num_patches_yx} saved:")
+                print(f"    Image: {im_path}")
+                print(f"    Mask:  {mask_path}")
+        elif patch_size_yx:
+            print(
+                f"⚠ Image shape {image.shape} is too small for {patch_size_yx} patches"
+            )
+
+        print("\n✓ Augmentation completed!")
+        print(f"  Total patches generated: {num_patches_zyx + num_patches_yx}")
+        print(f"  Saved to: {patches_dir_zyx}")
 
     print("\n" + "=" * 80)
     print("Script completed successfully!")
