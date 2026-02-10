@@ -187,6 +187,29 @@ class ImageDataModel:
 
         return annotation_dir
 
+    def get_patches_directory(self, axis: int | None = None) -> Path:
+        """
+        Get the base directory for storing patches.
+
+        Args:
+            axis: Optional axis identifier to append to directory name.
+                  If None, returns base patches directory.
+                  If specified, returns patches/patches_axis_{axis}/ directory.
+
+        Returns:
+            Path to patches/ folder or patches/patches_axis_{axis}/ folder
+        """
+        if axis is None:
+            patches_dir = self.parent_directory / "patches"
+        else:
+            patches_dir = (
+                self.parent_directory / "patches" / f"patches_axis_{axis}"
+            )
+
+        patches_dir.mkdir(parents=True, exist_ok=True)
+
+        return patches_dir
+
     def get_parent_directory(self) -> Path:
         """
         Get the parent directory containing images.
