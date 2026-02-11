@@ -61,17 +61,52 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
+    model_name: str = field(
+        default="",
+        metadata={
+            "type": "file",
+            "file_type": "file",
+            "default": "",
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
 
         # Model will be loaded from disk
         self.model = None
-        self.model_name = None
 
         # Set supported axes
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
+
+    def __setattr__(self, name, value):
+        """Override setattr to detect model_name changes."""
+        # Get old value if it exists
+        old_value = getattr(self, name, None) if hasattr(self, name) else None
+
+        # Set the new value
+        super().__setattr__(name, value)
+
+        # Check if this is model_name and value changed
+        if name == "model_name" and old_value != value and value:
+            print(f"🔄 Model name changed from '{old_value}' to '{value}'")
+            self._on_model_name_changed(value)
+
+    def _on_model_name_changed(self, model_path: str):
+        """Handle model name changes - load the PyTorch model."""
+        print(f"📁 Loading MONAI UNet model from: {model_path}")
+
+        try:
+            self.model = torch.load(model_path, weights_only=False)
+            print(
+                f"✅ Successfully loaded MONAI UNet model from: {model_path}"
+            )
+            print(f"   Model type: {type(self.model)}")
+        except Exception as e:  # noqa
+            print(f"❌ Failed to load model from {model_path}: {e}")
+            self.model = None
 
     def are_dependencies_available(self):
         """
@@ -103,9 +138,8 @@ MONAI UNet Automatic Segmentation:
         if not _is_monai_available:
             raise ImportError("MONAI is not available. Cannot load model.")
 
-        self.model = torch.load(model_path, weights_only=False)
+        # Setting model_name will trigger __setattr__ which loads the model
         self.model_name = model_path
-        print(f"Loaded model from: {model_path}")
 
     def segment(self, image, **kwargs):
         """
@@ -198,6 +232,13 @@ MONAI UNet Automatic Segmentation:
             image_norm = image_float
 
         return image_norm
+
+    @classmethod
+    def register(cls):
+        """Register this segmenter with the framework."""
+        return GlobalSegmenterBase.register_framework(
+            "MonaiUNetSegmenter", cls
+        )
 
     def get_execution_string(self, image, **kwargs):
         """
