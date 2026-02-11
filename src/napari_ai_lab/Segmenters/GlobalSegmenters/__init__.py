@@ -25,6 +25,7 @@ _OPTIONAL_SEGMENTERS = {
     "StardistSegmenter": ".StardistSegmenter",
     "MicroSamSegmenter": ".MicroSamSegmenter",
     "MicroSamYoloSegmenter": ".MicroSamYoloSegmenter",
+    "MonaiUNetSegmenter": ".MonaiUNetSegmenter",
     "OtsuSegmenter": ".OtsuSegmenter",
     "ThresholdSegmenter": ".ThresholdSegmenter",
 }
