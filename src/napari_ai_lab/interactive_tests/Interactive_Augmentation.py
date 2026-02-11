@@ -148,6 +148,13 @@ def main():
                 image.shape, patch_size_zyx, strict=False
             )
         ):
+            # Pre-compute valid coordinates for ZYX patches
+            print("Computing valid coordinates for ZYX patches...")
+            augmenter.create_valid_coordinates(
+                annotations, image.shape, patch_size_zyx, axis=None
+            )
+            print(f"Found {len(augmenter.valid_coordinates)} valid positions")
+
             for i in range(num_patches_zyx):
                 patch_base_name = "zyx_patch"
                 im_path, mask_path = augmenter.augment_and_save(
@@ -200,6 +207,13 @@ def main():
                 image.shape, patch_size_yx, strict=False
             )
         ):
+            # Pre-compute valid coordinates for YX patches
+            print("Computing valid coordinates for YX patches...")
+            augmenter.create_valid_coordinates(
+                annotations, image.shape, patch_size_yx, axis=None
+            )
+            print(f"Found {len(augmenter.valid_coordinates)} valid positions")
+
             for i in range(num_patches_yx):
                 patch_base_name = "yx_patch"
                 im_path, mask_path = augmenter.augment_and_save(

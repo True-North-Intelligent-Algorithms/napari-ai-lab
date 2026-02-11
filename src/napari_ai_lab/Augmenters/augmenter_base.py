@@ -22,6 +22,7 @@ class AugmenterBase(ABC):
         """Initialize the augmenter with default directory names."""
         self.input_dir = "input0"
         self.ground_truth_dir = "ground_truth0"
+        self.valid_coordinates = None
 
     @abstractmethod
     def augment(
@@ -115,6 +116,69 @@ class AugmenterBase(ABC):
 
         return im_path, mask_path
 
+    def create_valid_coordinates(
+        self,
+        sparse_annotation: np.ndarray,
+        im_shape: tuple[int, ...],
+        patch_size: tuple[int, ...],
+        axis: int | None = None,
+    ) -> list[tuple[int, ...]]:
+        """
+        Create and cache list of valid crop starting coordinates.
+
+        Parameters
+        ----------
+        sparse_annotation : np.ndarray
+            Sparse annotation array with labeled pixels (non-zero values)
+        im_shape : tuple[int, ...]
+            Shape of the input image
+        patch_size : tuple[int, ...]
+            Size of the patch to extract
+        axis : Optional[int]
+            Specific axis to crop along. If None, crop along all axes.
+
+        Returns
+        -------
+        list[tuple[int, ...]]
+            List of valid starting coordinates
+        """
+        binary = sparse_annotation != 0
+        coords = np.argwhere(binary)
+
+        print("num coords:", len(coords))
+
+        out = np.zeros_like(binary, dtype=bool)
+
+        for z, y, x in coords:
+            z0 = max(0, z - patch_size[0] + 1)
+            z1 = min(out.shape[0] - patch_size[0] + 1, z + 1)
+
+            y0 = max(0, y - patch_size[1] + 1)
+            y1 = min(out.shape[1] - patch_size[1] + 1, y + 1)
+
+            x0 = max(0, x - patch_size[2] + 1)
+            x1 = min(out.shape[2] - patch_size[2] + 1, x + 1)
+
+            out[z0:z1, y0:y1, x0:x1] = True
+
+        valid_coords = np.argwhere(out)
+        valid_starts = []
+
+        for coord in valid_coords:
+            # Check if patch fits within bounds
+            if all(  # noqa: SIM102
+                c + p <= s
+                for c, p, s in zip(coord, patch_size, im_shape, strict=False)
+            ):
+                # Check axis constraint
+                if axis is None or all(  # noqa: SIM102
+                    c == 0 if i != axis else True for i, c in enumerate(coord)
+                ):
+                    valid_starts.append(tuple(coord))
+
+        self.valid_coordinates = valid_starts
+        return valid_starts
+
     def _get_random_crop_indices(
         self,
         im_shape: tuple[int, ...],
@@ -124,9 +188,6 @@ class AugmenterBase(ABC):
         """
         Generate random starting indices for cropping.
 
-        This is a utility method that can be used by augmenter implementations
-        to generate random crop positions that ensure the patch fits within the image.
-
         Parameters
         ----------
         im_shape : tuple[int, ...]
@@ -135,31 +196,32 @@ class AugmenterBase(ABC):
             Size of the patch to extract
         axis : Optional[int]
             Specific axis to crop along. If None, crop along all axes.
-            If specified, only that axis will have random positioning,
-            other axes will start at 0.
 
         Returns
         -------
         tuple[int, ...]
             Starting indices for cropping
         """
-        start_indices = []
+        # Check if valid coordinates are pre-computed
+        if self.valid_coordinates is not None:
+            # Use cached valid coordinates
+            return self.valid_coordinates[
+                np.random.randint(len(self.valid_coordinates))
+            ]
 
+        # Standard random cropping
+        start_indices = []
         for i, (img_dim, patch_dim) in enumerate(
             zip(im_shape, patch_size, strict=False)
         ):
             if axis is not None and i != axis:
-                # If axis is specified and this is not the axis, start at 0
-                # and use the full dimension
                 start_indices.append(0)
             else:
-                # Random start position ensuring patch fits within image
                 max_start = img_dim - patch_dim
                 start = (
                     np.random.randint(0, max_start + 1) if max_start > 0 else 0
                 )
                 start_indices.append(start)
-
         return tuple(start_indices)
 
     def _save_array(self, array: np.ndarray, filepath: str) -> None:
