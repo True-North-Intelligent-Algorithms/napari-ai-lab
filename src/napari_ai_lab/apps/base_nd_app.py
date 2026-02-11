@@ -24,7 +24,7 @@ from ..utility import (
     load_images_from_directory,
     pad_to_largest,
 )
-from ..widgets import SegmenterWidget
+from ..widgets import NDOperationWidget
 
 
 class BaseNDApp(QWidget):
@@ -162,7 +162,7 @@ class BaseNDApp(QWidget):
 
     def _create_parameter_form(self):
         """Create the shared parameter form and connect change signal."""
-        self.parameter_form = SegmenterWidget()
+        self.parameter_form = NDOperationWidget()
         self.parameter_form.parameters_changed.connect(
             self._on_parameters_changed
         )
@@ -248,7 +248,7 @@ class BaseNDApp(QWidget):
 
     def _update_parameter_form(self, segmenter):
         """Update parameter form with segmenter instance."""
-        self.parameter_form.set_segmenter(segmenter)
+        self.parameter_form.set_nd_operation(segmenter)
 
     def _post_segmenter_selection(self):
         """Handle post-selection logic - to be implemented by derived classes."""

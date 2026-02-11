@@ -1,8 +1,11 @@
 """
-Segmenter Widget for Interactive and Global Segmenters.
+ND Operation Widget for Interactive and Global ND Operations
+
+ND Operations are operations that can be applied to N-dimensional image data,
+such as segmentation, filtering, etc.
 
 This module provides a widget that automatically generates form elements
-for parameters defined in Segmenter dataclasses.
+for parameters defined in ND Operation dataclasses.
 """
 
 import dataclasses
@@ -22,11 +25,11 @@ from qtpy.QtWidgets import (
 )
 
 
-class SegmenterWidget(QWidget):
+class NDOperationWidget(QWidget):
     """
     A widget that automatically generates form elements from dataclass parameters.
 
-    This widget inspects the dataclass fields of a Segmenter (Interactive or Global)
+    This widget inspects the dataclass fields of a ND Operation (Interactive or Global)
     and creates appropriate Qt input widgets based on the field metadata.
     """
 
@@ -36,17 +39,17 @@ class SegmenterWidget(QWidget):
     # Signal emitted when axis selection changes
     axis_changed = Signal(str)
 
-    def __init__(self, segmenter=None, parent=None):
+    def __init__(self, nd_operation=None, parent=None):
         """
-        Initialize the segmenter widget.
+        Initialize the ND Operation widget.
 
         Args:
-            segmenter: The Segmenter instance (dataclass) to create parameter widgets for.
+            nd_operation: The ND Operation instance (dataclass) to create parameter widgets for.
             parent: Parent widget.
         """
         super().__init__(parent)
 
-        self.segmenter = segmenter
+        self.nd_operation = nd_operation
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
         self._instructions_text = None  # Instructions label widget
@@ -61,18 +64,18 @@ class SegmenterWidget(QWidget):
         self.form_layout = QFormLayout()
         self.main_layout.addLayout(self.form_layout)
 
-        # Parse and create widgets if segmenter is provided
-        if segmenter is not None:
+        # Parse and create widgets if nd_operation is provided
+        if nd_operation is not None:
             self.parse_parameters()
 
-    def set_segmenter(self, segmenter):
+    def set_nd_operation(self, nd_operation):
         """
-        Set the segmenter instance and rebuild the parameter form.
+        Set the ND Operation instance and rebuild the parameter form.
 
         Args:
-            segmenter: The Segmenter instance (dataclass) to create parameter widgets for.
+            nd_operation: The ND Operation instance (dataclass) to create parameter widgets for.
         """
-        self.segmenter = segmenter
+        self.nd_operation = nd_operation
         self.clear_form()
         self.parse_parameters()
 
@@ -102,27 +105,29 @@ class SegmenterWidget(QWidget):
         """
         Parse dataclass fields and create appropriate Qt widgets.
         """
-        if not self.segmenter or not dataclasses.is_dataclass(self.segmenter):
+        if not self.nd_operation or not dataclasses.is_dataclass(
+            self.nd_operation
+        ):
             return
 
-        # Check if the segmenter has instructions
+        # Check if the ND Operation has instructions
         self._add_instructions_if_present()
 
-        # Add axis selection if segmenter supports multiple axes
+        # Add axis selection if ND Operation supports multiple axes
         self._add_axis_selection_if_present()
 
         # Get dataclass fields
-        fields = dataclasses.fields(self.segmenter)
+        fields = dataclasses.fields(self.nd_operation)
 
         for field in fields:
             self._create_widget_for_field(field)
 
     def _add_instructions_if_present(self):
         """
-        Add instructions label if the segmenter has instructions.
+        Add instructions label if the ND Operation has instructions.
         """
-        if hasattr(self.segmenter, "instructions"):
-            instructions_text = self.segmenter.instructions
+        if hasattr(self.nd_operation, "instructions"):
+            instructions_text = self.nd_operation.instructions
             if instructions_text and isinstance(instructions_text, str):
                 # Create instructions label with similar styling as nd_easy_label
                 self._instructions_text = QLabel(instructions_text)
@@ -135,17 +140,17 @@ class SegmenterWidget(QWidget):
                 self.main_layout.addWidget(self._instructions_text)
 
                 print(
-                    f"Added instructions for {self.segmenter.__class__.__name__}"
+                    f"Added instructions for {self.nd_operation.__class__.__name__}"
                 )
 
     def _add_axis_selection_if_present(self):
         """
-        Add axis selection combo box if the segmenter supports multiple axes.
+        Add axis selection combo box if the ND Operation supports multiple axes.
         """
-        if hasattr(self.segmenter, "supported_axes"):
+        if hasattr(self.nd_operation, "supported_axes"):
             try:
-                # Get supported axes directly from the segmenter instance
-                supported_axes = self.segmenter.supported_axes
+                # Get supported axes directly from the ND Operation instance
+                supported_axes = self.nd_operation.supported_axes
 
                 if supported_axes and len(supported_axes) > 0:
                     from qtpy.QtWidgets import QComboBox
@@ -169,18 +174,18 @@ class SegmenterWidget(QWidget):
                     self.form_layout.addRow(axis_label, self._axis_combo)
 
                     print(
-                        f"Added axis selection for {self.segmenter.__class__.__name__}: {supported_axes}"
+                        f"Added axis selection for {self.nd_operation.__class__.__name__}: {supported_axes}"
                     )
 
             except (TypeError, ValueError, AttributeError, RuntimeError) as e:
                 print(
-                    f"Could not get supported axes for {self.segmenter.__class__.__name__}: {e}"
+                    f"Could not get supported axes for {self.nd_operation.__class__.__name__}: {e}"
                 )
 
     def _on_axis_changed(self, axis_text):
         """Handle axis selection changes."""
         self.selected_axis = axis_text
-        self.segmenter.selected_axis = axis_text
+        self.nd_operation.selected_axis = axis_text
         print(f"Selected axis: {axis_text}")
         # Emit signal so external code can react to axis changes
         self.axis_changed.emit(axis_text)
@@ -201,9 +206,9 @@ class SegmenterWidget(QWidget):
         max_val = metadata.get("max", None)
         step = metadata.get("step", 1)
 
-        # Get current value from segmenter instance, fallback to metadata default
-        if self.segmenter and hasattr(self.segmenter, field_name):
-            current_val = getattr(self.segmenter, field_name)
+        # Get current value from ND Operation instance, fallback to metadata default
+        if self.nd_operation and hasattr(self.nd_operation, field_name):
+            current_val = getattr(self.nd_operation, field_name)
         else:
             current_val = metadata.get("default", None)
 
@@ -480,45 +485,45 @@ class SegmenterWidget(QWidget):
                 # Update stored value
                 self.parameter_values[field_name] = value
 
-    def update_segmenter_parameters(self):
+    def update_nd_operation_parameters(self):
         """
-        Update the segmenter instance with current parameter values from the widget.
+        Update the ND Operation instance with current parameter values from the widget.
 
-        Updates the segmenter instance in-place with the current form values.
+        Updates the ND Operation instance in-place with the current form values.
         """
-        if not self.segmenter:
-            raise ValueError("No segmenter instance set")
+        if not self.nd_operation:
+            raise ValueError("No ND Operation instance set")
 
-        # Update segmenter parameters with current form values
+        # Update ND Operation parameters with current form values
         for field_name, value in self.parameter_values.items():
-            if hasattr(self.segmenter, field_name):
-                setattr(self.segmenter, field_name, value)
+            if hasattr(self.nd_operation, field_name):
+                setattr(self.nd_operation, field_name, value)
 
-        return self.segmenter
+        return self.nd_operation
 
-    def sync_segmenter_instance(self, segmenter_instance):
+    def sync_nd_operation_instance(self, nd_operation_instance):
         """
-        Sync an existing segmenter instance with current parameter values from the widget.
+        Sync an existing ND Operation instance with current parameter values from the widget.
 
         Args:
-            segmenter_instance: Existing segmenter instance to update with current widget values.
+            nd_operation_instance: Existing ND Operation instance to update with current widget values.
 
         Returns:
-            The same segmenter instance with updated parameter values.
+            The same ND Operation instance with updated parameter values.
         """
-        if segmenter_instance is None:
+        if nd_operation_instance is None:
             return None
 
-        # Update each parameter in the segmenter instance
+        # Update each parameter in the ND Operation instance
         for field_name, value in self.parameter_values.items():
-            if hasattr(segmenter_instance, field_name):
-                setattr(segmenter_instance, field_name, value)
+            if hasattr(nd_operation_instance, field_name):
+                setattr(nd_operation_instance, field_name, value)
             else:
                 print(
-                    f"Warning: Segmenter instance has no attribute '{field_name}'"
+                    f"Warning: ND Operation instance has no attribute '{field_name}'"
                 )
 
-        return segmenter_instance
+        return nd_operation_instance
 
     def get_selected_axis(self):
         """
