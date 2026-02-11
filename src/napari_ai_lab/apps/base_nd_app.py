@@ -480,7 +480,7 @@ class BaseNDApp(QWidget):
 
         # Sync the current segmenter instance with new parameter values
         if hasattr(self, "segmenter") and self.segmenter is not None:
-            self.segmenter = self.parameter_form.sync_segmenter_instance(
+            self.segmenter = self.parameter_form.sync_nd_operation_instance(
                 self.segmenter
             )
             print("Synced segmenter instance with new parameters")

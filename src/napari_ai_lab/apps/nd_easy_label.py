@@ -129,7 +129,7 @@ class NDEasyLabel(BaseNDApp):
             # Create artifact name from non-spatial dims
             image_name = create_artifact_name(image_name, step, selected_axis)
 
-            self.segmenter = self.parameter_form.sync_segmenter_instance(
+            self.segmenter = self.parameter_form.sync_nd_operation_instance(
                 getattr(self, "segmenter", None)
             )
 
@@ -195,7 +195,7 @@ class NDEasyLabel(BaseNDApp):
             image_data = self.image_layer.data[indices]
 
             # Ensure segmenter is synced with current parameters before use
-            self.segmenter = self.parameter_form.sync_segmenter_instance(
+            self.segmenter = self.parameter_form.sync_nd_operation_instance(
                 self.segmenter
             )
 

@@ -169,8 +169,10 @@ class NDEasySegment(BaseNDApp):
 
             # Ensure segmenter is synced with current parameters
             if hasattr(self, "segmenter") and self.segmenter is not None:
-                self.segmenter = self.parameter_form.sync_segmenter_instance(
-                    self.segmenter
+                self.segmenter = (
+                    self.parameter_form.sync_nd_operation_instance(
+                        self.segmenter
+                    )
                 )
 
             try:
@@ -240,7 +242,7 @@ class NDEasySegment(BaseNDApp):
 
         try:
             # Ensure segmenter is synced with current parameters
-            self.segmenter = self.parameter_form.sync_segmenter_instance(
+            self.segmenter = self.parameter_form.sync_nd_operation_instance(
                 self.segmenter
             )
 
