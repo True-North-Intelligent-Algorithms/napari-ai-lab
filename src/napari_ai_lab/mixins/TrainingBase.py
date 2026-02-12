@@ -15,7 +15,17 @@ class TrainingBase(ABC):
     This class provides a simple interface for training segmenters.
     Subclasses should implement the train() method with their specific
     training logic.
+
+    Attributes:
+        train_loss_list (list): List to track training loss per epoch.
+        validation_loss_list (list): List to track validation loss per epoch.
     """
+
+    def __init__(self):
+        """Initialize training base with loss tracking lists."""
+        # Loss tracking lists - accessible by subclasses
+        self.train_loss_list = []
+        self.validation_loss_list = []
 
     @abstractmethod
     def train(self, updater=None):

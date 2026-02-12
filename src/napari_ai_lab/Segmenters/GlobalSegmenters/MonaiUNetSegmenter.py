@@ -205,7 +205,8 @@ MONAI UNet Automatic Segmentation:
 
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
-        super().__init__()
+        # Initialize TrainingBase to set up loss tracking lists
+        TrainingBase.__init__(self)
 
         # Model will be loaded from disk
         self.model = None
