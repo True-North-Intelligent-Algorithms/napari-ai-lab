@@ -245,6 +245,17 @@ class NDEasySegment(BaseNDApp):
             QMessageBox.warning(self, "Warning", "No segmenter selected")
             return
 
+        # Check if segmenter supports training
+        if not hasattr(self.segmenter, "train") or not callable(
+            getattr(self.segmenter, "train", None)
+        ):
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "Selected segmenter does not support training",
+            )
+            return
+
         # Create and show training dialog
         dialog = TrainDialog(self.segmenter, parent=self)
         result = dialog.exec_()
@@ -254,12 +265,29 @@ class NDEasySegment(BaseNDApp):
             training_params = dialog.get_training_parameters()
             print(f"Training parameters accepted: {training_params}")
 
-            # TODO: Implement actual training logic here
-            QMessageBox.information(
-                self,
-                "Info",
-                f"Training would start with parameters:\n{training_params}",
-            )
+            # Call the train method
+            try:
+                print("Starting training...")
+                result = self.segmenter.train()
+
+                if result.get("success"):
+                    QMessageBox.information(
+                        self,
+                        "Training Complete",
+                        f"Training completed successfully!\n\n{result.get('message', '')}",
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Training Status",
+                        f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
+                    )
+            except (RuntimeError, ValueError, TypeError, OSError) as e:
+                QMessageBox.critical(
+                    self,
+                    "Training Error",
+                    f"Training failed with error:\n{str(e)}",
+                )
         else:
             print("Training cancelled")
 
