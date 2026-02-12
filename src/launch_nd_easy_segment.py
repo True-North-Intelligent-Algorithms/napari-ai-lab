@@ -7,27 +7,30 @@ from napari_ai_lab.nd_stacked_sequence_viewer import NDStackedSequenceViewer
 from napari_ai_lab.Segmenters.GlobalSegmenters import (
     CellposeSegmenter,
     MicroSamSegmenter,
+    MonaiUNetSegmenter,
     StardistSegmenter,
     ThresholdSegmenter,
 )
 
 # Flag to control viewer type
-stacked = True
+stacked = False
 
 # Register all global segmenters
 CellposeSegmenter.register()
 StardistSegmenter.register()
 ThresholdSegmenter.register()
 MicroSamSegmenter.register()
+MonaiUNetSegmenter.register()
 
 viewer = napari.Viewer()
 parent_dir = (
     # r"D:\images\tnia-python-images\imagesc\2025_09_29_gray_scale_3d_test_set"
     # r"D:\images\tnia-python-images\imagesc\2025_10_16_grayscale_subset2"
     # r"D:\deep-learning\test\dx4"
-    r"/home/bnorthan/dplexbio/images/dx4/"
+    # r"/home/bnorthan/dplexbio/images/dx4/"
     # r"D:\dplexbio\Nov 2025\model_o_data\testing"
     # r'D:\images\tnia-python-images\imagesc\2025_12_08_ND_Segmentation'
+    r"/home/bnorthan/images/tnia-python-images/imagesc/2026_02_07_vessels_czi/"
 )
 
 model = ImageDataModel(parent_dir)
