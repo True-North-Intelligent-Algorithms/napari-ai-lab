@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from ...mixins import TrainingBase
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import MONAI dependencies
@@ -23,9 +24,9 @@ except ImportError:
 
 
 @dataclass
-class MonaiUNetSegmenter(GlobalSegmenterBase):
+class MonaiUNetSegmenter(GlobalSegmenterBase, TrainingBase):
     """
-    MONAI UNet global segmenter.
+    MONAI UNet global segmenter with training support.
 
     This segmenter uses a trained MONAI UNet model for automatic semantic
     segmentation on entire images using sliding window inference.
@@ -409,3 +410,62 @@ with torch.no_grad():
 probabilities = F.softmax(y, dim=1)
 result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 """
+
+    def train(self, updater=None):
+        """
+        Train the MONAI UNet model.
+
+        This is a simple placeholder implementation. Full training logic
+        will be implemented later with proper data loading, training loops,
+        validation, etc.
+
+        Args:
+            updater (callable, optional): A callback function for progress updates.
+                Example: updater(epoch=10, loss=0.5, status="Training...")
+
+        Returns:
+            dict: Training results containing success status and metrics.
+        """
+        if not _is_monai_available:
+            return {
+                "success": False,
+                "error": "MONAI is not available. Cannot train model.",
+            }
+
+        print("🚀 Starting MONAI UNet training...")
+        print(f"   Sparse: {self.sparse}")
+        print(f"   Num Classes: {self.num_classes}")
+        print(f"   Depth: {self.depth}")
+        print(f"   Features Level 1: {self.features_level_1}")
+        print(
+            f"   Class Weights: [{self.weight_c1}, {self.weight_c2}, {self.weight_c3}]"
+        )
+        print(f"   Epochs: {self.num_epochs}")
+        print(f"   Learning Rate: {self.learning_rate}")
+        print(f"   Dropout: {self.dropout}")
+        print(f"   Save Interval: {self.save_interval}")
+
+        # TODO: Implement actual training logic here
+        # - Load training data
+        # - Create MONAI UNet model with specified parameters
+        # - Set up optimizer and loss function
+        # - Training loop with validation
+        # - Save model checkpoints
+        # - Return training metrics
+
+        if updater:
+            updater(epoch=0, loss=0.0, status="Training not yet implemented")
+
+        return {
+            "success": False,
+            "message": "Training implementation coming soon",
+            "parameters": {
+                "sparse": self.sparse,
+                "num_classes": self.num_classes,
+                "depth": self.depth,
+                "features_level_1": self.features_level_1,
+                "num_epochs": self.num_epochs,
+                "learning_rate": self.learning_rate,
+                "dropout": self.dropout,
+            },
+        }
