@@ -19,6 +19,7 @@ class TrainingBase(ABC):
     Attributes:
         train_loss_list (list): List to track training loss per epoch.
         validation_loss_list (list): List to track validation loss per epoch.
+        patch_path (str): Path to the directory containing training patches.
     """
 
     def __init__(self):
@@ -26,6 +27,18 @@ class TrainingBase(ABC):
         # Loss tracking lists - accessible by subclasses
         self.train_loss_list = []
         self.validation_loss_list = []
+        # Path to training patches directory
+        self._patch_path = None
+
+    @property
+    def patch_path(self):
+        """Get the path to training patches directory."""
+        return self._patch_path
+
+    @patch_path.setter
+    def patch_path(self, value):
+        """Set the path to training patches directory."""
+        self._patch_path = value
 
     @abstractmethod
     def train(self, updater=None):

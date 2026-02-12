@@ -265,6 +265,12 @@ class NDEasySegment(BaseNDApp):
             training_params = dialog.get_training_parameters()
             print(f"Training parameters accepted: {training_params}")
 
+            # Set patch path from the image data model
+            if hasattr(self.segmenter, "patch_path"):
+                patch_dir = self.image_data_model.get_patches_directory()
+                self.segmenter.patch_path = str(patch_dir)
+                print(f"Set patch path to: {patch_dir}")
+
             # Call the train method
             try:
                 print("Starting training...")
