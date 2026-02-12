@@ -70,6 +70,51 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
+    sparse: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "training",
+            "default": True,
+        },
+    )
+
+    num_classes: int = field(
+        default=2,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 10,
+            "step": 1,
+            "default": 2,
+        },
+    )
+
+    depth: int = field(
+        default=5,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 4,
+            "max": 6,
+            "step": 1,
+            "default": 5,
+        },
+    )
+
+    features_level_1: int = field(
+        default=32,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 8,
+            "max": 64,
+            "step": 1,
+            "default": 32,
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()

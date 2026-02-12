@@ -39,17 +39,25 @@ class NDOperationWidget(QWidget):
     # Signal emitted when axis selection changes
     axis_changed = Signal(str)
 
-    def __init__(self, nd_operation=None, parent=None):
+    def __init__(
+        self, nd_operation=None, parent=None, param_type_to_parse=None
+    ):
         """
         Initialize the ND Operation widget.
 
         Args:
             nd_operation: The ND Operation instance (dataclass) to create parameter widgets for.
             parent: Parent widget.
+            param_type_to_parse: Optional filter for parameter types. If specified, only fields
+                with metadata['param_type'] matching this value will have widgets created.
+                If None, all fields will have widgets created. This allows creating specialized
+                widgets for specific parameter categories (e.g., 'training', 'inference', etc.).
         """
         super().__init__(parent)
 
         self.nd_operation = nd_operation
+        self.param_type_to_parse = param_type_to_parse
+
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
         self._instructions_text = None  # Instructions label widget
@@ -104,6 +112,11 @@ class NDOperationWidget(QWidget):
     def parse_parameters(self):
         """
         Parse dataclass fields and create appropriate Qt widgets.
+
+        If param_type_to_parse is set, only fields with metadata['param_type']
+        matching that value will have widgets created. This allows filtering
+        parameters by category (e.g., only training parameters, only inference
+        parameters, etc.).
         """
         if not self.nd_operation or not dataclasses.is_dataclass(
             self.nd_operation
@@ -120,6 +133,17 @@ class NDOperationWidget(QWidget):
         fields = dataclasses.fields(self.nd_operation)
 
         for field in fields:
+            # Check if we should filter by param_type
+            if self.param_type_to_parse is not None:
+                # Only create widget if field's param_type matches param_type_to_parse
+                metadata = field.metadata
+                field_param_type = metadata.get("param_type", None)
+
+                # Skip this field if param_type doesn't match
+                if field_param_type != self.param_type_to_parse:
+                    continue
+
+            # Create widget for this field
             self._create_widget_for_field(field)
 
     def _add_instructions_if_present(self):

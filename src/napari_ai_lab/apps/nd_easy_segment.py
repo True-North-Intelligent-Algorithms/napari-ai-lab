@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utility import get_current_slice_indices
+from ..widgets.train_dialog import TrainDialog
 from .base_nd_app import BaseNDApp
 
 
@@ -89,6 +90,10 @@ class NDEasySegment(BaseNDApp):
         self.segment_all_btn = QPushButton("Segment All Images")
         self.segment_all_btn.clicked.connect(self._on_segment_all)
         auto_layout.addWidget(self.segment_all_btn)
+
+        self.train_btn = QPushButton("Train")
+        self.train_btn.clicked.connect(self._on_train)
+        auto_layout.addWidget(self.train_btn)
 
         main_layout.addWidget(self.auto_controls_group)
 
@@ -233,6 +238,30 @@ class NDEasySegment(BaseNDApp):
         QMessageBox.information(
             self, "Info", "Batch segmentation not yet implemented"
         )
+
+    def _on_train(self):
+        """Open training dialog to configure training parameters."""
+        if not hasattr(self, "segmenter") or self.segmenter is None:
+            QMessageBox.warning(self, "Warning", "No segmenter selected")
+            return
+
+        # Create and show training dialog
+        dialog = TrainDialog(self.segmenter, parent=self)
+        result = dialog.exec_()
+
+        if result == TrainDialog.Accepted:
+            # Get training parameters
+            training_params = dialog.get_training_parameters()
+            print(f"Training parameters accepted: {training_params}")
+
+            # TODO: Implement actual training logic here
+            QMessageBox.information(
+                self,
+                "Info",
+                f"Training would start with parameters:\n{training_params}",
+            )
+        else:
+            print("Training cancelled")
 
     def _segment_image_automatically(self, image_data):
         """Perform automatic segmentation on image data."""
