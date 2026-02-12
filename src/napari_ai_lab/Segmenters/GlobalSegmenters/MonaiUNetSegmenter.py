@@ -118,6 +118,90 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
+    weight_c1: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "default": 1,
+        },
+    )
+
+    weight_c2: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "default": 1,
+        },
+    )
+
+    weight_c3: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "default": 1,
+        },
+    )
+
+    num_epochs: int = field(
+        default=100,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 0,
+            "max": 100000,
+            "step": 1,
+            "default": 100,
+        },
+    )
+
+    save_interval: int = field(
+        default=10,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 10000,
+            "step": 1,
+            "default": 10,
+        },
+    )
+
+    learning_rate: float = field(
+        default=0.0001,
+        metadata={
+            "type": "float",
+            "param_type": "training",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.001,
+            "default": 0.0001,
+        },
+    )
+
+    dropout: float = field(
+        default=0.2,
+        metadata={
+            "type": "float",
+            "param_type": "training",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.01,
+            "default": 0.2,
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
