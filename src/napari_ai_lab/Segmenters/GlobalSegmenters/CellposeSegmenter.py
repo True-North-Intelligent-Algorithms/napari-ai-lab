@@ -51,6 +51,7 @@ Cellpose Automatic Cell Segmentation:
         default="cyto2",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": ["cyto", "cyto2", "nuclei", "cyto3"],
             "default": "cyto2",
         },
@@ -60,6 +61,7 @@ Cellpose Automatic Cell Segmentation:
         default=30.0,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 500.0,
             "step": 5.0,
@@ -71,6 +73,7 @@ Cellpose Automatic Cell Segmentation:
         default=True,
         metadata={
             "type": "bool",
+            "param_type": "inference",
             "default": True,
         },
     )
@@ -80,6 +83,7 @@ Cellpose Automatic Cell Segmentation:
         default=0.0,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 1.0,
             "step": 0.05,
@@ -91,6 +95,7 @@ Cellpose Automatic Cell Segmentation:
         default=0.4,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 3.0,
             "step": 0.1,
@@ -102,6 +107,7 @@ Cellpose Automatic Cell Segmentation:
         default=200,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 50,
             "max": 5000,
             "step": 50,

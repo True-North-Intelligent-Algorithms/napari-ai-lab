@@ -47,6 +47,7 @@ StarDist Automatic Segmentation:
         default="2D_versatile_fluo",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": [
                 "2D_versatile_fluo",
                 "2D_versatile_he",
@@ -59,6 +60,7 @@ StarDist Automatic Segmentation:
         default=0.5,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 1.0,
             "step": 0.05,
@@ -70,6 +72,7 @@ StarDist Automatic Segmentation:
         default=0.4,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 1.0,
             "step": 0.05,
@@ -81,6 +84,7 @@ StarDist Automatic Segmentation:
         default="",
         metadata={
             "type": "file",
+            "param_type": "inference",
             "file_type": "directory",
             "default": "",
         },
@@ -90,6 +94,7 @@ StarDist Automatic Segmentation:
         default=True,
         metadata={
             "type": "bool",
+            "param_type": "inference",
             "default": True,
         },
     )

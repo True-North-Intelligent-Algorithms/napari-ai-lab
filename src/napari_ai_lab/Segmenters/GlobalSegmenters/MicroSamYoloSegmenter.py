@@ -50,6 +50,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default="ObjectAwareModelHuggingFace",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": ["ObjectAwareModelHuggingFace", "Default"],
             "default": "ObjectAwareModelHuggingFace",
         },
@@ -59,6 +60,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default="ObjectAwareModelFromMobileSamV2",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": [
                 "ObjectAwareModelFromMobileSamV2",
                 "ObjectAwareTiny",
@@ -72,6 +74,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default="cuda",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": ["cuda", "cpu"],
             "default": "cuda",
         },
@@ -81,6 +84,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default="vit_b_lm",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": ["vit_b_lm", "vit_l_lm", "vit_h_lm"],
             "default": "vit_b_lm",
         },
@@ -90,6 +94,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default="cuda",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": ["cuda", "cpu"],
             "default": "cuda",
         },
@@ -99,6 +104,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default=0.2,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 1.0,
             "step": 0.01,
@@ -110,6 +116,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default=1024,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 128,
             "max": 8192,
             "step": 64,
@@ -124,6 +131,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default=0,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 0,
             "max": int(np.iinfo(np.uint16).max),
             "step": 1,
@@ -135,6 +143,7 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         default=int(np.iinfo(np.uint16).max),
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 0,
             "max": int(np.iinfo(np.uint16).max),
             "step": 1,

@@ -34,6 +34,7 @@ class Square2D(InteractiveSegmenterBase):
         default=20,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 1,
             "max": 200,
             "step": 1,

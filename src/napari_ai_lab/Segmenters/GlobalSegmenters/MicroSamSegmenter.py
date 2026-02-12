@@ -51,6 +51,7 @@ MicroSam Automatic Instance Segmentation:
         default="vit_b_lm",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "choices": ["vit_b", "vit_l", "vit_h", "vit_b_lm", "vit_t"],
             "default": "vit_b_lm",
         },
@@ -60,6 +61,7 @@ MicroSam Automatic Instance Segmentation:
         default=False,
         metadata={
             "type": "bool",
+            "param_type": "inference",
             "default": False,
         },
     )
@@ -68,6 +70,7 @@ MicroSam Automatic Instance Segmentation:
         default=384,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 128,
             "max": 1024,
             "step": 64,
@@ -79,6 +82,7 @@ MicroSam Automatic Instance Segmentation:
         default=384,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 128,
             "max": 1024,
             "step": 64,
@@ -90,6 +94,7 @@ MicroSam Automatic Instance Segmentation:
         default=64,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 0,
             "max": 256,
             "step": 16,
@@ -101,6 +106,7 @@ MicroSam Automatic Instance Segmentation:
         default=64,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 0,
             "max": 256,
             "step": 16,

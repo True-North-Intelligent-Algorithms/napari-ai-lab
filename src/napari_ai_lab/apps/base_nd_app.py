@@ -162,7 +162,9 @@ class BaseNDApp(QWidget):
 
     def _create_parameter_form(self):
         """Create the shared parameter form and connect change signal."""
-        self.parameter_form = NDOperationWidget()
+        self.parameter_form = NDOperationWidget(
+            param_type_to_parse="inference"
+        )
         self.parameter_form.parameters_changed.connect(
             self._on_parameters_changed
         )

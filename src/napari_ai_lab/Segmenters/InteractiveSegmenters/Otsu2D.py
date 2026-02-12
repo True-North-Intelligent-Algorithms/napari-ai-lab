@@ -34,16 +34,15 @@ Instructions for Otsu 2D Segmentation:
     """
 
     lateral_roi_size: int = field(
+        default=30,
         metadata={
             "type": "int",
-            "harvest": True,
-            "advanced": False,
-            "training": False,
+            "param_type": "inference",
             "min": 0,
             "max": 500,
-            "default": 30,
             "step": 1,
-        }
+            "default": 30,
+        },
     )
 
     def __init__(self):

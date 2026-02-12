@@ -46,6 +46,7 @@ MONAI UNet Automatic Segmentation:
         default=1024,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "min": 128,
             "max": 100000,
             "step": 128,
@@ -57,6 +58,7 @@ MONAI UNet Automatic Segmentation:
         default=True,
         metadata={
             "type": "bool",
+            "param_type": "inference",
             "default": True,
         },
     )
@@ -65,6 +67,7 @@ MONAI UNet Automatic Segmentation:
         default="",
         metadata={
             "type": "file",
+            "param_type": "inference",
             "file_type": "file",
             "default": "",
         },

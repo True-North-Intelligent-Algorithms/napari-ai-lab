@@ -51,6 +51,7 @@ Instructions:
         default=0.7,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "harvest": True,
             "advanced": False,
             "training": False,
@@ -65,6 +66,7 @@ Instructions:
         default=0.5,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "harvest": True,
             "advanced": False,
             "training": False,
@@ -79,6 +81,7 @@ Instructions:
         default="vit_b",
         metadata={
             "type": "str",
+            "param_type": "inference",
             "harvest": True,
             "advanced": False,
             "training": False,

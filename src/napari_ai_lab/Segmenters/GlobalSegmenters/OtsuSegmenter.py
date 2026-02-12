@@ -38,6 +38,7 @@ Otsu Automatic Segmentation:
         default=False,
         metadata={
             "type": "bool",
+            "param_type": "inference",
             "default": False,
         },
     )

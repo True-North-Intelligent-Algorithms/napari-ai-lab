@@ -40,6 +40,7 @@ Instructions for Otsu 3D Segmentation:
         default=30,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "harvest": True,
             "advanced": False,
             "training": False,
@@ -54,6 +55,7 @@ Instructions for Otsu 3D Segmentation:
         default=10,
         metadata={
             "type": "int",
+            "param_type": "inference",
             "harvest": True,
             "advanced": False,
             "training": False,

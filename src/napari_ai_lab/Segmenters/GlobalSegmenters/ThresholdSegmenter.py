@@ -36,6 +36,7 @@ Simple Threshold Segmentation:
         default=128.0,
         metadata={
             "type": "float",
+            "param_type": "inference",
             "min": 0.0,
             "max": 65535.0,
             "step": 1.0,
@@ -47,6 +48,7 @@ Simple Threshold Segmentation:
         default=False,
         metadata={
             "type": "bool",
+            "param_type": "inference",
             "default": False,
         },
     )
