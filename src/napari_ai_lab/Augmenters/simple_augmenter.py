@@ -11,7 +11,12 @@ class SimpleAugmenter(AugmenterBase):
     image and mask along the specified axis.
     """
 
-    def __init__(self, seed: int | None = None):
+    def __init__(
+        self,
+        seed: int | None = None,
+        normalize: bool = True,
+        use_global_stats: bool = True,
+    ):
         """
         Initialize the SimpleAugmenter.
 
@@ -19,9 +24,17 @@ class SimpleAugmenter(AugmenterBase):
         ----------
         seed : Optional[int]
             Random seed for reproducibility. If None, uses random state.
+        normalize : bool
+            Whether to normalize images using percentile normalization. Default is True.
+        use_global_stats : bool
+            If True, use global normalization statistics (computed from full image).
+            If False, compute normalization statistics from each patch individually.
+            Default is True for consistency with inference normalization.
         """
         super().__init__()  # Initialize parent class to set up directories
         self.seed = seed
+        self.normalize = normalize
+        self.use_global_stats = use_global_stats
         if seed is not None:
             np.random.seed(seed)
 
@@ -95,5 +108,11 @@ class SimpleAugmenter(AugmenterBase):
         # Crop both image and mask using the same indices
         cropped_im = im[slices]
         cropped_mask = mask[slices]
+
+        # Normalize image if enabled
+        if self.normalize:
+            cropped_im = self.normalize_image(
+                cropped_im, use_global_stats=self.use_global_stats
+            )
 
         return cropped_im, cropped_mask
