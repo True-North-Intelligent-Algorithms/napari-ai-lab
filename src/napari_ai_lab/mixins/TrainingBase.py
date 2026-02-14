@@ -71,3 +71,30 @@ class TrainingBase(ABC):
         """
         # By default, if a class inherits from TrainingBase, it can train
         return True
+
+    def get_image_label_files(
+        self, patch_path, input_str, ground_truth_str, num_truths
+    ):
+        """
+        Collect image and label files from patch directory.
+
+        Args:
+            patch_path (Path): Path object pointing to the patch directory containing image and label subdirectories.
+            input_str (str): Name of the input image subdirectory (e.g., 'input0', 'input_validation0').
+            ground_truth_str (str): Base name of the ground truth label subdirectories (e.g., 'ground_truth').
+                                   Numbers will be appended (ground_truth0, ground_truth1, etc.).
+            num_truths (int): Number of ground truth label classes to collect.
+
+        Returns:
+            tuple: A tuple (X, Y) where:
+                - X (list): Sorted list of Path objects for all .tif files in the input directory.
+                - Y (list of lists): List where each element is a sorted list of Path objects for .tif files
+                                    in each ground truth directory (ground_truth0, ground_truth1, etc.).
+        """
+        X = sorted(patch_path.rglob(f"**/{input_str}/*.tif"))
+        Y = []
+        for i in range(num_truths):
+            Y.append(
+                sorted(patch_path.rglob(f"**/{ground_truth_str}{i}/*.tif"))
+            )
+        return X, Y
