@@ -310,3 +310,43 @@ class AugmenterBase(ABC):
             import numpy as np
 
             np.save(filepath.replace(".tif", ".npy"), array)
+
+    def write_info(
+        self,
+        patch_path: str,
+        axes: str,
+        num_inputs: int = 1,
+        num_truths: int = 1,
+        sub_sample: int = 1,
+    ) -> None:
+        """
+        Write info.json file with patch dataset information.
+
+        Parameters
+        ----------
+        patch_path : str
+            Directory path where info.json will be saved
+        axes : str
+            String describing the axes (e.g., "ZYX", "YX")
+        num_inputs : int
+            Number of input channels/images (default: 1)
+        num_truths : int
+            Number of ground truth channels/classes (default: 1)
+        sub_sample : int
+            Subsampling factor (default: 1)
+        """
+        import json
+        import os
+
+        info = {
+            "axes": axes,
+            "num_inputs": num_inputs,
+            "num_truths": num_truths,
+            "sub_sample": sub_sample,
+        }
+
+        info_path = os.path.join(patch_path, "info.json")
+        with open(info_path, "w") as f:
+            json.dump(info, f, indent=2)
+
+        print(f"✓ Created info.json at {info_path}")
