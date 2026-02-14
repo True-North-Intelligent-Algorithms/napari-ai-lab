@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from ..utilities.dl_util import normalize_image, normalize_percentile
+
 
 class AugmenterBase(ABC):
     """
@@ -16,6 +18,10 @@ class AugmenterBase(ABC):
         Subdirectory name for saving input images (default: "input0")
     ground_truth_dir : str
         Subdirectory name for saving ground truth masks (default: "ground_truth0")
+    global_norm_low : float or None
+        Global low value for normalization (computed from full image)
+    global_norm_high : float or None
+        Global high value for normalization (computed from full image)
     """
 
     def __init__(self):
@@ -23,6 +29,62 @@ class AugmenterBase(ABC):
         self.input_dir = "input0"
         self.ground_truth_dir = "ground_truth0"
         self.valid_coordinates = None
+        self.global_norm_low = None
+        self.global_norm_high = None
+
+    def compute_global_normalization_stats(
+        self,
+        image: np.ndarray,
+        percentile_low: float = 1,
+        percentile_high: float = 99,
+    ):
+        """
+        Compute global normalization statistics from full image.
+
+        This should be called once with the full image before augmentation
+        to ensure all patches use the same normalization.
+
+        Parameters
+        ----------
+        image : np.ndarray
+            Full image to compute statistics from
+        percentile_low : float
+            Lower percentile (default: 1)
+        percentile_high : float
+            Upper percentile (default: 99)
+        """
+        self.global_norm_low, self.global_norm_high = normalize_percentile(
+            image, percentile_low, percentile_high
+        )
+        print(
+            f"Computed global normalization stats: low={self.global_norm_low:.4f}, high={self.global_norm_high:.4f}"
+        )
+
+    def normalize_image(
+        self, image: np.ndarray, use_global_stats: bool = False
+    ) -> np.ndarray:
+        """
+        Normalize image using percentile normalization.
+
+        Parameters
+        ----------
+        image : np.ndarray
+            Input image array
+        use_global_stats : bool
+            If True, use global normalization statistics (if available).
+            If False, compute statistics from the image itself.
+
+        Returns
+        -------
+        np.ndarray
+            Normalized image in range [0, 1]
+        """
+        if use_global_stats and self.global_norm_low is not None:
+            return normalize_image(
+                image, self.global_norm_low, self.global_norm_high
+            )
+        else:
+            return normalize_image(image)
 
     @abstractmethod
     def augment(
