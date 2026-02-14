@@ -172,6 +172,10 @@ class AugmenterBase(ABC):
         im_path = os.path.join(input_path, f"{im_base_name}.tif")
         mask_path = os.path.join(ground_truth_path, f"{mask_base_name}.tif")
 
+        # get rid of trivial dimensions before saving
+        augmented_im = np.squeeze(augmented_im)
+        augmented_mask = np.squeeze(augmented_mask)
+
         # Save the augmented image and mask
         self._save_array(augmented_im, im_path)
         self._save_array(augmented_mask, mask_path)
