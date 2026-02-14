@@ -210,6 +210,17 @@ class ImageDataModel:
 
         return patches_dir
 
+    def get_models_directory(self) -> Path:
+        """
+        Get the directory for storing trained models.
+
+        Returns:
+            Path to models/ folder
+        """
+        models_dir = self.parent_directory / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        return models_dir
+
     def get_parent_directory(self) -> Path:
         """
         Get the parent directory containing images.
