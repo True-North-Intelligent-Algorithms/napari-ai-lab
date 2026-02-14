@@ -88,3 +88,6 @@ venv/
 
 # ignore test images
 tests/test_images/
+
+# ignore temp scrips
+temp_scripts/
