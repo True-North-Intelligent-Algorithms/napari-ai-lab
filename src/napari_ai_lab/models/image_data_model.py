@@ -19,6 +19,8 @@ from napari_ai_lab.utility import (
     remove_trivial_axes,
 )
 
+from ..artifact_io import get_artifact_io
+
 
 class ImageDataModel:
     """
@@ -134,25 +136,27 @@ class ImageDataModel:
             from czifile import CziFile
 
             with CziFile(str(image_path)) as czi:
-                image_data = czi.asarray()
+                self.image_data = czi.asarray()
                 self.axis_types = czi.axes
         else:
             # Use skimage for other formats
-            image_data = imread(str(image_path))
-            self.axis_types = get_axis_info_from_shape(image_data.shape)
+            self.image_data = imread(str(image_path))
+            self.axis_types = get_axis_info_from_shape(self.image_data.shape)
 
         # Squeeze to remove singleton dimensions
-        if self.axis_types and len(self.axis_types) == len(image_data.shape):
+        if self.axis_types and len(self.axis_types) == len(
+            self.image_data.shape
+        ):
             # Remove axis characters corresponding to trivial dimensions
             self.axis_types = remove_trivial_axes(
-                self.axis_types, image_data.shape
+                self.axis_types, self.image_data.shape
             )
 
-        image_data = np.squeeze(image_data)
-        print(f"Loaded image shape: {image_data.shape}")
+        self.image_data = np.squeeze(self.image_data)
+        print(f"Loaded image shape: {self.image_data.shape}")
         print(f"Axis types: {self.axis_types}")
 
-        return image_data
+        return self.image_data
 
     def _populate_image_list(self, directory: str):
         """
@@ -306,16 +310,16 @@ class ImageDataModel:
 
     def get_predictions_io(self):
         """Get prediction artifact io."""
-        if self._predictions_io is None:
-            from ..artifact_io import get_artifact_io
-
-            self._predictions_io = get_artifact_io(self.prediction_io_type)
         return self._predictions_io
 
-    def set_prediction_io_type(self, io_type: str):
+    def set_prediction_io_type(self, io_type: str, axis_slice: str = None):
         """Set prediction artifact io type."""
         self.prediction_io_type = io_type
-        self._predictions_io = None
+        self._predictions_io = get_artifact_io(self.prediction_io_type)
+        if axis_slice is not None and hasattr(
+            self._predictions_io, "set_axis_slice"
+        ):
+            self._predictions_io.set_axis_slice(axis_slice)
 
     def load_existing_predictions(
         self,
@@ -348,6 +352,10 @@ class ImageDataModel:
             dataset_name = "unknown"
 
         io = self.get_predictions_io()
+
+        if hasattr(io, "set_shape_total"):
+            io.set_shape_total(self.image_data.shape)
+
         data = io.load(str(preds_dir), dataset_name)
 
         if data is None or getattr(data, "size", 0) == 0:
@@ -397,6 +405,7 @@ class ImageDataModel:
         image_index: int,
         subdirectory: str = "predictions",
         current_step: tuple = None,
+        selected_axis: str = None,
     ):
         """
         Save prediction array for the image at image_index under predictions/subdirectory.
@@ -406,6 +415,7 @@ class ImageDataModel:
             image_index: Index of the associated image.
             subdirectory: Subdirectory under predictions to save into.
             current_step: Viewer dimension position (for stacked mode).
+            selected_axis: Axis string like "YX", "ZYX", "YXC", etc.
 
         Returns:
             Result of io.save(...)
@@ -430,6 +440,7 @@ class ImageDataModel:
             dataset_name,
             predictions_to_save,
             current_step,
+            selected_axis,
         )
 
     def get_global_frameworks(self):
