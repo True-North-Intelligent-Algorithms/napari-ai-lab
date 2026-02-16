@@ -9,12 +9,14 @@ from .base_artifact_io import BaseArtifactIO
 from .numpy_artifact_io import NumpyArtifactIO
 from .stacked_sequence_artifact_io import StackedSequenceArtifactIO
 from .tiff_artifact_io import TiffArtifactIO
+from .tiff_slice_io import TiffSliceIO
 
 # Export available Artifact I/O classes for easy selection
 __all__ = [
     "BaseArtifactIO",
     "NumpyArtifactIO",
     "TiffArtifactIO",
+    "TiffSliceIO",
     "StackedSequenceArtifactIO",
 ]
 
@@ -22,6 +24,7 @@ __all__ = [
 AVAILABLE_ARTIFACT_IO = {
     "numpy": NumpyArtifactIO,
     "tiff": TiffArtifactIO,
+    "tiff_slice": TiffSliceIO,
     "stacked_sequence": StackedSequenceArtifactIO,
 }
 
