@@ -369,50 +369,34 @@ class NDEasySegment(BaseNDApp):
 
     def _set_image_layer(self, image_layer):
         """Set up annotation layers based on the provided image layer."""
-        try:
-            self.image_layer = image_layer
-            image_data = image_layer.data
+        self.image_layer = image_layer
+        image_data = image_layer.data
 
-            # Load existing labels or create empty ones
-            # Load existing labels or create empty ones (delegated to model)
-            labels_data = self.image_data_model.load_existing_annotations(
-                image_data.shape, self.current_image_index
-            )
+        # Load existing labels or create empty ones
+        labels_data = self.image_data_model.load_existing_annotations(
+            image_data.shape, self.current_image_index
+        )
 
-            predictions_data = self.image_data_model.load_existing_predictions(
-                image_data.shape, self.current_image_index
-            )
+        predictions_data = self.image_data_model.load_existing_predictions(
+            image_data.shape, self.current_image_index
+        )
 
-            self.annotation_layer = self.viewer.add_labels(
-                labels_data, name="Labels (Persistent)"
-            )
+        self.annotation_layer = self.viewer.add_labels(
+            labels_data, name="Labels (Persistent)"
+        )
 
-            self.predictions_layer = self.viewer.add_labels(
-                predictions_data, name="Predictions (Persistent)"
-            )
+        self.predictions_layer = self.viewer.add_labels(
+            predictions_data, name="Predictions (Persistent)"
+        )
 
-            # Only create interactive layers if in interactive mode
-            if self.is_interactive_mode():
-                self._setup_interactive_layers(image_data)
+        # Only create interactive layers if in interactive mode
+        if self.is_interactive_mode():
+            self._setup_interactive_layers(image_data)
 
-            print(f"Successfully set up layers for image: {image_layer.name}")
+        print(f"Successfully set up layers for image: {image_layer.name}")
 
-            # move image layer to bottom
-            # self.viewer.layers.move(self.image_layer, len(self.viewer.layers)-1)
-
-        except (
-            AttributeError,
-            ValueError,
-            TypeError,
-            RuntimeError,
-            OSError,
-        ) as e:
-            print(f"Error setting up image layer: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"An error occurred while setting up layers: {str(e)}",
-            )
+        # move image layer to bottom
+        # self.viewer.layers.move(self.image_layer, len(self.viewer.layers)-1)
 
     def _setup_interactive_layers(self, image_data):
         """Setup interactive annotation layers (points and shapes)."""
