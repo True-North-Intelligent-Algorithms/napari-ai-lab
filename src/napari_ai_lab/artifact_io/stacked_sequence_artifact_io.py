@@ -35,6 +35,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
         dataset_name: str,
         data: np.ndarray,
         current_step: tuple = None,
+        selected_axis: str = None,
     ) -> bool:
         try:
             if current_step:

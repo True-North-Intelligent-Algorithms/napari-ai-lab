@@ -40,6 +40,7 @@ class BaseArtifactIO(ABC):
         dataset_name: str,
         data: np.ndarray,
         current_step: tuple = None,
+        selected_axis: str = None,
     ) -> bool:
         """
         Save data to storage.
@@ -49,6 +50,7 @@ class BaseArtifactIO(ABC):
             dataset_name: Name of the dataset (without extension)
             data: Array to save
             current_step: Viewer dimension position (for stacked mode)
+            selected_axis: Axis string like "YX", "ZYX", "YXC", etc.
 
         Returns:
             True if successful, False otherwise
