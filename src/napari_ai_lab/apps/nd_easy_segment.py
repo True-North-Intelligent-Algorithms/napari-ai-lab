@@ -317,42 +317,39 @@ class NDEasySegment(BaseNDApp):
                 parent_directory=self.image_data_model.parent_directory,
             )
 
-            # Copy mask to predictions layer
-            if self.predictions_layer is not None:
-                input_axis = self.parameter_form.get_selected_axis()
+            input_axis = self.parameter_form.get_selected_axis()
 
-                # Result axis can be smaller than the input axis (ie YXC input, YX output),
-                # keep only
-                # the spatial characters (Z, Y, X) from selected_axis. If
-                # that produces an empty string, fall back to 'YX'. Keep
-                # this small and direct; if the axis string is malformed
-                # we'll handle it later.
-                if len(input_axis) > len(mask.shape):
-                    temp_axis = "".join(
-                        [c for c in input_axis if c in ("Z", "Y", "X")]
-                    )
-                    if temp_axis == "":
-                        temp_axis = "YX"
-                else:
-                    temp_axis = input_axis
-
-                indices = get_current_slice_indices(
-                    self.viewer.dims.current_step, temp_axis
+            # Result axis can be smaller than the input axis (ie YXC input, YX output),
+            # keep only
+            # the spatial characters (Z, Y, X) from selected_axis. If
+            # that produces an empty string, fall back to 'YX'. Keep
+            # this small and direct; if the axis string is malformed
+            # we'll handle it later.
+            if len(input_axis) > len(mask.shape):
+                segmentation_axis = "".join(
+                    [c for c in input_axis if c in ("Z", "Y", "X")]
                 )
-                self.predictions_layer.data[indices] = (
-                    mask  # self.current_label_num
-                )
-                self.current_label_num += 1
-                self.predictions_layer.refresh()
-                print("Automatic segmentation completed")
+                if segmentation_axis == "":
+                    segmentation_axis = "YX"
             else:
-                print("No label layer available")
+                segmentation_axis = input_axis
+
+            indices = get_current_slice_indices(
+                self.viewer.dims.current_step, segmentation_axis
+            )
+            self.predictions_layer.data[indices] = (
+                mask  # self.current_label_num
+            )
+            self.current_label_num += 1
+            self.predictions_layer.refresh()
+            print("Automatic segmentation completed")
 
             # save predictions via model
             self.image_data_model.save_predictions(
                 mask,
                 self.current_image_index,
                 current_step=self.viewer.dims.current_step,
+                selected_axis=segmentation_axis,
             )
 
         except (
