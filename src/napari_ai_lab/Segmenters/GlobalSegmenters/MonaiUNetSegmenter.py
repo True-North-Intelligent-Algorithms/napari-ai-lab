@@ -5,18 +5,29 @@ This module provides a MONAI UNet segmenter for automatic semantic segmentation
 of entire images without user prompts.
 """
 
+import csv
+import json
 from dataclasses import dataclass, field
+from datetime import datetime
+from glob import glob
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from tifffile import imread
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
+from ...datasets.pytorch_semantic_dataset import PyTorchSemanticDataset
 from ...mixins import TrainingBase
+from ...utilities.dl_util import normalize_image
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import MONAI dependencies
 try:
     from monai.inferers import sliding_window_inference
+    from monai.networks.nets import UNet
 
     _is_monai_available = True
 except ImportError:
@@ -275,7 +286,7 @@ MONAI UNet Automatic Segmentation:
         # Setting model_name will trigger __setattr__ which loads the model
         self.model_name = model_path
 
-    def segment(self, image, **kwargs):
+    def segment(self, image, normalize=True, **kwargs):
         """
         Perform MONAI UNet segmentation on entire image.
 
@@ -300,7 +311,10 @@ MONAI UNet Automatic Segmentation:
             )
 
         # Prepare image for inference
-        image_norm = self._normalize_image(image)
+        if normalize:
+            image_norm = normalize_image(image)
+        else:
+            image_norm = image.astype(np.float32)
 
         # Prepare tensor
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -345,27 +359,45 @@ MONAI UNet Automatic Segmentation:
 
         return (result + 1).astype(np.uint16)
 
-    def _normalize_image(self, image):
-        """
-        Normalize image using quantile normalization.
+    def predict(self, image):
+        device = torch.device("cuda")
+        self.model.to(device)
 
-        Args:
-            image (numpy.ndarray): Input image
+        image_ = image  # quantile_normalization(image.astype(np.float32))
 
-        Returns:
-            numpy.ndarray: Normalized image
-        """
-        image_float = image.astype(np.float32)
-
-        # Simple percentile normalization
-        p_low, p_high = np.percentile(image_float, [1, 99])
-        if p_high > p_low:
-            image_norm = (image_float - p_low) / (p_high - p_low)
-            image_norm = np.clip(image_norm, 0, 1)
+        # move channel position to first axis if data has channel
+        if len(image_.shape) == 3:
+            features = image_.transpose(2, 0, 1)
         else:
-            image_norm = image_float
+            # add trivial channel axis
+            features = np.expand_dims(image_, axis=0)
 
-        return image_norm
+        # make into tensor and add trivial batch dimension
+        x = torch.from_numpy(features).unsqueeze(0).to(device)
+
+        # move into evaluation mode
+        self.model.eval()
+
+        with torch.no_grad():
+            # perform sliding window inference to avoid running out of memory on smaller GPUS
+            y = sliding_window_inference(
+                x,  # Input tensor
+                (self.tile_size, self.tile_size),  # Patch size
+                1,  # Batch size during inference
+                self.model,  # Model for inference
+                mode="gaussian",  # Inference mode
+                overlap=0.125,  # Overlap factor
+            )
+
+        # Apply softmax along the class dimension (dim=1)
+        probabilities = F.softmax(y, dim=1)
+        # now predicted classes are max of probabilities along the class dimension
+        predicted_classes = torch.argmax(probabilities, dim=1)
+
+        if not self.show_background_class:
+            predicted_classes = predicted_classes - 1
+
+        return predicted_classes.cpu().detach().numpy().squeeze() + 1
 
     @classmethod
     def register(cls):
@@ -412,6 +444,126 @@ probabilities = F.softmax(y, dim=1)
 result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 """
 
+    def train_loop(
+        self,
+        train_loader,
+        net,
+        loss_fn,
+        optimizer,
+        dtype,
+        num_epochs,
+        device,
+        validation_loader=None,
+        steps_per_update=-1,
+        sparse=False,
+        use_tqdm=False,
+    ):
+
+        # set train flags, initialize step
+        net.train()
+        loss_fn.train()
+        epoch = 0
+
+        while epoch < num_epochs:
+            # reset data loader to get random augmentations
+            np.random.seed()
+
+            # zero gradients
+            total_loss = 0.0  # To track the sum of losses for averaging
+
+            if steps_per_update == -1:
+                total_steps = len(train_loader.dataset)
+            else:
+                total_steps = steps_per_update
+
+            # Create progress bar context manager conditionally
+            if use_tqdm:
+                pbar = tqdm(
+                    total=total_steps, desc=f"Epoch {epoch}", leave=True
+                )
+            else:
+                # Create a dummy context manager that does nothing
+                from contextlib import nullcontext
+
+                pbar = nullcontext()
+
+            with pbar if use_tqdm else nullcontext() as progress:
+
+                for feature, label in train_loader:
+
+                    optimizer.zero_grad()
+
+                    label = label.type(dtype)
+
+                    if sparse:
+                        label = label - 1
+                    label = label.to(device)
+                    feature = feature.to(device)
+
+                    # forward
+                    predicted = net(feature)
+                    label = torch.squeeze(label, 1)
+                    loss_value = loss_fn(input=predicted, target=label)
+
+                    # Accumulate loss for averaging
+                    total_loss += loss_value.item()
+
+                    # pass through loss
+                    loss_value.backward()
+
+                    if use_tqdm and progress is not None:
+                        progress.update(label.shape[0])
+
+                    optimizer.step()
+
+            # Compute the average loss over all steps
+            average_loss = total_loss / len(train_loader)
+            self.train_loss_list.append(average_loss)
+
+            # Calculate validation loss
+            val_loss_str = ""
+            if validation_loader is not None:
+                net.eval()
+                total_val_loss = 0.0
+                with torch.no_grad():
+                    for val_feature, val_label in validation_loader:
+                        val_label = val_label.type(dtype)
+                        if sparse:
+                            val_label = val_label - 1
+                        val_label = val_label.to(device)
+                        val_feature = val_feature.to(device)
+                        val_predicted = net(val_feature)
+                        val_label = torch.squeeze(val_label, 1)
+                        val_loss_value = loss_fn(
+                            input=val_predicted, target=val_label
+                        )
+                        total_val_loss += val_loss_value.item()
+                average_val_loss = total_val_loss / len(validation_loader)
+                self.validation_loss_list.append(average_val_loss)
+                val_loss_str = f", validation loss: {average_val_loss:.4f}"
+                net.train()
+
+            print(
+                f"Epoch {epoch} - training loss: {average_loss:.4f}{val_loss_str}"
+            )
+
+            if epoch % self.save_interval == 0 and epoch > 0:
+                # Insert 'checkpoint' before the file extension
+                model_path_obj = Path(self.model_name)
+                checkpoint_name = (
+                    model_path_obj.stem + "_checkpoint" + model_path_obj.suffix
+                )
+                torch.save(net, Path(self.model_path) / Path(checkpoint_name))
+
+            if self.updater is not None:
+                progress = int(epoch / self.num_epochs * 100)
+                self.updater(
+                    f"Epoch {epoch} - training loss: {average_loss:.4f}{val_loss_str}",
+                    progress,
+                )
+
+            epoch += 1
+
     def train(self, updater=None):
         """
         Train the MONAI UNet model.
@@ -454,19 +606,207 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         # - Save model checkpoints
         # - Return training metrics
 
-        if updater:
-            updater(epoch=0, loss=0.0, status="Training not yet implemented")
+        patch_path = Path(self.patch_path)
+
+        if updater is None:
+            updater = self.updater
+
+        if updater is not None:
+            updater("Training Monai Semantic model", 0)
+
+        cuda_present = torch.cuda.is_available()
+        ndevices = torch.cuda.device_count()
+        use_cuda = cuda_present and ndevices > 0
+        device = torch.device(
+            "cuda" if use_cuda else "cpu"
+        )  # "cuda:0" ... default device, "cuda:1" would be GPU index 1, "cuda:2" etc
+
+        with open(patch_path / "info.json") as json_file:
+            data = json.load(json_file)
+            sub_sample = data.get("sub_sample", 1)
+            print("sub_sample", sub_sample)
+            axes = data["axes"]
+            print("axes", axes)
+            num_inputs = data["num_inputs"]
+            print("num_inputs", num_inputs)
+            num_truths = data["num_truths"]
+            print("num_truths", num_truths)
+
+        image_patch_path = patch_path / "input0"
+
+        tif_files = glob(str(image_patch_path / "*.tif"))
+        first_im = imread(tif_files[0])
+        target_shape = first_im.shape
+
+        num_in_channels = 1 if axes == "YX" else 3
+
+        assert (
+            patch_path.exists()
+        ), f"root directory with images and masks {patch_path} does not exist"
+
+        train_input_str = "input0"
+        train_ground_truth_str = "ground_truth"
+
+        X, Y = self.get_image_label_files(
+            patch_path, train_input_str, train_ground_truth_str, num_truths
+        )
+
+        validation_input_str = "input_validation0"
+        validation_ground_truth_str = "ground truth_validation"
+
+        X_val, Y_val = self.get_image_label_files(
+            patch_path,
+            validation_input_str,
+            validation_ground_truth_str,
+            num_truths,
+        )
+
+        train_data = PyTorchSemanticDataset(
+            image_files=X, label_files_list=Y, target_shape=target_shape
+        )
+
+        # NOTE: the length of the dataset might not be the same as n_samples
+        #       because files not having the target shape will be discarded
+        print(f"Training data size: {len(train_data)}")
+
+        train_loader = DataLoader(train_data, batch_size=8, shuffle=True)
+
+        # Create validation dataset and loader only if validation data exists
+        validation_data = None
+        validation_loader = None
+        if len(X_val) > 0:
+            validation_data = PyTorchSemanticDataset(
+                image_files=X_val,
+                label_files_list=Y_val,
+                target_shape=target_shape,
+            )
+            print(f"Validation data size: {len(validation_data)}")
+            validation_loader = DataLoader(
+                validation_data, batch_size=8, shuffle=False
+            )
+        else:
+            print("No validation data found - training without validation")
+
+        self.num_classes_auto = True
+
+        if self.num_classes_auto:
+
+            if self.sparse:
+                # if sparse background will be label 1 so number of classes is the max label indexes
+                # ie if the max label index is 3 then there are 3 classes, 1, 2, 3 and 0 is unlabeled
+                # (we subtract 1 at later step so 1 (background) becomes 0 and 0 (not labeled) becomes -1)
+                self.num_classes = train_data.max_label_index
+            else:
+                # if not sparse background will be label 0 so number of classes is the max label indexes + 1
+                # ie if there are 3 classes the indexes are 0, 1, 2, so need to add 1 to the max index to get number of classes
+                self.num_classes = train_data.max_label_index + 1
+
+        # there is an inconstency in how different classes can be defined
+        # 1. every class has it's own label image (one-hot encoded)
+        # 2. every class has a unique value in the label image
+        # When I wrote a lot of this code I was thinking of the first case, but now see the second may be easier for the user
+        # so number of output channels is the max of the truth image
+        # use monai to create a model, note we don't use an activation function because
+        # we use CrossEntropyLoss that includes a softmax, and our prediction will include the softmax
+        if self.model is None:
+
+            channels = tuple(
+                self.features_level_1 * (2 ** (i - 1) if i > 1 else 1)
+                for i in range(self.depth + 1)
+            )
+            strides = tuple(2 for i in range(self.depth))
+            # channels = (self.features_level_1, self.features)
+
+            self.model = UNet(
+                spatial_dims=2,
+                in_channels=num_in_channels,
+                out_channels=self.num_classes,
+                channels=channels,  #
+                strides=strides,
+                num_res_units=2,  # BasicUNet has no residual blocks
+                act=("LeakyReLU", {"negative_slope": 0.01, "inplace": True}),
+                norm="batch",
+                dropout=self.dropout,
+            )
+
+        self.model = self.model.to(device)
+
+        optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.learning_rate
+        )
+
+        self.model.train(True)
+
+        weights = torch.ones(self.num_classes, dtype=torch.float32)
+        weights[0] = self.weight_c1
+
+        if self.num_classes > 1:
+            weights[1] = self.weight_c2
+
+        if self.num_classes > 2:
+            weights[2] = self.weight_c3
+
+        weights[0] = 0.33
+        weights[1] = 0.33
+        weights[2] = 0.33
+
+        # weights = weights*0.01
+
+        # loss_function = torch.nn.CrossEntropyLoss(ignore_index=-1, weight=weights).to(device)
+        loss_function = torch.nn.CrossEntropyLoss(ignore_index=-1).to(device)
+        dtype = torch.LongTensor
+
+        # Diagnostic prints for troubleshooting input/model mismatch
+        print("\n🔍 Training diagnostics:")
+        print(
+            f"   Model expects: in_channels={num_in_channels}, out_channels={self.num_classes}"
+        )
+        print(
+            f"   Data shape from dataset: {train_data.images.shape if hasattr(train_data, 'images') else 'N/A'}"
+        )
+        print(f"   Target shape: {target_shape}, Axes: {axes}")
+
+        self.train_loop(
+            train_loader,
+            self.model,
+            loss_function,
+            optimizer,
+            dtype,
+            self.num_epochs,
+            device,
+            validation_loader=validation_loader,
+            sparse=self.sparse,
+        )
+
+        torch.save(self.model, Path(self.model_path) / self.model_name)
+
+        # Save training and validation losses to CSV
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_name = Path(self.model_name).stem + f"_{timestamp}.csv"
+        csv_path = Path(self.model_path) / csv_name
+        with open(csv_path, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["Epoch", "Training Loss", "Validation Loss"])
+            for epoch, (train_loss, val_loss) in enumerate(
+                zip(
+                    self.train_loss_list,
+                    self.validation_loss_list,
+                    strict=False,
+                )
+            ):
+                writer.writerow([epoch, train_loss, val_loss])
+        print(f"Saved loss history to {csv_path}")
 
         return {
             "success": False,
             "message": "Training implementation coming soon",
-            "parameters": {
-                "sparse": self.sparse,
-                "num_classes": self.num_classes,
-                "depth": self.depth,
-                "features_level_1": self.features_level_1,
-                "num_epochs": self.num_epochs,
-                "learning_rate": self.learning_rate,
-                "dropout": self.dropout,
-            },
+            "cuda_present": cuda_present,
+            "ndevices": ndevices,
+            "device": str(device),
+            "num_inputs": num_inputs,
+            "num_truths": num_truths,
+            "X": X,
+            "Y": Y,
+            "X_val": X_val,
+            "Y_val": Y_val,
         }
