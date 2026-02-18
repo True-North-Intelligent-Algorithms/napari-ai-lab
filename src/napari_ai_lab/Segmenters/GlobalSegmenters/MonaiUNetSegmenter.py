@@ -240,9 +240,9 @@ MONAI UNet Automatic Segmentation:
         # Check if this is model_name and value changed
         if name == "model_name" and old_value != value and value:
             print(f"🔄 Model name changed from '{old_value}' to '{value}'")
-            self._on_model_name_changed(value)
+            self._on_model_path_changed(value)
 
-    def _on_model_name_changed(self, model_path: str):
+    def _on_model_path_changed(self, model_path: str):
         """Handle model name changes - load the PyTorch model."""
         print(f"📁 Loading MONAI UNet model from: {model_path}")
 
