@@ -53,6 +53,9 @@ MONAI UNet Automatic Segmentation:
 • Works with 2D and 3D images
     """
 
+    # Segmenter name
+    name: str = field(default="MonaiUNetSegmenter", init=False, repr=False)
+
     # Parameters for MONAI UNet segmentation
     tile_size: int = field(
         default=1024,
