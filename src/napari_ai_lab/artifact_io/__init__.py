@@ -2,7 +2,7 @@
 Artifact I/O for different storage formats.
 
 This package provides a flexible architecture for saving and loading artifacts
-in various formats (numpy, tiff, etc.) with a common interface.
+in various formats (numpy, tiff, zarr, etc.) with a common interface.
 """
 
 from .base_artifact_io import BaseArtifactIO
@@ -10,6 +10,7 @@ from .numpy_artifact_io import NumpyArtifactIO
 from .stacked_sequence_artifact_io import StackedSequenceArtifactIO
 from .tiff_artifact_io import TiffArtifactIO
 from .tiff_slice_io import TiffSliceIO
+from .zarr_artifact_io import ZarrArtifactIO
 
 # Export available Artifact I/O classes for easy selection
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "NumpyArtifactIO",
     "TiffArtifactIO",
     "TiffSliceIO",
+    "ZarrArtifactIO",
     "StackedSequenceArtifactIO",
 ]
 
@@ -25,6 +27,7 @@ AVAILABLE_ARTIFACT_IO = {
     "numpy": NumpyArtifactIO,
     "tiff": TiffArtifactIO,
     "tiff_slice": TiffSliceIO,
+    "zarr": ZarrArtifactIO,
     "stacked_sequence": StackedSequenceArtifactIO,
 }
 
