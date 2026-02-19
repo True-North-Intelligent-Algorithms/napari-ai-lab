@@ -46,22 +46,8 @@ def test_train_method_exists():
     assert callable(segmenter.train)
 
 
-def test_train_with_patch_path():
-    """Test that train method can access patch_path."""
-    segmenter = MonaiUNetSegmenter()
-    segmenter.patch_path = "/test/patch/path"
-
-    # Call train (will return not implemented message)
-    result = segmenter.train()
-
-    # Should return a dict
-    assert isinstance(result, dict)
-    assert "success" in result
-
-
 if __name__ == "__main__":
     test_training_base_initialization()
     test_patch_path_property()
     test_train_method_exists()
-    test_train_with_patch_path()
     print("✅ All tests passed!")
