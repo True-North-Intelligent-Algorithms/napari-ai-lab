@@ -64,7 +64,6 @@ class BaseNDApp(QWidget):
         self.current_label_num = 1
 
         # Track current image context (common to both widgets)
-        self.current_image_path = None
         self.current_image_index = 0
 
         # Signal processing state protection (common to both widgets)
@@ -96,7 +95,7 @@ class BaseNDApp(QWidget):
             print("Viewer closing detected via closeEvent")
 
             # Ask user if they want to save annotations
-            if self.annotation_layer and self.current_image_path:
+            if self.annotation_layer:
                 reply = QMessageBox.question(
                     self,
                     "Save Annotations?",
@@ -139,7 +138,7 @@ class BaseNDApp(QWidget):
 
     def _on_save_annotations(self):
         """Save current annotations explicitly."""
-        if self.annotation_layer and self.current_image_path:
+        if self.annotation_layer:
             try:
                 self.image_data_model.save_annotations(
                     self.annotation_layer.data,
@@ -405,19 +404,9 @@ class BaseNDApp(QWidget):
         try:
             print(f"Processing image change: index {image_index}")
 
-            # Get image path from model using index
-            image_paths = self.image_data_model.get_image_paths()
-            if 0 <= image_index < len(image_paths):
-                image_path = str(image_paths[self.current_image_index])
-                print(f"Image path from model: {image_path}")
-            else:
-                print(f"Invalid image index: {self.current_image_index}")
-                image_path = None
-
             # Save current labels before switching (if we have a current context)
             if (
-                self.current_image_path
-                and self.image_data_model.parent_directory
+                self.image_data_model.parent_directory
                 and self.annotation_layer
             ):
                 # Delegate saving to the model; pass explicit image index
@@ -436,9 +425,8 @@ class BaseNDApp(QWidget):
             # Set the current image index from the signal
             self.current_image_index = image_index
 
-            if image_layer and image_path:
+            if image_layer:
                 print(f"Setting up new image: {image_layer.name}")
-                print(f"New image path: {image_path}")
 
                 # Clean up existing layers BEFORE updating context
                 print("Cleaning up old layers...")
@@ -446,7 +434,6 @@ class BaseNDApp(QWidget):
 
                 # Update current context AFTER cleanup
                 print("Updating context...")
-                self.current_image_path = image_path
                 # parent_directory is managed by image_data_model, no need to store locally
 
                 print("Creating new layers with fresh labels...")
@@ -454,8 +441,6 @@ class BaseNDApp(QWidget):
             else:
                 print("Received invalid image data from sequence viewer")
                 self._cleanup_existing_layers()
-                # Clear current context
-                self.current_image_path = None
                 # parent_directory is managed by image_data_model
 
         except (
@@ -510,7 +495,7 @@ class BaseNDApp(QWidget):
     # - self.viewer
     # - self.image_layer, self.label_layer, self.points_layer, self.shapes_layer
     # - self.current_label_num
-    # - self.current_image_path (parent_directory managed by image_data_model)
+    # - self.current_image_index
     # - self._processing_image_change
     # - self.segmenter
 
