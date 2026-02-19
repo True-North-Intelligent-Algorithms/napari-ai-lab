@@ -31,12 +31,9 @@ class SimpleAugmenter(AugmenterBase):
             If False, compute normalization statistics from each patch individually.
             Default is True for consistency with inference normalization.
         """
-        super().__init__()  # Initialize parent class to set up directories
-        self.seed = seed
+        super().__init__(seed=seed)  # Initialize parent class with seed
         self.normalize = normalize
         self.use_global_stats = use_global_stats
-        if seed is not None:
-            np.random.seed(seed)
 
     def augment(
         self,

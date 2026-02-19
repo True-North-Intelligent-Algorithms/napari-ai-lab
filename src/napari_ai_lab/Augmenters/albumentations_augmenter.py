@@ -51,8 +51,7 @@ class AlbumentationsAugmenter(AugmenterBase):
         size_factor : float
             Size factor for random sized crop (0.0 to 1.0). Default is 0.8.
         """
-        super().__init__()  # Initialize parent class to set up directories
-        self.seed = seed
+        super().__init__(seed=seed)  # Initialize parent class with seed
         self.normalize = normalize
         self.use_global_stats = use_global_stats
         self.do_vertical_flip = do_vertical_flip
@@ -61,9 +60,6 @@ class AlbumentationsAugmenter(AugmenterBase):
         self.do_random_sized_crop = do_random_sized_crop
         self.do_random_brightness_contrast = do_random_brightness_contrast
         self.size_factor = size_factor
-
-        if seed is not None:
-            np.random.seed(seed)
 
     def _create_augmentation_pipeline(self, patch_size: int) -> A.Compose:
         """

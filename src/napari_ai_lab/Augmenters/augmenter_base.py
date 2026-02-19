@@ -18,19 +18,38 @@ class AugmenterBase(ABC):
         Subdirectory name for saving input images (default: "input0")
     ground_truth_dir : str
         Subdirectory name for saving ground truth masks (default: "ground_truth0")
+    seed : int or None
+        Random seed for reproducibility (default: None)
+    rng : np.random.RandomState
+        Random number generator instance for this augmenter
     global_norm_low : float or None
         Global low value for normalization (computed from full image)
     global_norm_high : float or None
         Global high value for normalization (computed from full image)
     """
 
-    def __init__(self):
-        """Initialize the augmenter with default directory names."""
+    def __init__(self, seed: int | None = None):
+        """
+        Initialize the augmenter with default directory names and optional seed.
+
+        Parameters
+        ----------
+        seed : int or None
+            Random seed for reproducibility. If None, uses random state.
+        """
         self.input_dir = "input0"
         self.ground_truth_dir = "ground_truth0"
+        self.seed = seed
         self.valid_coordinates = None
         self.global_norm_low = None
         self.global_norm_high = None
+
+        # Create a dedicated random number generator for this augmenter instance
+        # This ensures reproducibility and isolation from global random state
+        if seed is not None:
+            self.rng = np.random.RandomState(seed)
+        else:
+            self.rng = np.random.RandomState()
 
     def compute_global_normalization_stats(
         self,
@@ -270,9 +289,9 @@ class AugmenterBase(ABC):
         """
         # Check if valid coordinates are pre-computed
         if self.valid_coordinates is not None:
-            # Use cached valid coordinates
+            # Use cached valid coordinates with instance RNG
             return self.valid_coordinates[
-                np.random.randint(len(self.valid_coordinates))
+                self.rng.randint(len(self.valid_coordinates))
             ]
 
         # Standard random cropping
@@ -285,7 +304,7 @@ class AugmenterBase(ABC):
             else:
                 max_start = img_dim - patch_dim
                 start = (
-                    np.random.randint(0, max_start + 1) if max_start > 0 else 0
+                    self.rng.randint(0, max_start + 1) if max_start > 0 else 0
                 )
                 start_indices.append(start)
         return tuple(start_indices)
