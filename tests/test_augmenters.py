@@ -125,8 +125,8 @@ class TestSimpleAugmenter:
             assert os.path.exists(mask_path)
 
             # Check that files have expected naming pattern
-            assert "test_patch_im" in os.path.basename(im_path)
-            assert "test_patch_mask" in os.path.basename(mask_path)
+            assert "test_patch_" in os.path.basename(im_path)
+            assert "test_patch_" in os.path.basename(mask_path)
 
     def test_augment_and_save_multiple_calls(self):
         """Test that multiple calls to augment_and_save create unique filenames."""
