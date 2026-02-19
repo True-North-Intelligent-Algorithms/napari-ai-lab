@@ -225,6 +225,12 @@ MONAI UNet Automatic Segmentation:
         # Model will be loaded from disk
         self.model = None
 
+        # Set up a simple default updater function
+        # This will be used if no updater is passed to training/inference methods
+        self.updater = lambda message, progress: print(
+            f"[{progress}%] {message}"
+        )
+
         # Set supported axes
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
