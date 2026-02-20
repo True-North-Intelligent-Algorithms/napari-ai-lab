@@ -214,6 +214,24 @@ class ImageDataModel:
 
         return patches_dir
 
+    def delete_patches(self, axis: int | None = None):
+        """
+        Delete all patch files in the patches directory.
+
+        Args:
+            axis: Optional axis identifier to specify which patches directory to clear.
+                  If None, clears the base patches/ directory.
+                  If specified, clears patches/patches_axis_{axis}/ directory.
+        """
+        patches_dir = self.get_patches_directory(axis)
+
+        if patches_dir.exists() and patches_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(patches_dir)
+        else:
+            print(f"Patches directory does not exist: {patches_dir}")
+
     def get_models_directory(self) -> Path:
         """
         Get the directory for storing trained models.
@@ -498,6 +516,178 @@ class ImageDataModel:
             pass
 
         return None
+
+    def set_augmenter(self, augmenter):
+        """
+        Set the augmenter to use for patch generation.
+
+        Args:
+            augmenter: An augmenter instance (SimpleAugmenter, AlbumentationsAugmenter, etc.)
+        """
+        self.augmenter = augmenter
+
+    def set_patch_size(self, patch_size: tuple[int, ...]):
+        """
+        Set the patch size for augmentation.
+
+        Args:
+            patch_size: Tuple specifying patch dimensions (e.g., (128, 128) or (1, 128, 128))
+        """
+        self.patch_size = patch_size
+
+    def set_num_patches(self, num_patches: int):
+        """
+        Set the number of patches to generate.
+
+        Args:
+            num_patches: Number of patches to generate during augmentation
+        """
+        self.num_patches = num_patches
+
+    def setup_augmentation(
+        self,
+        image: np.ndarray,
+        annotations: np.ndarray,
+        mode: str = "valid_coordinates",
+        compute_global_stats: bool = True,
+        percentile_low: float = 1.0,
+        percentile_high: float = 99.0,
+    ):
+        """
+        Setup augmentation by computing normalization stats and/or valid coordinates.
+
+        Args:
+            image: Full image array
+            annotations: Full annotations array
+            mode: Augmentation mode - "valid_coordinates", "marked_roi", or "random_crop"
+                  (currently only "valid_coordinates" is implemented)
+            compute_global_stats: Whether to compute global normalization statistics
+            percentile_low: Lower percentile for normalization (default: 1.0)
+            percentile_high: Upper percentile for normalization (default: 99.0)
+
+        Raises:
+            ValueError: If augmenter or patch_size not set
+            NotImplementedError: If mode is not "valid_coordinates"
+        """
+        if not hasattr(self, "augmenter") or self.augmenter is None:
+            raise ValueError("Augmenter not set. Call set_augmenter() first.")
+
+        if not hasattr(self, "patch_size") or self.patch_size is None:
+            raise ValueError(
+                "Patch size not set. Call set_patch_size() first."
+            )
+
+        # Compute global normalization statistics if requested
+        if compute_global_stats and hasattr(
+            self.augmenter, "compute_global_normalization_stats"
+        ):
+            print(
+                "Computing global normalization statistics from full image..."
+            )
+            self.augmenter.compute_global_normalization_stats(
+                image, percentile_low, percentile_high
+            )
+
+        # Setup augmentation mode
+        if mode == "valid_coordinates":
+            if hasattr(self.augmenter, "create_valid_coordinates"):
+                print("Computing valid coordinates for patches...")
+                self.augmenter.create_valid_coordinates(
+                    annotations, image.shape, self.patch_size, axis=None
+                )
+                if hasattr(self.augmenter, "valid_coordinates"):
+                    print(
+                        f"Found {len(self.augmenter.valid_coordinates)} valid positions"
+                    )
+            else:
+                print(
+                    "Warning: Augmenter does not support create_valid_coordinates"
+                )
+        elif mode == "marked_roi":
+            raise NotImplementedError(
+                "marked_roi mode not yet implemented. Use 'valid_coordinates' or 'random_crop'."
+            )
+        elif mode == "random_crop":
+            # Random crop mode doesn't need special setup
+            print("Using random crop mode (no coordinate pre-computation)")
+        else:
+            raise ValueError(
+                f"Unknown augmentation mode: {mode}. Use 'valid_coordinates', 'marked_roi', or 'random_crop'."
+            )
+
+    def generate_patches(
+        self,
+        image: np.ndarray,
+        annotations: np.ndarray,
+        axis: str | None = None,
+        patch_base_name: str = "patch",
+        axes_string: str = "YX",
+        num_inputs: int = 1,
+        num_truths: int = 1,
+        sub_sample: int = 1,
+    ) -> Path:
+        """
+        Generate augmented patches and save them to the patches directory.
+
+        Args:
+            image: Full image array
+            annotations: Full annotations array
+            axis: Optional axis identifier for patches directory (e.g., "yx")
+            patch_base_name: Base name for patch files (default: "patch")
+            axes_string: String describing axes for info.json (e.g., "YX", "ZYX")
+            num_inputs: Number of input channels for info.json (default: 1)
+            num_truths: Number of truth classes for info.json (default: 1)
+            sub_sample: Subsampling factor for info.json (default: 1)
+
+        Returns:
+            Path to the patches directory
+
+        Raises:
+            ValueError: If augmenter, patch_size, or num_patches not set
+        """
+        if not hasattr(self, "augmenter") or self.augmenter is None:
+            raise ValueError("Augmenter not set. Call set_augmenter() first.")
+
+        if not hasattr(self, "patch_size") or self.patch_size is None:
+            raise ValueError(
+                "Patch size not set. Call set_patch_size() first."
+            )
+
+        if not hasattr(self, "num_patches") or self.num_patches is None:
+            raise ValueError(
+                "Number of patches not set. Call set_num_patches() first."
+            )
+
+        # Get patches directory
+        patches_dir = self.get_patches_directory(axis=axis)
+
+        # Generate patches
+        print(f"\nGenerating {self.num_patches} patches...")
+        for i in range(self.num_patches):
+            self.augmenter.augment_and_save(
+                image,
+                annotations,
+                str(patches_dir),
+                patch_base_name,
+                self.patch_size,
+                axis=None,
+            )
+            if (i + 1) % 10 == 0 or (i + 1) == self.num_patches:
+                print(f"  Created {i+1}/{self.num_patches} patches")
+
+        # Write info.json
+        print("\nWriting info.json...")
+        if hasattr(self.augmenter, "write_info"):
+            self.augmenter.write_info(
+                patch_path=str(patches_dir),
+                axes=axes_string,
+                num_inputs=num_inputs,
+                num_truths=num_truths,
+                sub_sample=sub_sample,
+            )
+
+        print(f"✅ Created {self.num_patches} patches in {patches_dir}")
+        return patches_dir
 
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"
