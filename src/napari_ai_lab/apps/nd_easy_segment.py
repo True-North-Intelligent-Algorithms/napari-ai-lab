@@ -276,10 +276,10 @@ class NDEasySegment(BaseNDApp):
             else:
                 segmentation_axis = input_axis
 
-            indices = get_current_slice_indices(
+            segmentation_indices = get_current_slice_indices(
                 self.viewer.dims.current_step, segmentation_axis
             )
-            self.predictions_layer.data[indices] = (
+            self.predictions_layer.data[segmentation_indices] = (
                 mask  # self.current_label_num
             )
             self.current_label_num += 1
