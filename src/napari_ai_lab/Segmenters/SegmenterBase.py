@@ -72,6 +72,7 @@ class SegmenterBase:
         self.name = self.__class__.__name__
         self._supported_axes = []
         self._potential_axes = []
+        self.axis_map = {}  # Maps input axis to output axis (e.g., YXC -> YX)
 
     @property
     def supported_axes(self):
@@ -179,6 +180,27 @@ class SegmenterBase:
             str or None: Version string if available, None otherwise.
         """
         return None
+
+    def get_segmentation_axis(self, input_axis):
+        """
+        Get the output segmentation axis given an input axis.
+
+        This method allows segmenters to indicate when they transform the axis
+        configuration, such as collapsing a channel dimension (YXC -> YX).
+
+        If the segmenter has an axis_map dictionary, it will be used to map
+        the input axis to the output axis. Otherwise, the input axis is returned
+        unchanged.
+
+        Args:
+            input_axis (str): The input axis configuration (e.g., 'YXC', 'YX', 'ZYX')
+
+        Returns:
+            str: The output segmentation axis configuration
+        """
+        if hasattr(self, "axis_map") and self.axis_map:
+            return self.axis_map.get(input_axis, input_axis)
+        return input_axis
 
     def __str__(self):
         """String representation of the segmenter."""

@@ -158,6 +158,11 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         self._supported_axes = ["YXC", "YX", "ZYX"]
         self._potential_axes = ["YXC", "YX", "ZYX"]
 
+        # Define axis mapping (input -> output)
+        # YXC collapses to YX (channel dimension removed)
+        # YX and ZYX remain unchanged
+        self.axis_map = {"YXC": "YX", "YX": "YX", "ZYX": "ZYX"}
+
     def are_dependencies_available(self):
         return _is_seg_everything_available
 

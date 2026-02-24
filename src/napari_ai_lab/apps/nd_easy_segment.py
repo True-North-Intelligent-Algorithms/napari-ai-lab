@@ -326,20 +326,12 @@ class NDEasySegment(BaseNDApp):
                 shapes=None,
             )
 
-            # Result axis can be smaller than the input axis (ie YXC input, YX output),
-            # keep only
-            # the spatial characters (Z, Y, X) from selected_axis. If
-            # that produces an empty string, fall back to 'YX'. Keep
-            # this small and direct; if the axis string is malformed
-            # we'll handle it later.
-            if len(selected_axis) > len(mask.shape):
-                segmentation_axis = "".join(
-                    [c for c in selected_axis if c in ("Z", "Y", "X")]
-                )
-                if segmentation_axis == "":
-                    segmentation_axis = "YX"
-            else:
-                segmentation_axis = selected_axis
+            # Get the segmentation axis from the segmenter
+            # This handles cases where the segmenter transforms the axis
+            # (e.g., YXC -> YX when channel dimension is collapsed)
+            segmentation_axis = self.segmenter.get_segmentation_axis(
+                selected_axis
+            )
 
             # save predictions via model
             self.image_data_model.save_predictions(
