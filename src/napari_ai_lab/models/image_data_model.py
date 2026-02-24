@@ -689,5 +689,28 @@ class ImageDataModel:
         print(f"✅ Created {self.num_patches} patches in {patches_dir}")
         return patches_dir
 
+    def segment(self, segmenter, image_slice, points=None, shapes=None):
+        """
+        Perform segmentation using the provided segmenter.
+
+        This method wraps the segmenter's segment call and automatically
+        provides the parent_directory from the model.
+
+        Args:
+            segmenter: The segmenter instance to use
+            image_slice: The image data to segment
+            points: Optional points for interactive segmentation
+            shapes: Optional shapes for interactive segmentation
+
+        Returns:
+            numpy.ndarray: Segmentation mask
+        """
+        return segmenter.segment(
+            image_slice,
+            points=points,
+            shapes=shapes,
+            parent_directory=self.parent_directory,
+        )
+
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"

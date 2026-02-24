@@ -184,11 +184,11 @@ class NDEasySegment(BaseNDApp):
                 )
 
             try:
-                mask = self.segmenter.segment(
+                mask = self.image_data_model.segment(
+                    self.segmenter,
                     image_data,
                     points=[latest_point],
                     shapes=None,
-                    parent_directory=self.image_data_model.parent_directory,
                 )
 
                 self.annotation_layer.data[mask] = self.current_label_num
@@ -318,12 +318,12 @@ class NDEasySegment(BaseNDApp):
 
             current_yx_slice = self.image_layer.data[indices]
 
-            # Call segmenter without points/shapes for automatic segmentation
-            mask = self.segmenter.segment(
+            # Call segmenter through model (provides parent_directory automatically)
+            mask = self.image_data_model.segment(
+                self.segmenter,
                 current_yx_slice,
                 points=None,
                 shapes=None,
-                parent_directory=self.image_data_model.parent_directory,
             )
 
             # Result axis can be smaller than the input axis (ie YXC input, YX output),
@@ -341,14 +341,6 @@ class NDEasySegment(BaseNDApp):
             else:
                 segmentation_axis = selected_axis
 
-            segmentation_indices = get_current_slice_indices(
-                current_step, segmentation_axis
-            )
-
-            self.predictions_layer.data[segmentation_indices] = mask
-            self.predictions_layer.refresh()
-            print("Automatic segmentation completed")
-
             # save predictions via model
             self.image_data_model.save_predictions(
                 mask,
@@ -356,6 +348,14 @@ class NDEasySegment(BaseNDApp):
                 current_step=current_step,
                 selected_axis=segmentation_axis,
             )
+
+            segmentation_indices = get_current_slice_indices(
+                current_step, segmentation_axis
+            )
+
+            self.predictions_layer.data[segmentation_indices] = mask
+            self.predictions_layer.refresh()
+            print("Automatic segmentation completed")
 
         except (
             AttributeError,
