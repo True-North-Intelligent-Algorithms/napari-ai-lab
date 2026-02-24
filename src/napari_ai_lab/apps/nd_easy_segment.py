@@ -5,7 +5,10 @@ This module provides a unified interface for both interactive (point/shape-based
 and automatic (full plane/volume) segmentation workflows.
 """
 
+import itertools
+
 import napari
+import numpy as np
 from qtpy.QtWidgets import (
     QComboBox,
     QGroupBox,
@@ -213,53 +216,115 @@ class NDEasySegment(BaseNDApp):
 
         print("Segmenting current image...")
 
-        # Print the axis mode the user chose
-        selected_axis = self.parameter_form.get_selected_axis()
-        print(f"User selected axis mode: {selected_axis}")
-
-        # Extract current slice based on selected axis mode
-        indices = get_current_slice_indices(
-            self.viewer.dims.current_step, selected_axis
-        )
-        current_yx_slice = self.image_layer.data[indices]
-
-        print(f"Current YX slice shape: {current_yx_slice.shape}")
-
-        self._segment_image_automatically(current_yx_slice)
+        self._segment_nd_slice(current_step=self.viewer.dims.current_step)
 
     def _on_segment_all(self):
-        """Segment all images in the directory automatically."""
+        """Segment all slices in the ND data automatically."""
         if self.image_layer is None:
             QMessageBox.warning(self, "Warning", "No images loaded")
             return
 
-        print("Segmenting all images...")
-        # Implementation for batch processing would go here
-        QMessageBox.information(
-            self, "Info", "Batch segmentation not yet implemented"
-        )
-
-    def _segment_image_automatically(self, image_data):
-        """Perform automatic segmentation on image data."""
         if not hasattr(self, "segmenter") or self.segmenter is None:
             QMessageBox.warning(self, "Warning", "No segmenter selected")
             return
 
+        print("Segmenting all slices...")
+
+        # Ensure segmenter is synced with current parameters
+        self.segmenter = self.parameter_form.sync_nd_operation_instance(
+            self.segmenter
+        )
+
+        # Get selected axis and dataset axis types
+        selected_axis = self.parameter_form.get_selected_axis()
+        dataset_axis_types = self.image_data_model.axis_types
+        image_shape = self.image_layer.data.shape
+
+        print(f"Selected axis: {selected_axis}")
+        print(f"Dataset axis types: {dataset_axis_types}")
+        print(f"Image shape: {image_shape}")
+
+        # Determine number of spatial dimensions
+        if selected_axis.endswith("ZYX"):
+            num_spatial = 3
+        elif selected_axis.endswith("YX"):
+            num_spatial = 2
+        else:
+            num_spatial = 2
+
+        # Calculate number of non-spatial dimensions
+        num_non_spatial = len(image_shape) - num_spatial
+
+        # Get shape of non-spatial dimensions
+        non_spatial_shape = image_shape[:num_non_spatial]
+
+        print(f"Non-spatial dimensions: {num_non_spatial}")
+        print(f"Non-spatial shape: {non_spatial_shape}")
+
+        # Calculate total number of slices
+        total_slices = (
+            int(np.prod(non_spatial_shape)) if non_spatial_shape else 1
+        )
+
+        print(f"Total slices to segment: {total_slices}")
+
+        # Iterate through all combinations of non-spatial indices
+        for idx, non_spatial_indices in enumerate(
+            itertools.product(*[range(dim) for dim in non_spatial_shape])
+        ):
+            # Build current_step tuple
+            current_step = non_spatial_indices + (0,) * num_spatial
+
+            print(
+                f"Processing slice {idx + 1}/{total_slices}: step={current_step}"
+            )
+
+            # Segment the slice
+            self._segment_nd_slice(current_step=current_step)
+
+        print(f"✅ Completed segmentation of all {total_slices} slices")
+        QMessageBox.information(
+            self,
+            "Success",
+            f"Successfully segmented all {total_slices} slices",
+        )
+
+    def _segment_nd_slice(self, current_step: tuple):
+        """Perform automatic segmentation on image data.
+
+        Args:
+            image_data: The MD slice to segment
+            input_axis: The axis mode (e.g., "YX", "ZYX", "YXC")
+            current_step: The current step/position in the ND data
+        """
+
         try:
+
+            if not hasattr(self, "segmenter") or self.segmenter is None:
+                QMessageBox.warning(self, "Warning", "No segmenter selected")
+                return
+
             # Ensure segmenter is synced with current parameters
             self.segmenter = self.parameter_form.sync_nd_operation_instance(
                 self.segmenter
             )
 
+            # Print the axis mode the user chose
+            selected_axis = self.parameter_form.get_selected_axis()
+            print(f"User selected axis mode: {selected_axis}")
+
+            # Extract current slice based on selected axis mode
+            indices = get_current_slice_indices(current_step, selected_axis)
+
+            current_yx_slice = self.image_layer.data[indices]
+
             # Call segmenter without points/shapes for automatic segmentation
             mask = self.segmenter.segment(
-                image_data,
+                current_yx_slice,
                 points=None,
                 shapes=None,
                 parent_directory=self.image_data_model.parent_directory,
             )
-
-            input_axis = self.parameter_form.get_selected_axis()
 
             # Result axis can be smaller than the input axis (ie YXC input, YX output),
             # keep only
@@ -267,22 +332,20 @@ class NDEasySegment(BaseNDApp):
             # that produces an empty string, fall back to 'YX'. Keep
             # this small and direct; if the axis string is malformed
             # we'll handle it later.
-            if len(input_axis) > len(mask.shape):
+            if len(selected_axis) > len(mask.shape):
                 segmentation_axis = "".join(
-                    [c for c in input_axis if c in ("Z", "Y", "X")]
+                    [c for c in selected_axis if c in ("Z", "Y", "X")]
                 )
                 if segmentation_axis == "":
                     segmentation_axis = "YX"
             else:
-                segmentation_axis = input_axis
+                segmentation_axis = selected_axis
 
             segmentation_indices = get_current_slice_indices(
-                self.viewer.dims.current_step, segmentation_axis
+                current_step, segmentation_axis
             )
-            self.predictions_layer.data[segmentation_indices] = (
-                mask  # self.current_label_num
-            )
-            self.current_label_num += 1
+
+            self.predictions_layer.data[segmentation_indices] = mask
             self.predictions_layer.refresh()
             print("Automatic segmentation completed")
 
@@ -290,7 +353,7 @@ class NDEasySegment(BaseNDApp):
             self.image_data_model.save_predictions(
                 mask,
                 self.current_image_index,
-                current_step=self.viewer.dims.current_step,
+                current_step=current_step,
                 selected_axis=segmentation_axis,
             )
 
