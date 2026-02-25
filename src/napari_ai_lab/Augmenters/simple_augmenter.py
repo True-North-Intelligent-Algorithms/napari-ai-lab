@@ -1,8 +1,11 @@
+from dataclasses import dataclass, field
+
 import numpy as np
 
 from .augmenter_base import AugmenterBase
 
 
+@dataclass
 class SimpleAugmenter(AugmenterBase):
     """
     A simple augmenter that performs random cropping of images and masks.
@@ -11,29 +14,75 @@ class SimpleAugmenter(AugmenterBase):
     image and mask along the specified axis.
     """
 
-    def __init__(
-        self,
-        seed: int | None = None,
-        normalize: bool = True,
-        use_global_stats: bool = True,
-    ):
-        """
-        Initialize the SimpleAugmenter.
+    # Augmenter name
+    name: str = field(default="SimpleAugmenter", init=False, repr=False)
 
-        Parameters
-        ----------
-        seed : Optional[int]
-            Random seed for reproducibility. If None, uses random state.
-        normalize : bool
-            Whether to normalize images using percentile normalization. Default is True.
-        use_global_stats : bool
-            If True, use global normalization statistics (computed from full image).
-            If False, compute normalization statistics from each patch individually.
-            Default is True for consistency with inference normalization.
+    # Instructions for users
+    instructions: str = field(
+        default="""
+Simple Random Crop Augmentation:
+• Randomly crops patches from images and annotations
+• Normalization: Percentile-based intensity normalization
+• Use Global Stats: Apply same normalization across all patches
+• Seed: Set for reproducible augmentation (optional)
+• Best for: Basic data augmentation for training
+    """,
+        init=False,
+        repr=False,
+    )
+
+    # Augmentation parameters
+    normalize: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    use_global_stats: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    seed: int | None = field(
+        default=None,
+        metadata={
+            "type": "int",
+            "param_type": "augmentation",
+            "min": 0,
+            "max": 99999,
+            "step": 1,
+            "default": 42,
+            "nullable": True,
+        },
+    )
+
+    def __post_init__(self):
+        """Initialize parent class after dataclass initialization."""
+        super().__init__(seed=self.seed)
+        self.normalize = self.normalize
+        self.use_global_stats = self.use_global_stats
+
+    @classmethod
+    def register(cls):
+        """Register this augmenter with the framework."""
+        return AugmenterBase.register_framework("SimpleAugmenter", cls)
+
+    def get_parameters_dict(self):
         """
-        super().__init__(seed=seed)  # Initialize parent class with seed
-        self.normalize = normalize
-        self.use_global_stats = use_global_stats
+        Return current parameter values as a dict (same format as segmenters).
+        """
+        return {
+            "normalize": self.normalize,
+            "use_global_stats": self.use_global_stats,
+            "seed": self.seed,
+        }
 
     def augment(
         self,

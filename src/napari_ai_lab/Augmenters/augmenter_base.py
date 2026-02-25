@@ -7,10 +7,10 @@ from ..utilities.dl_util import normalize_image, normalize_percentile
 
 class AugmenterBase(ABC):
     """
-    Abstract base class for image and mask augmentation.
+    Abstract base class for image and mask augmentation with registry system.
 
     This class provides the interface for augmenting images and their corresponding
-    masks, with support for saving augmented patches to disk.
+    masks, with support for saving augmented patches to disk and framework registration.
 
     Attributes
     ----------
@@ -27,6 +27,54 @@ class AugmenterBase(ABC):
     global_norm_high : float or None
         Global high value for normalization (computed from full image)
     """
+
+    # Registry for all augmenter frameworks
+    registry = {}
+
+    @classmethod
+    def register_framework(cls, name, framework):
+        """
+        Add a framework to the registry.
+
+        Args:
+            name (str): The name of the framework.
+            framework (AugmenterBase): The framework class to register.
+        """
+        cls.registry[name] = framework
+        print(f"Registered augmenter: {name}")
+
+    @classmethod
+    def get_registered_frameworks(cls):
+        """
+        Get all registered frameworks for this augmenter type.
+
+        Returns:
+            dict: Dictionary of registered frameworks {name: framework_class}
+        """
+        return cls.registry.copy()
+
+    @classmethod
+    def get_framework(cls, name):
+        """
+        Get a specific framework by name.
+
+        Args:
+            name (str): The name of the framework to retrieve.
+
+        Returns:
+            AugmenterBase: The framework class, or None if not found.
+        """
+        return cls.registry.get(name)
+
+    @classmethod
+    def list_frameworks(cls):
+        """
+        List all registered framework names for this augmenter type.
+
+        Returns:
+            list: List of registered framework names.
+        """
+        return list(cls.registry.keys())
 
     def __init__(self, seed: int | None = None):
         """
@@ -369,3 +417,15 @@ class AugmenterBase(ABC):
             json.dump(info, f, indent=2)
 
         print(f"✓ Created info.json at {info_path}")
+
+    def get_parameters_dict(self):
+        """
+        Get current parameters as a dictionary.
+
+        This method should be overridden by derived classes that use dataclass
+        parameters to return the current parameter values.
+
+        Returns:
+            dict: Dictionary of parameter names to current values.
+        """
+        return {}

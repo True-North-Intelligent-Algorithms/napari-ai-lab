@@ -1,9 +1,12 @@
+from dataclasses import dataclass, field
+
 import albumentations as A
 import numpy as np
 
 from .augmenter_base import AugmenterBase
 
 
+@dataclass
 class AlbumentationsAugmenter(AugmenterBase):
     """
     An augmenter that uses Albumentations library for image augmentation.
@@ -13,53 +16,147 @@ class AlbumentationsAugmenter(AugmenterBase):
     brightness/contrast adjustments.
     """
 
-    def __init__(
-        self,
-        seed: int | None = None,
-        normalize: bool = True,
-        use_global_stats: bool = True,
-        do_vertical_flip: bool = True,
-        do_horizontal_flip: bool = True,
-        do_random_rotate90: bool = True,
-        do_random_sized_crop: bool = False,
-        do_random_brightness_contrast: bool = True,
-        size_factor: float = 0.8,
-    ):
-        """
-        Initialize the AlbumentationsAugmenter.
+    # Augmenter name
+    name: str = field(
+        default="AlbumentationsAugmenter", init=False, repr=False
+    )
 
-        Parameters
-        ----------
-        seed : Optional[int]
-            Random seed for reproducibility. If None, uses random state.
-        normalize : bool
-            Whether to normalize images using percentile normalization. Default is True.
-        use_global_stats : bool
-            If True, use global normalization statistics (computed from full image).
-            If False, compute normalization statistics from each patch individually.
-            Default is True for consistency with inference normalization.
-        do_vertical_flip : bool
-            Whether to apply vertical flips. Default is True.
-        do_horizontal_flip : bool
-            Whether to apply horizontal flips. Default is True.
-        do_random_rotate90 : bool
-            Whether to apply random 90-degree rotations. Default is True.
-        do_random_sized_crop : bool
-            Whether to apply random sized crop (with resize). Default is False.
-        do_random_brightness_contrast : bool
-            Whether to apply random brightness/contrast adjustments. Default is True.
-        size_factor : float
-            Size factor for random sized crop (0.0 to 1.0). Default is 0.8.
+    # Instructions for users
+    instructions: str = field(
+        default="""
+Albumentations Advanced Augmentation:
+• Random flips (vertical/horizontal)
+• Random 90-degree rotations
+• Random sized crop with resize
+• Random brightness/contrast adjustments
+• Normalization: Percentile-based intensity normalization
+• Best for: Advanced data augmentation with diverse transforms
+    """,
+        init=False,
+        repr=False,
+    )
+
+    # Augmentation parameters
+    normalize: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    use_global_stats: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    do_vertical_flip: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    do_horizontal_flip: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    do_random_rotate90: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    do_random_sized_crop: bool = field(
+        default=False,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": False,
+        },
+    )
+
+    do_random_brightness_contrast: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": True,
+        },
+    )
+
+    size_factor: float = field(
+        default=0.8,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 0.1,
+            "max": 1.0,
+            "step": 0.1,
+            "default": 0.8,
+        },
+    )
+
+    seed: int | None = field(
+        default=None,
+        metadata={
+            "type": "int",
+            "param_type": "augmentation",
+            "min": 0,
+            "max": 99999,
+            "step": 1,
+            "default": 42,
+            "nullable": True,
+        },
+    )
+
+    def __post_init__(self):
+        """Initialize parent class after dataclass initialization."""
+        super().__init__(seed=self.seed)
+        self.normalize = self.normalize
+        self.use_global_stats = self.use_global_stats
+        self.do_vertical_flip = self.do_vertical_flip
+        self.do_horizontal_flip = self.do_horizontal_flip
+        self.do_random_rotate90 = self.do_random_rotate90
+        self.do_random_sized_crop = self.do_random_sized_crop
+        self.do_random_brightness_contrast = self.do_random_brightness_contrast
+        self.size_factor = self.size_factor
+
+    @classmethod
+    def register(cls):
+        """Register this augmenter with the framework."""
+        return AugmenterBase.register_framework("AlbumentationsAugmenter", cls)
+
+    def get_parameters_dict(self):
         """
-        super().__init__(seed=seed)  # Initialize parent class with seed
-        self.normalize = normalize
-        self.use_global_stats = use_global_stats
-        self.do_vertical_flip = do_vertical_flip
-        self.do_horizontal_flip = do_horizontal_flip
-        self.do_random_rotate90 = do_random_rotate90
-        self.do_random_sized_crop = do_random_sized_crop
-        self.do_random_brightness_contrast = do_random_brightness_contrast
-        self.size_factor = size_factor
+        Return current parameter values as a dict (same format as segmenters).
+        """
+        return {
+            "normalize": self.normalize,
+            "use_global_stats": self.use_global_stats,
+            "do_vertical_flip": self.do_vertical_flip,
+            "do_horizontal_flip": self.do_horizontal_flip,
+            "do_random_rotate90": self.do_random_rotate90,
+            "do_random_sized_crop": self.do_random_sized_crop,
+            "do_random_brightness_contrast": self.do_random_brightness_contrast,
+            "size_factor": self.size_factor,
+            "seed": self.seed,
+        }
 
     def _create_augmentation_pipeline(self, patch_size: int) -> A.Compose:
         """
