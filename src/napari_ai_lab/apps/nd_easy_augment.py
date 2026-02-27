@@ -7,7 +7,14 @@ Uses nd_operation_widget for dynamic parameter controls based on selected augmen
 """
 
 import napari
-from qtpy.QtWidgets import QComboBox, QLabel, QVBoxLayout
+from qtpy.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+)
 
 from ..Augmenters import AugmenterBase
 from ..models import ImageDataModel
@@ -52,6 +59,54 @@ class NDEasyAugment(BaseNDApp):
             param_type_to_parse="augmentation"
         )
         self.layout().addWidget(self.augmentation_form)
+
+        # Add patch size controls
+        patch_size_layout = QHBoxLayout()
+        patch_size_layout.addWidget(QLabel("Patch Size (Y):"))
+        self.patch_size_y_spinbox = QSpinBox()
+        self.patch_size_y_spinbox.setMinimum(16)
+        self.patch_size_y_spinbox.setMaximum(2048)
+        self.patch_size_y_spinbox.setValue(128)
+        self.patch_size_y_spinbox.setSingleStep(16)
+        patch_size_layout.addWidget(self.patch_size_y_spinbox)
+
+        patch_size_layout.addWidget(QLabel("Patch Size (X):"))
+        self.patch_size_x_spinbox = QSpinBox()
+        self.patch_size_x_spinbox.setMinimum(16)
+        self.patch_size_x_spinbox.setMaximum(2048)
+        self.patch_size_x_spinbox.setValue(128)
+        self.patch_size_x_spinbox.setSingleStep(16)
+        patch_size_layout.addWidget(self.patch_size_x_spinbox)
+
+        self.layout().addLayout(patch_size_layout)
+
+        # Add number of patches control
+        num_patches_layout = QHBoxLayout()
+        num_patches_layout.addWidget(QLabel("Number of Patches:"))
+        self.num_patches_spinbox = QSpinBox()
+        self.num_patches_spinbox.setMinimum(1)
+        self.num_patches_spinbox.setMaximum(10000)
+        self.num_patches_spinbox.setValue(200)
+        self.num_patches_spinbox.setSingleStep(10)
+        num_patches_layout.addWidget(self.num_patches_spinbox)
+        self.layout().addLayout(num_patches_layout)
+
+        # Add buttons for augmentation operations
+        buttons_layout = QHBoxLayout()
+
+        self.perform_augmentation_button = QPushButton("Perform Augmentations")
+        self.perform_augmentation_button.clicked.connect(
+            self._on_perform_augmentations
+        )
+        buttons_layout.addWidget(self.perform_augmentation_button)
+
+        self.delete_augmentations_button = QPushButton("Delete Augmentations")
+        self.delete_augmentations_button.clicked.connect(
+            self._on_delete_augmentations
+        )
+        buttons_layout.addWidget(self.delete_augmentations_button)
+
+        self.layout().addLayout(buttons_layout)
 
         # Populate augmenter combo with registered frameworks
         self._populate_augmenter_combo()
@@ -144,3 +199,89 @@ class NDEasyAugment(BaseNDApp):
         if hasattr(self, "augmenter") and self.augmenter is not None:
             return self.augmenter.get_parameters_dict()
         return {}
+
+    def _on_perform_augmentations(self):
+        """Perform augmentations by generating patches."""
+        # Validate that we have an augmenter
+        if not hasattr(self, "augmenter") or self.augmenter is None:
+            print("⚠️ No augmenter selected!")
+            return
+
+        # Validate that we have image and annotations
+        if not hasattr(self, "image_layer") or self.image_layer is None:
+            print("⚠️ No image loaded!")
+            return
+
+        if (
+            not hasattr(self, "annotation_layer")
+            or self.annotation_layer is None
+        ):
+            print("⚠️ No annotations layer!")
+            return
+
+        try:
+            # Get current values from UI
+            patch_size_y = self.patch_size_y_spinbox.value()
+            patch_size_x = self.patch_size_x_spinbox.value()
+            num_patches = self.num_patches_spinbox.value()
+
+            # Sync augmenter parameters from form back to augmenter instance
+            # (in case user changed any parameters in the UI)
+            self.augmenter = self.augmentation_form.sync_nd_operation_instance(
+                self.augmenter
+            )
+
+            # Configure the model
+            self.image_data_model.set_augmenter(self.augmenter)
+            self.image_data_model.set_patch_size((patch_size_y, patch_size_x))
+            self.image_data_model.set_num_patches(num_patches)
+
+            # Get image and annotations data
+            image = self.image_layer.data
+            annotations = self.annotation_layer.data
+
+            print("\n🔧 Setting up augmentation...")
+            print(f"  Patch size: ({patch_size_y}, {patch_size_x})")
+            print(f"  Number of patches: {num_patches}")
+
+            # Setup augmentation (compute stats, valid coordinates, etc.)
+            self.image_data_model.setup_augmentation(
+                image=image,
+                annotations=annotations,
+                mode="valid_coordinates",
+                compute_global_stats=True,
+            )
+
+            # Generate patches
+            print("\n🎨 Generating patches...")
+            patches_dir = self.image_data_model.generate_patches(
+                image=image,
+                annotations=annotations,
+                axis="yx",
+                axes_string="YX",
+            )
+
+            print("\n✅ Augmentation complete!")
+            print(f"📁 Patches saved to: {patches_dir}")
+
+        except (ValueError, RuntimeError, OSError, AttributeError) as e:
+            print(f"\n❌ Error during augmentation: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _on_delete_augmentations(self):
+        """Delete augmentation patches by removing the patches directory."""
+        try:
+            print("\n🗑️  Deleting augmentation patches...")
+
+            # Delete patches (axis=None means delete base patches/ directory)
+            self.image_data_model.delete_patches(axis=None)
+
+            print("✅ Augmentation patches deleted successfully!")
+
+        except (OSError, AttributeError) as e:
+            print(f"\n❌ Error deleting patches: {e}")
+            import traceback
+
+            traceback.print_exc()
