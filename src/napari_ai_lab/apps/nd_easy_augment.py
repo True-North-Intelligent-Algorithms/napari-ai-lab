@@ -231,17 +231,32 @@ class NDEasyAugment(BaseNDApp):
                 self.augmenter
             )
 
-            # Configure the model
-            self.image_data_model.set_augmenter(self.augmenter)
-            self.image_data_model.set_patch_size((patch_size_y, patch_size_x))
-            self.image_data_model.set_num_patches(num_patches)
-
             # Get image and annotations data
             image = self.image_layer.data
             annotations = self.annotation_layer.data
 
+            # Adjust patch size based on image dimensions
+            # If image is 3D, use (1, Y, X) for 2D slices from 3D data
+            # If image is 2D, use (Y, X)
+            if len(image.shape) == 3:
+                patch_size = (1, patch_size_y, patch_size_x)
+                print(
+                    f"\n📐 Detected 3D image, using patch size: {patch_size}"
+                )
+            else:
+                patch_size = (patch_size_y, patch_size_x)
+                print(
+                    f"\n📐 Detected 2D image, using patch size: {patch_size}"
+                )
+
+            # Configure the model
+            self.image_data_model.set_augmenter(self.augmenter)
+            self.image_data_model.set_patch_size(patch_size)
+            self.image_data_model.set_num_patches(num_patches)
+
             print("\n🔧 Setting up augmentation...")
-            print(f"  Patch size: ({patch_size_y}, {patch_size_x})")
+            print(f"  Image shape: {image.shape}")
+            print(f"  Patch size: {patch_size}")
             print(f"  Number of patches: {num_patches}")
 
             # Setup augmentation (compute stats, valid coordinates, etc.)
