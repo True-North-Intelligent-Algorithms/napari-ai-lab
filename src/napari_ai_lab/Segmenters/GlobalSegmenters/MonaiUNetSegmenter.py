@@ -88,6 +88,15 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
+    model_name_prefix: str = field(
+        default="",
+        metadata={
+            "type": "str",
+            "param_type": "training",
+            "default": "",
+        },
+    )
+
     sparse: bool = field(
         default=True,
         metadata={
