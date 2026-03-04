@@ -243,6 +243,24 @@ class ImageDataModel:
         models_dir.mkdir(parents=True, exist_ok=True)
         return models_dir
 
+    def generate_model_name(self, segmenter) -> str:
+        """
+        Generate a unique model name based on segmenter type and current datetime.
+
+        Args:
+            segmenter: The segmenter instance to generate a name for
+
+        Returns:
+            str: Model name in format <SegmenterClassName>_YYYYMMDD_HHMMSS.pth
+        """
+        from datetime import datetime
+
+        # Generate model name: <SegmenterClassName>_YYYYMMDD_HHMMSS.pth
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        segmenter_class_name = segmenter.__class__.__name__
+        model_name = f"{segmenter_class_name}_{timestamp}.pth"
+        return model_name
+
     def get_parent_directory(self) -> Path:
         """
         Get the parent directory containing images.
