@@ -387,18 +387,48 @@ class NDEasySegment(BaseNDApp):
             training_params = dialog.get_training_parameters()
             print(f"Training parameters accepted: {training_params}")
 
+            # Get the selected axis to find the correct patches directory
+            selected_axis = self.parameter_form.get_selected_axis()
+            if selected_axis:
+                # Convert axis to lowercase for directory name (e.g., "YX" -> "yx")
+                axis_lower = selected_axis.lower()
+                print(f"Using axis: {axis_lower} for patches directory")
+            else:
+                axis_lower = None
+                print("No axis selected, using default patches directory")
+
             # Set patch path from the image data model
             if hasattr(self.segmenter, "patch_path"):
-                patch_dir = self.image_data_model.get_patches_directory()
+                patch_dir = self.image_data_model.get_patches_directory(
+                    axis=axis_lower
+                )
                 self.segmenter.patch_path = str(patch_dir)
                 print(f"Set patch path to: {patch_dir}")
+
+            # Sync training parameters from widget to segmenter
+            for param_name, param_value in training_params.items():
+                setattr(self.segmenter, param_name, param_value)
+
+            # Set model save directory for training
+            models_dir = self.image_data_model.get_models_directory()
+            self.segmenter.model_save_dir = str(models_dir)
+            print(f"Set model save directory to: {models_dir}")
+
+            # Generate unique model name based on segmenter type and timestamp
+            model_name = self.image_data_model.generate_model_name(
+                self.segmenter
+            )
+            self.segmenter.model_name = model_name
+            print(f"Set model name to: {model_name}")
 
             # Call the train method
             try:
                 print("Starting training...")
+
                 result = self.segmenter.train()
 
                 if result.get("success"):
+
                     QMessageBox.information(
                         self,
                         "Training Complete",
@@ -410,6 +440,12 @@ class NDEasySegment(BaseNDApp):
                         "Training Status",
                         f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
                     )
+
+                # Update UI to show where model was saved
+                self.parameter_form.set_parameter(
+                    "model_file_path", self.segmenter.model_file_path
+                )
+
             except (RuntimeError, ValueError, TypeError, OSError) as e:
                 QMessageBox.critical(
                     self,

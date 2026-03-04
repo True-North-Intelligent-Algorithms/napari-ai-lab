@@ -78,12 +78,21 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
-    model_name: str = field(
+    model_file_path: str = field(
         default="",
         metadata={
             "type": "file",
             "param_type": "inference",
             "file_type": "file",
+            "default": "",
+        },
+    )
+
+    model_save_dir: str = field(
+        default="",
+        metadata={
+            "type": "str",
+            "param_type": "training",
             "default": "",
         },
     )
@@ -245,31 +254,11 @@ MONAI UNet Automatic Segmentation:
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
 
     def __setattr__(self, name, value):
-        """Override setattr to detect model_name changes."""
-        # Get old value if it exists
-        old_value = getattr(self, name, None) if hasattr(self, name) else None
-
+        """Override setattr to detect parameter changes."""
         # Set the new value
         super().__setattr__(name, value)
 
-        # Check if this is model_name and value changed
-        if name == "model_name" and old_value != value and value:
-            print(f"🔄 Model name changed from '{old_value}' to '{value}'")
-            self._on_model_path_changed(value)
-
-    def _on_model_path_changed(self, model_path: str):
-        """Handle model name changes - load the PyTorch model."""
-        print(f"📁 Loading MONAI UNet model from: {model_path}")
-
-        try:
-            self.model = torch.load(model_path, weights_only=False)
-            print(
-                f"✅ Successfully loaded MONAI UNet model from: {model_path}"
-            )
-            print(f"   Model type: {type(self.model)}")
-        except Exception as e:  # noqa
-            print(f"❌ Failed to load model from {model_path}: {e}")
-            self.model = None
+        # Auto-load hook removed - use load_model() explicitly to load models
 
     def are_dependencies_available(self):
         """
@@ -291,18 +280,32 @@ MONAI UNet Automatic Segmentation:
                 return "monai-unknown"
         return None
 
-    def load_model(self, model_path: str):
+    def load_model(self, model_file_path: str):
         """
-        Load a trained model from disk.
+        Explicitly load a trained model from disk.
 
         Args:
-            model_path (str): Path to the saved model file (.pth)
+            model_file_path (str): Full path to the saved model file (.pth)
         """
         if not _is_monai_available:
             raise ImportError("MONAI is not available. Cannot load model.")
 
-        # Setting model_name will trigger __setattr__ which loads the model
-        self.model_name = model_path
+        if not Path(model_file_path).exists():
+            raise FileNotFoundError(f"Model file not found: {model_file_path}")
+
+        print(f"📁 Loading MONAI UNet model from: {model_file_path}")
+
+        try:
+            self.model = torch.load(model_file_path, weights_only=False)
+            self.model_file_path = model_file_path
+            print(
+                f"✅ Successfully loaded MONAI UNet model from: {model_file_path}"
+            )
+            print(f"   Model type: {type(self.model)}")
+        except Exception as e:  # noqa
+            print(f"❌ Failed to load model from {model_file_path}: {e}")
+            self.model = None
+            raise
 
     def segment(self, image, normalize=True, **kwargs):
         """
@@ -571,7 +574,9 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
                 checkpoint_name = (
                     model_path_obj.stem + "_checkpoint" + model_path_obj.suffix
                 )
-                torch.save(net, Path(self.model_path) / Path(checkpoint_name))
+                torch.save(
+                    net, Path(self.model_save_dir) / Path(checkpoint_name)
+                )
 
             if self.updater is not None:
                 progress = int(epoch / self.num_epochs * 100)
@@ -796,12 +801,16 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
             sparse=self.sparse,
         )
 
-        torch.save(self.model, Path(self.model_path) / self.model_name)
+        # Save the trained model
+        torch.save(self.model, Path(self.model_save_dir) / self.model_name)
+
+        # Record where model was saved (no loading needed - model already in memory)
+        self.model_file_path = str(Path(self.model_save_dir) / self.model_name)
 
         # Save training and validation losses to CSV
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         csv_name = Path(self.model_name).stem + f"_{timestamp}.csv"
-        csv_path = Path(self.model_path) / csv_name
+        csv_path = Path(self.model_save_dir) / csv_name
         with open(csv_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(["Epoch", "Training Loss", "Validation Loss"])
@@ -817,7 +826,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
         return {
             "success": False,
-            "message": "Training implementation coming soon",
+            "message": "Training finished",
             "cuda_present": cuda_present,
             "ndevices": ndevices,
             "device": str(device),
