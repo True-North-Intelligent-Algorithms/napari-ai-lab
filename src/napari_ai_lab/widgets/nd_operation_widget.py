@@ -485,6 +485,32 @@ class NDOperationWidget(QWidget):
         """
         return self.parameter_values.copy()
 
+    def set_parameter(self, field_name: str, value: Any):
+        """
+        Set a single parameter value programmatically.
+
+        Args:
+            field_name: Name of the parameter to set.
+            value: Value to set for the parameter.
+        """
+        if field_name in self.parameter_widgets:
+            widget = self.parameter_widgets[field_name]
+
+            # Set value based on widget type
+            if hasattr(widget, "line_edit"):  # File widget
+                widget.line_edit.setText(str(value))
+            elif hasattr(widget, "spinbox"):  # Integer widget with spinbox
+                widget.spinbox.setValue(value)
+            elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                widget.setValue(value)
+            elif isinstance(widget, QCheckBox):
+                widget.setChecked(value)
+            elif hasattr(widget, "setCurrentText"):  # ComboBox
+                widget.setCurrentText(str(value))
+
+            # Update stored value
+            self.parameter_values[field_name] = value
+
     def set_parameters(self, parameters: dict[str, Any]):
         """
         Set parameter values programmatically.
@@ -493,21 +519,7 @@ class NDOperationWidget(QWidget):
             parameters: Dictionary of parameter names to values.
         """
         for field_name, value in parameters.items():
-            if field_name in self.parameter_widgets:
-                widget = self.parameter_widgets[field_name]
-
-                # Set value based on widget type
-                if hasattr(widget, "spinbox"):  # Integer widget with spinbox
-                    widget.spinbox.setValue(value)
-                elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
-                    widget.setValue(value)
-                elif isinstance(widget, QCheckBox):
-                    widget.setChecked(value)
-                elif hasattr(widget, "setCurrentText"):  # ComboBox
-                    widget.setCurrentText(str(value))
-
-                # Update stored value
-                self.parameter_values[field_name] = value
+            self.set_parameter(field_name, value)
 
     def update_nd_operation_parameters(self):
         """
