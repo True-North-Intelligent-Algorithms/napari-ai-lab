@@ -276,6 +276,16 @@ class NDEasyAugment(BaseNDApp):
                 axes_string="YX",
             )
 
+            # Write info.json with patch metadata
+            print("📝 Writing patch metadata (info.json)...")
+            self.augmenter.write_info(
+                patch_path=str(patches_dir),
+                axes="YX",
+                num_inputs=1,
+                num_truths=1,
+                sub_sample=1,
+            )
+
             print("\n✅ Augmentation complete!")
             print(f"📁 Patches saved to: {patches_dir}")
 
