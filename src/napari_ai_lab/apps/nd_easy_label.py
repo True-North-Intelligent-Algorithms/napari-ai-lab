@@ -28,15 +28,11 @@ class NDEasyLabel(BaseNDApp):
     def setup_ui(self):
         """Set up the user interface."""
 
-        btn = QPushButton("Click me!")
-        btn.clicked.connect(self._on_click)
-
         # Add directory selection button
         self.dir_btn = QPushButton("Open Image Directory")
         self.dir_btn.clicked.connect(self._on_open_directory)
 
         self.setLayout(QVBoxLayout())
-        self.layout().addWidget(btn)
         self.layout().addWidget(self.dir_btn)
 
         # Add Interactive Segmenter selection
@@ -57,9 +53,6 @@ class NDEasyLabel(BaseNDApp):
 
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
-
-    def _on_click(self):
-        print("Welcome to NDEasyLabel! Let's Go!")
 
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""
