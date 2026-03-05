@@ -564,10 +564,6 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
                 val_loss_str = f", validation loss: {average_val_loss:.4f}"
                 net.train()
 
-            print(
-                f"Epoch {epoch} - training loss: {average_loss:.4f}{val_loss_str}"
-            )
-
             if epoch % self.save_interval == 0 and epoch > 0:
                 # Insert 'checkpoint' before the file extension
                 model_path_obj = Path(self.model_name)
@@ -587,7 +583,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
             epoch += 1
 
-    def train(self, updater=None):
+    def train(self, updater=None, use_tqdm=False):
         """
         Train the MONAI UNet model.
 
@@ -598,6 +594,9 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         Args:
             updater (callable, optional): A callback function for progress updates.
                 Example: updater(epoch=10, loss=0.5, status="Training...")
+            use_tqdm (bool, optional): If True, use tqdm progress bar for training.
+                Recommended for notebook environments to avoid excessive output.
+                Defaults to False.
 
         Returns:
             dict: Training results containing success status and metrics.
@@ -630,9 +629,6 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         # - Return training metrics
 
         patch_path = Path(self.patch_path)
-
-        if updater is None:
-            updater = self.updater
 
         if updater is not None:
             updater("Training Monai Semantic model", 0)
@@ -799,6 +795,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
             device,
             validation_loader=validation_loader,
             sparse=self.sparse,
+            use_tqdm=use_tqdm,
         )
 
         # Save the trained model
