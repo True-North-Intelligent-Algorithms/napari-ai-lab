@@ -765,10 +765,6 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         if self.num_classes > 2:
             weights[2] = self.weight_c3
 
-        weights[0] = 0.33
-        weights[1] = 0.33
-        weights[2] = 0.33
-
         # weights = weights*0.01
 
         # loss_function = torch.nn.CrossEntropyLoss(ignore_index=-1, weight=weights).to(device)
