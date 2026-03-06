@@ -47,8 +47,8 @@ def test_nd_easy_segment_creates_prediction():
         )
 
         segmenter._on_model_path_changed(model_path)
-        nd_easy_segment_widget._update_parameter_form(segmenter)
-        nd_easy_segment_widget.parameter_form.set_selected_axis("YX")
+        nd_easy_segment_widget._update_segmenter_parameter_form(segmenter)
+        nd_easy_segment_widget.segmenter_parameter_form.set_selected_axis("YX")
 
         image_data = model.load_image(0)
         image_layer = viewer.add_image(image_data, name="Image")

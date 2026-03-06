@@ -159,15 +159,15 @@ class BaseNDApp(QWidget):
     # === COMMON METHODS TO BE IMPLEMENTED ===
     # These methods exist in both NDEasyLabel and NDEasySegment with similar/identical implementations
 
-    def _create_parameter_form(self):
+    def _create_segmenter_parameter_form(self):
         """Create the shared parameter form and connect change signal."""
-        self.parameter_form = NDOperationWidget(
+        self.segmenter_parameter_form = NDOperationWidget(
             param_type_to_parse="inference"
         )
-        self.parameter_form.parameters_changed.connect(
+        self.segmenter_parameter_form.parameters_changed.connect(
             self._on_segmenter_parameters_changed
         )
-        return self.parameter_form
+        return self.segmenter_parameter_form
 
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""
@@ -177,7 +177,7 @@ class BaseNDApp(QWidget):
     def _on_segmenter_changed(self, segmenter_name):
         """Handle changes to segmenter selection."""
         if not segmenter_name or segmenter_name == "No segmenters available":
-            self.parameter_form.clear_form()
+            self.segmenter_parameter_form.clear_form()
             return
 
         # Use model to get (and cache) segmenter instances
@@ -219,14 +219,14 @@ class BaseNDApp(QWidget):
                         )
 
             # Update parameter form with segmenter instance
-            self._update_parameter_form(self.segmenter)
+            self._update_segmenter_parameter_form(self.segmenter)
             print(f"Selected segmenter: {segmenter_name}")
             print(f"Supported axes: {self.segmenter.supported_axes}")
         else:
             print(
                 f"Warning: Segmenter '{segmenter_name}' not found in registry"
             )
-            self.parameter_form.clear_form()
+            self.segmenter_parameter_form.clear_form()
 
         # Handle post-selection logic (like predictor initialization)
         self._post_segmenter_selection()
@@ -247,9 +247,9 @@ class BaseNDApp(QWidget):
 
         return None
 
-    def _update_parameter_form(self, segmenter):
+    def _update_segmenter_parameter_form(self, segmenter):
         """Update parameter form with segmenter instance."""
-        self.parameter_form.set_nd_operation(segmenter)
+        self.segmenter_parameter_form.set_nd_operation(segmenter)
 
     def _post_segmenter_selection(self):
         """Handle post-selection logic - to be implemented by derived classes."""
@@ -462,8 +462,10 @@ class BaseNDApp(QWidget):
 
         # Sync the current segmenter instance with new parameter values
         if hasattr(self, "segmenter") and self.segmenter is not None:
-            self.segmenter = self.parameter_form.sync_nd_operation_instance(
-                self.segmenter
+            self.segmenter = (
+                self.segmenter_parameter_form.sync_nd_operation_instance(
+                    self.segmenter
+                )
             )
             print("Synced segmenter instance with new parameters")
 

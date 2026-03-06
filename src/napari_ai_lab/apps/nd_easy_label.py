@@ -46,10 +46,12 @@ class NDEasyLabel(BaseNDApp):
         self.layout().addWidget(self.segmenter_combo)
 
         # Parameter form widget for segmenter parameters (from base)
-        self.layout().addWidget(self._create_parameter_form())
+        self.layout().addWidget(self._create_segmenter_parameter_form())
 
         # Connect to axis changes to reinitialize segmenter
-        self.parameter_form.axis_changed.connect(self._on_axis_changed)
+        self.segmenter_parameter_form.axis_changed.connect(
+            self._on_axis_changed
+        )
 
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
@@ -108,7 +110,7 @@ class NDEasyLabel(BaseNDApp):
             image_paths = self.image_data_model.get_image_paths()
             image_name = image_paths[self.current_image_index].stem
 
-            selected_axis = self.parameter_form.get_selected_axis()
+            selected_axis = self.segmenter_parameter_form.get_selected_axis()
 
             indices = get_current_slice_indices(
                 self.viewer.dims.current_step, selected_axis
@@ -122,8 +124,10 @@ class NDEasyLabel(BaseNDApp):
             # Create artifact name from non-spatial dims
             image_name = create_artifact_name(image_name, step, selected_axis)
 
-            self.segmenter = self.parameter_form.sync_nd_operation_instance(
-                getattr(self, "segmenter", None)
+            self.segmenter = (
+                self.segmenter_parameter_form.sync_nd_operation_instance(
+                    getattr(self, "segmenter", None)
+                )
             )
 
             self.segmenter.initialize_predictor(
@@ -159,7 +163,7 @@ class NDEasyLabel(BaseNDApp):
                 print("No image layer available")
                 return
 
-            selected_axis = self.parameter_form.get_selected_axis()
+            selected_axis = self.segmenter_parameter_form.get_selected_axis()
 
             if selected_axis == "YX" or selected_axis == "YXC":
                 latest_point = latest_point[
@@ -188,8 +192,10 @@ class NDEasyLabel(BaseNDApp):
             image_data = self.image_layer.data[indices]
 
             # Ensure segmenter is synced with current parameters before use
-            self.segmenter = self.parameter_form.sync_nd_operation_instance(
-                self.segmenter
+            self.segmenter = (
+                self.segmenter_parameter_form.sync_nd_operation_instance(
+                    self.segmenter
+                )
             )
 
             # Call segmenter with the latest point

@@ -79,7 +79,7 @@ class NDEasySegment(BaseNDApp):
         main_layout.addWidget(self.segmenter_combo)
 
         # Parameter form widget (from base)
-        main_layout.addWidget(self._create_parameter_form())
+        main_layout.addWidget(self._create_segmenter_parameter_form())
 
         # === Mode-Specific Controls ===
         # Automatic mode controls
@@ -178,7 +178,7 @@ class NDEasySegment(BaseNDApp):
             # Ensure segmenter is synced with current parameters
             if hasattr(self, "segmenter") and self.segmenter is not None:
                 self.segmenter = (
-                    self.parameter_form.sync_nd_operation_instance(
+                    self.segmenter_parameter_form.sync_nd_operation_instance(
                         self.segmenter
                     )
                 )
@@ -216,6 +216,13 @@ class NDEasySegment(BaseNDApp):
 
         print("Segmenting current image...")
 
+        # Ensure segmenter is synced with current parameters
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+
         self._segment_nd_slice(current_step=self.viewer.dims.current_step)
 
     def _on_segment_all(self):
@@ -231,12 +238,14 @@ class NDEasySegment(BaseNDApp):
         print("Segmenting all slices...")
 
         # Ensure segmenter is synced with current parameters
-        self.segmenter = self.parameter_form.sync_nd_operation_instance(
-            self.segmenter
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
         )
 
         # Get selected axis and dataset axis types
-        selected_axis = self.parameter_form.get_selected_axis()
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
         dataset_axis_types = self.image_data_model.axis_types
         image_shape = self.image_layer.data.shape
 
@@ -304,13 +313,8 @@ class NDEasySegment(BaseNDApp):
                 QMessageBox.warning(self, "Warning", "No segmenter selected")
                 return
 
-            # Ensure segmenter is synced with current parameters
-            self.segmenter = self.parameter_form.sync_nd_operation_instance(
-                self.segmenter
-            )
-
             # Print the axis mode the user chose
-            selected_axis = self.parameter_form.get_selected_axis()
+            selected_axis = self.segmenter_parameter_form.get_selected_axis()
             print(f"User selected axis mode: {selected_axis}")
 
             # Extract current slice based on selected axis mode
@@ -388,7 +392,7 @@ class NDEasySegment(BaseNDApp):
             print(f"Training parameters accepted: {training_params}")
 
             # Get the selected axis to find the correct patches directory
-            selected_axis = self.parameter_form.get_selected_axis()
+            selected_axis = self.segmenter_parameter_form.get_selected_axis()
             if selected_axis:
                 # Convert axis to lowercase for directory name (e.g., "YX" -> "yx")
                 axis_lower = selected_axis.lower()
@@ -442,7 +446,7 @@ class NDEasySegment(BaseNDApp):
                     )
 
                 # Update UI to show where model was saved
-                self.parameter_form.set_parameter(
+                self.segmenter_parameter_form.set_parameter(
                     "model_file_path", self.segmenter.model_file_path
                 )
 
