@@ -75,6 +75,113 @@ class NDAILab(QWidget):
 
         print("✅ Shared image data model set for all tabs")
 
+    def _set_image_layer(self, image_layer):
+        """
+        Central layer management - creates ALL layers needed by all sub-apps.
+
+        This prevents duplicate layer creation and ensures consistency.
+        Layers are created once here and distributed to sub-apps via direct assignment.
+
+        Args:
+            image_layer: The napari image layer to set up annotations for.
+        """
+        # Store image layer reference
+        self.image_layer = image_layer
+
+        # Get current image index (default to 0 for now)
+        current_image_index = 0
+
+        # Load existing data or create empty
+        labels_data = self.image_data_model.load_existing_annotations(
+            image_layer.data.shape, current_image_index
+        )
+        predictions_data = self.image_data_model.load_existing_predictions(
+            image_layer.data.shape, current_image_index
+        )
+
+        # Create shared layers ONCE
+        self.labels_layer = self.viewer.add_labels(
+            labels_data, name="Labels (Persistent)"
+        )
+        self.predictions_layer = self.viewer.add_labels(
+            predictions_data, name="Predictions (Persistent)"
+        )
+
+        # Create points layer for interactive segmentation
+        self._point_choices = ["positive", "negative"]
+        LABEL_COLOR_CYCLE = ["red", "blue"]
+        annotation_ndim = len(self.labels_layer.data.shape)
+
+        self.points_layer = self.viewer.add_points(
+            name="Point Layer",
+            property_choices={"label": self._point_choices},
+            border_color="label",
+            border_color_cycle=LABEL_COLOR_CYCLE,
+            symbol="o",
+            face_color="transparent",
+            border_width=0.5,
+            size=1,
+            ndim=annotation_ndim,
+        )
+
+        # Create shapes layer for segment widget (if in interactive mode)
+        self.shapes_layer = self.viewer.add_shapes(
+            name="Shapes Layer",
+            edge_color="green",
+            face_color="transparent",
+            edge_width=2,
+            ndim=annotation_ndim,
+        )
+
+        # Distribute layers to sub-apps (direct assignment, not calling their _set_image_layer)
+        self._distribute_layers_to_sub_apps()
+
+        print(f"✅ Central layer setup complete for image: {image_layer.name}")
+
+    def _distribute_layers_to_sub_apps(self):
+        """
+        Distribute the centrally-created layers to each sub-app.
+
+        Uses direct attribute assignment instead of calling sub-apps' _set_image_layer()
+        to avoid duplicate layer creation.
+        """
+        # Label widget needs: image, labels, points
+        self.label_widget.image_layer = self.image_layer
+        self.label_widget.annotation_layer = self.labels_layer
+        self.label_widget.points_layer = self.points_layer
+
+        # Connect points layer events for label widget
+        if self.points_layer and hasattr(
+            self.label_widget, "_on_points_changed"
+        ):
+            self.points_layer.events.data.connect(
+                self.label_widget._on_points_changed
+            )
+
+        # Augment widget needs: image, labels
+        self.augment_widget.image_layer = self.image_layer
+        self.augment_widget.annotation_layer = self.labels_layer
+
+        # Segment widget needs: image, labels, predictions, points, shapes
+        self.segment_widget.image_layer = self.image_layer
+        self.segment_widget.annotation_layer = self.labels_layer
+        self.segment_widget.predictions_layer = self.predictions_layer
+        self.segment_widget.points_layer = self.points_layer
+        self.segment_widget.shapes_layer = self.shapes_layer
+
+        # Connect interactive layers events for segment widget (if in interactive mode)
+        if self.segment_widget.is_interactive_mode():
+            if hasattr(self.segment_widget, "_on_points_changed"):
+                self.points_layer.events.data.connect(
+                    self.segment_widget._on_points_changed
+                )
+            if hasattr(self.segment_widget, "_on_shapes_changed"):
+                self.shapes_layer.events.data.connect(
+                    self.segment_widget._on_shapes_changed
+                )
+
+        print("   → Layers distributed to all sub-apps")
+
     def _setup_ui(self):
         """Setup the tabbed user interface."""
         layout = QVBoxLayout(self)
