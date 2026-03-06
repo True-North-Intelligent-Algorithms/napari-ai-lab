@@ -38,20 +38,25 @@ class BaseNDApp(QWidget):
     """
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", image_data_model: ImageDataModel
+        self,
+        viewer: "napari.viewer.Viewer",
+        image_data_model: ImageDataModel = None,
     ):
         """
         Initialize the base widget with common setup.
 
         Args:
             viewer: The napari viewer instance.
+            image_data_model: Optional ImageDataModel. Can be set later via set_image_data_model().
         """
         super().__init__()
         self.viewer = viewer
         self.image_data_model = image_data_model
         # Use the model-owned segmenter cache so caching is centralized.
         # Keep a reference here for backwards compatibility with external code.
-        self.segmenter_cache = self.image_data_model.segmenter_cache
+        self.segmenter_cache = (
+            self.image_data_model.segmenter_cache if image_data_model else {}
+        )
 
         # Initialize layer references (common to both widgets)
         self.image_layer = None
@@ -155,6 +160,20 @@ class BaseNDApp(QWidget):
                 )
         else:
             print("No annotations to save")
+
+    def set_image_data_model(self, image_data_model: ImageDataModel):
+        """
+        Set or update the image data model.
+
+        This allows the model to be injected after widget creation,
+        useful for combined widgets that create the model later.
+
+        Args:
+            image_data_model: The ImageDataModel instance to use.
+        """
+        self.image_data_model = image_data_model
+        self.segmenter_cache = image_data_model.segmenter_cache
+        print(f"{self.__class__.__name__}: Image data model set")
 
     # === COMMON METHODS TO BE IMPLEMENTED ===
     # These methods exist in both NDEasyLabel and NDEasySegment with similar/identical implementations

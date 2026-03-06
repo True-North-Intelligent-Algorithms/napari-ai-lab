@@ -36,7 +36,9 @@ class NDEasySegment(BaseNDApp):
     """
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", image_data_model: ImageDataModel
+        self,
+        viewer: "napari.viewer.Viewer",
+        image_data_model: ImageDataModel = None,
     ):
         super().__init__(viewer, image_data_model)
 
@@ -118,6 +120,9 @@ class NDEasySegment(BaseNDApp):
         self._populate_segmenter_combo()
         self._update_mode_ui()
 
+        # Add stretch to push everything to the top (prevents button stretching)
+        main_layout.addStretch()
+
     def _on_mode_changed(self):
         """Handle mode change between Interactive and Automatic."""
         self._update_mode_ui()
@@ -148,6 +153,9 @@ class NDEasySegment(BaseNDApp):
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""
         self.segmenter_combo.clear()
+
+        if self.image_data_model is None:
+            return
 
         framework_names = self.image_data_model.get_global_frameworks()
 

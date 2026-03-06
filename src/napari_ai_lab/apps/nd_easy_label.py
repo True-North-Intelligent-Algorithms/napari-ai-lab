@@ -19,7 +19,7 @@ class NDEasyLabel(BaseNDApp):
     def __init__(
         self,
         viewer: "napari.viewer.Viewer",
-        image_data_model: "ImageDataModel",
+        image_data_model: "ImageDataModel" = None,
     ):
         super().__init__(viewer, image_data_model)
         self.frameworks = InteractiveSegmenterBase.get_registered_frameworks()
@@ -55,6 +55,9 @@ class NDEasyLabel(BaseNDApp):
 
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
+
+        # Add stretch to push everything to the top (prevents button stretching)
+        self.layout().addStretch()
 
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""

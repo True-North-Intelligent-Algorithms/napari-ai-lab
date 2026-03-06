@@ -33,7 +33,7 @@ class NDEasyAugment(BaseNDApp):
     def __init__(
         self,
         viewer: "napari.viewer.Viewer",
-        image_data_model: "ImageDataModel",
+        image_data_model: "ImageDataModel" = None,
     ):
         super().__init__(viewer, image_data_model)
         self.augmenter_cache = {}  # Cache for augmenter instances
@@ -110,6 +110,9 @@ class NDEasyAugment(BaseNDApp):
 
         # Populate augmenter combo with registered frameworks
         self._populate_augmenter_combo()
+
+        # Add stretch to push everything to the top (prevents button stretching)
+        self.layout().addStretch()
 
     def _populate_augmenter_combo(self):
         """Populate the augmenter combo box with registered frameworks."""
