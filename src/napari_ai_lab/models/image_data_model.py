@@ -294,12 +294,60 @@ class ImageDataModel:
         # for future use where we might create subfolders per algorithm.
         return self.parent_directory / "predictions"
 
+    def _detect_artifact_io_type(
+        self, artifact_dir: Path, default_type: str = "tiff"
+    ) -> str:
+        """
+        Detect artifact IO type by examining existing files in directory.
+
+        Args:
+            artifact_dir: Directory to scan for artifacts
+            default_type: Default type if no files found (default: "tiff")
+
+        Returns:
+            Detected IO type string ("tiff", "zarr", "numpy", "tiff_slice", "stacked_sequence")
+        """
+        if not artifact_dir.exists():
+            return default_type
+
+        # Check for different file types in order of specificity
+        # Zarr stores are directories with .zarr extension or .zarray file
+        if list(artifact_dir.glob("**/*.zarr")) or list(
+            artifact_dir.glob("**/.zarray")
+        ):
+            return "zarr"
+
+        # Numpy files (.npy)
+        if list(artifact_dir.glob("**/*.npy")):
+            return "numpy"
+
+        # TIFF files (.tif, .tiff)
+        if list(artifact_dir.glob("**/*.tif")) or list(
+            artifact_dir.glob("**/*.tiff")
+        ):
+            # Could be tiff or tiff_slice - for now return "tiff"
+            # TODO: Add more sophisticated detection if needed
+            return "tiff"
+
+        # No files found, use default
+        return default_type
+
     def get_annotations_io(self):
-        """Get annotation artifact io."""
+        """Get annotation artifact io, auto-detecting type if not set."""
         if self._annotations_io is None:
-            from ..artifact_io import get_artifact_io
+            # Auto-detect IO type from existing files if not explicitly set
+            annotation_dir = self.parent_directory / "annotations"
+            detected_type = self._detect_artifact_io_type(
+                annotation_dir, self.annotation_io_type
+            )
+
+            # Update type if detected different from current
+            if detected_type != self.annotation_io_type:
+                print(f"📁 Auto-detected annotation IO type: {detected_type}")
+                self.annotation_io_type = detected_type
 
             self._annotations_io = get_artifact_io(self.annotation_io_type)
+
         return self._annotations_io
 
     def set_annotation_io_type(self, io_type: str):
@@ -345,7 +393,21 @@ class ImageDataModel:
         return data
 
     def get_predictions_io(self):
-        """Get prediction artifact io."""
+        """Get prediction artifact io, auto-detecting type if not set."""
+        if self._predictions_io is None:
+            # Auto-detect IO type from existing files if not explicitly set
+            prediction_dir = self.parent_directory / "predictions"
+            detected_type = self._detect_artifact_io_type(
+                prediction_dir, self.prediction_io_type
+            )
+
+            # Update type if detected different from current
+            if detected_type != self.prediction_io_type:
+                print(f"📁 Auto-detected prediction IO type: {detected_type}")
+                self.prediction_io_type = detected_type
+
+            self._predictions_io = get_artifact_io(self.prediction_io_type)
+
         return self._predictions_io
 
     def set_prediction_io_type(self, io_type: str, axis_slice: str = None):
