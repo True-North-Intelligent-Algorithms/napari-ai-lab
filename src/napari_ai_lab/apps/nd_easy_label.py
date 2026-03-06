@@ -20,20 +20,23 @@ class NDEasyLabel(BaseNDApp):
         self,
         viewer: "napari.viewer.Viewer",
         image_data_model: "ImageDataModel" = None,
+        embedded: bool = False,
     ):
         super().__init__(viewer, image_data_model)
+        self.embedded = embedded
         self.frameworks = InteractiveSegmenterBase.get_registered_frameworks()
         self.setup_ui()
 
     def setup_ui(self):
         """Set up the user interface."""
 
-        # Add directory selection button
-        self.dir_btn = QPushButton("Open Image Directory")
-        self.dir_btn.clicked.connect(self._on_open_directory)
-
         self.setLayout(QVBoxLayout())
-        self.layout().addWidget(self.dir_btn)
+
+        # Add directory selection button (only in standalone mode)
+        if not self.embedded:
+            self.dir_btn = QPushButton("Open Image Directory")
+            self.dir_btn.clicked.connect(self._on_open_directory)
+            self.layout().addWidget(self.dir_btn)
 
         # Add Interactive Segmenter selection
         self.segmenter_label = QLabel("Interactive Segmenter:")

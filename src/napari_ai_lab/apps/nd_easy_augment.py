@@ -34,8 +34,10 @@ class NDEasyAugment(BaseNDApp):
         self,
         viewer: "napari.viewer.Viewer",
         image_data_model: "ImageDataModel" = None,
+        embedded: bool = False,
     ):
         super().__init__(viewer, image_data_model)
+        self.embedded = embedded
         self.augmenter_cache = {}  # Cache for augmenter instances
         self.setup_ui()
 

@@ -39,8 +39,10 @@ class NDEasySegment(BaseNDApp):
         self,
         viewer: "napari.viewer.Viewer",
         image_data_model: ImageDataModel = None,
+        embedded: bool = False,
     ):
         super().__init__(viewer, image_data_model)
+        self.embedded = embedded
 
         # Setup UI
         self._setup_ui()
@@ -65,10 +67,11 @@ class NDEasySegment(BaseNDApp):
         main_layout.addWidget(mode_group)
 
         # === Common Controls ===
-        # Directory selection
-        self.dir_btn = QPushButton("Open Image Directory")
-        self.dir_btn.clicked.connect(self._on_open_directory)
-        main_layout.addWidget(self.dir_btn)
+        # Directory selection (only in standalone mode)
+        if not self.embedded:
+            self.dir_btn = QPushButton("Open Image Directory")
+            self.dir_btn.clicked.connect(self._on_open_directory)
+            main_layout.addWidget(self.dir_btn)
 
         # Segmenter selection
         self.segmenter_label = QLabel("Segmenter:")

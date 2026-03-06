@@ -5,8 +5,12 @@ This module combines NDEasyLabel, NDEasyAugment, and NDEasySegment
 into a single tabbed interface with shared model and viewer.
 """
 
+from pathlib import Path
+
 import napari
 from qtpy.QtWidgets import (
+    QFileDialog,
+    QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -42,12 +46,11 @@ class NDAILab(QWidget):
         self.viewer = viewer
         self.image_data_model = image_data_model
 
-        # Create sub-apps WITHOUT model initially
+        # Create sub-apps in EMBEDDED mode (no individual directory buttons)
         # Model can be set later via set_image_data_model()
-        # TODO: Add embedded=True parameter in Phase 2
-        self.label_widget = NDEasyLabel(viewer)
-        self.augment_widget = NDEasyAugment(viewer)
-        self.segment_widget = NDEasySegment(viewer)
+        self.label_widget = NDEasyLabel(viewer, embedded=True)
+        self.augment_widget = NDEasyAugment(viewer, embedded=True)
+        self.segment_widget = NDEasySegment(viewer, embedded=True)
 
         # If model provided, set it now
         if image_data_model is not None:
@@ -76,6 +79,11 @@ class NDAILab(QWidget):
         """Setup the tabbed user interface."""
         layout = QVBoxLayout(self)
 
+        # Top-level controls (shared across all tabs)
+        self.dir_btn = QPushButton("Open Image Directory")
+        self.dir_btn.clicked.connect(self._on_open_directory)
+        layout.addWidget(self.dir_btn)
+
         # Tab widget
         self.tabs = QTabWidget()
         self.tabs.addTab(self.label_widget, "Label")
@@ -83,6 +91,27 @@ class NDAILab(QWidget):
         self.tabs.addTab(self.segment_widget, "Segment")
         layout.addWidget(self.tabs)
 
-        # TODO Phase 2: Add top-level controls (shared directory button)
         # TODO Phase 3: Add central layer management
         # TODO Phase 4: Add sequence viewer connection
+
+    def _on_open_directory(self):
+        """Open directory and create/set model for all sub-apps."""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Image Directory",
+            "...",
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+
+        if directory:
+            print(f"📁 Loading directory: {directory}")
+
+            # Create model from directory
+            parent_dir = Path(directory)
+            self.image_data_model = ImageDataModel(parent_dir)
+
+            # Propagate to all tabs
+            self.set_image_data_model(self.image_data_model)
+
+            print("✅ Model created and shared across all tabs")
+            # TODO Phase 3: Load images and create layers
