@@ -255,11 +255,6 @@ class BaseNDApp(QWidget):
         """Handle post-selection logic - to be implemented by derived classes."""
         # Default: do nothing
 
-    def _on_parameters_changed(self, parameters):
-        """Handle changes to segmenter parameters."""
-        # TODO: Move implementation from both widgets
-        raise NotImplementedError("To be implemented in next step")
-
     def _on_points_changed(self, event):
         """Handle points layer data changes - interactive segmentation."""
         # TODO: Move implementation from both widgets
