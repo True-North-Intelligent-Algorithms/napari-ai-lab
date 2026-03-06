@@ -165,7 +165,7 @@ class BaseNDApp(QWidget):
             param_type_to_parse="inference"
         )
         self.parameter_form.parameters_changed.connect(
-            self._on_parameters_changed
+            self._on_segmenter_parameters_changed
         )
         return self.parameter_form
 
@@ -455,7 +455,7 @@ class BaseNDApp(QWidget):
             print("Finished processing image change")
             print("==============================")
 
-    def _on_parameters_changed(self, parameters):
+    def _on_segmenter_parameters_changed(self, parameters):
         """Handle changes to segmenter parameters."""
         segmenter_name = self.segmenter_combo.currentText()
         print(f"Parameters changed for {segmenter_name}: {parameters}")
