@@ -687,6 +687,7 @@ class ImageDataModel:
         num_inputs: int = 1,
         num_truths: int = 1,
         sub_sample: int = 1,
+        progress_logger=None,
     ) -> Path:
         """
         Generate augmented patches and save them to the patches directory.
@@ -700,6 +701,8 @@ class ImageDataModel:
             num_inputs: Number of input channels for info.json (default: 1)
             num_truths: Number of truth classes for info.json (default: 1)
             sub_sample: Subsampling factor for info.json (default: 1)
+            progress_logger: Optional ProgressLogger for tracking progress and logging.
+                           If None, falls back to print statements.
 
         Returns:
             Path to the patches directory
@@ -723,8 +726,14 @@ class ImageDataModel:
         # Get patches directory
         patches_dir = self.get_patches_directory(axis=axis)
 
-        # Generate patches
-        print(f"\nGenerating {self.num_patches} patches...")
+        # Generate patches with progress tracking
+        if progress_logger:
+            progress_logger.log_info(
+                f"🎨 Generating {self.num_patches} patches..."
+            )
+        else:
+            print(f"\nGenerating {self.num_patches} patches...")
+
         for i in range(self.num_patches):
             self.augmenter.augment_and_save(
                 image,
@@ -734,11 +743,23 @@ class ImageDataModel:
                 self.patch_size,
                 axis=None,
             )
-            if (i + 1) % 10 == 0 or (i + 1) == self.num_patches:
+
+            # Update progress
+            if progress_logger:
+                progress_logger.update_progress(
+                    i + 1, self.num_patches, "Generating patches"
+                )
+            elif (i + 1) % 10 == 0 or (i + 1) == self.num_patches:
                 print(f"  Created {i+1}/{self.num_patches} patches")
 
         # Write info.json
-        print("\nWriting info.json...")
+        if progress_logger:
+            progress_logger.log_info(
+                "📝 Writing patch metadata (info.json)..."
+            )
+        else:
+            print("\nWriting info.json...")
+
         if hasattr(self.augmenter, "write_info"):
             self.augmenter.write_info(
                 patch_path=str(patches_dir),
@@ -748,7 +769,14 @@ class ImageDataModel:
                 sub_sample=sub_sample,
             )
 
-        print(f"✅ Created {self.num_patches} patches in {patches_dir}")
+        # Log completion
+        if progress_logger:
+            progress_logger.log_info(
+                f"✅ Created {self.num_patches} patches in {patches_dir}"
+            )
+        else:
+            print(f"✅ Created {self.num_patches} patches in {patches_dir}")
+
         return patches_dir
 
     def segment(self, segmenter, image_slice, points=None, shapes=None):

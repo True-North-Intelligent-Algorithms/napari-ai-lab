@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
 
 from ..Augmenters import AugmenterBase
 from ..models import ImageDataModel
+from ..utilities import QtProgressLogger
 from ..widgets.nd_operation_widget import NDOperationWidget
 from .base_nd_app import BaseNDApp
 
@@ -39,6 +40,10 @@ class NDEasyAugment(BaseNDApp):
         super().__init__(viewer, image_data_model)
         self.embedded = embedded
         self.augmenter_cache = {}  # Cache for augmenter instances
+
+        # Create Qt progress logger
+        self.progress_logger = QtProgressLogger()
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -110,11 +115,14 @@ class NDEasyAugment(BaseNDApp):
 
         self.layout().addLayout(buttons_layout)
 
+        # Add stretch before progress widget to push it to bottom
+        self.layout().addStretch()
+
+        # Add progress logger widget at bottom (stretch factor 1 to fill available space)
+        self.layout().addWidget(self.progress_logger.get_widget(), 1)
+
         # Populate augmenter combo with registered frameworks
         self._populate_augmenter_combo()
-
-        # Add stretch to push everything to the top (prevents button stretching)
-        self.layout().addStretch()
 
     def _populate_augmenter_combo(self):
         """Populate the augmenter combo box with registered frameworks."""
@@ -272,30 +280,37 @@ class NDEasyAugment(BaseNDApp):
                 compute_global_stats=True,
             )
 
-            # Generate patches
-            print("\n🎨 Generating patches...")
+            # Clear previous progress
+            self.progress_logger.clear()
+
+            # Generate patches with progress tracking
             patches_dir = self.image_data_model.generate_patches(
                 image=image,
                 annotations=annotations,
                 axis="yx",
                 axes_string="YX",
+                progress_logger=self.progress_logger,
             )
 
             # Write info.json with patch metadata
-            print("📝 Writing patch metadata (info.json)...")
-            self.augmenter.write_info(
-                patch_path=str(patches_dir),
-                axes="YX",
-                num_inputs=1,
-                num_truths=1,
-                sub_sample=1,
-            )
+            # (Note: generate_patches already writes info.json via augmenter.write_info)
+            # This is redundant but kept for compatibility
+            if not hasattr(self.augmenter, "write_info"):
+                print("📝 Writing patch metadata (info.json)...")
+                self.augmenter.write_info(
+                    patch_path=str(patches_dir),
+                    axes="YX",
+                    num_inputs=1,
+                    num_truths=1,
+                    sub_sample=1,
+                )
 
-            print("\n✅ Augmentation complete!")
             print(f"📁 Patches saved to: {patches_dir}")
 
         except (ValueError, RuntimeError, OSError, AttributeError) as e:
-            print(f"\n❌ Error during augmentation: {e}")
+            error_msg = f"Error during augmentation: {e}"
+            self.progress_logger.log_error(error_msg)
+
             import traceback
 
             traceback.print_exc()
