@@ -202,6 +202,11 @@ class NDAILab(QWidget):
         self.tabs.addTab(self.label_widget, "Label")
         self.tabs.addTab(self.augment_widget, "Augment")
         self.tabs.addTab(self.segment_widget, "Segment")
+
+        # Add training tab - shows training view of segment widget
+        # Same widget, different controls (segmenter combo + training params only)
+        self.tabs.addTab(self.segment_widget.get_training_widget(), "Train")
+
         layout.addWidget(self.tabs)
 
         # TODO Phase 3: Add central layer management

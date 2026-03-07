@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utility import get_current_slice_indices
+from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
 from .base_nd_app import BaseNDApp
 
@@ -172,6 +173,60 @@ class NDEasySegment(BaseNDApp):
         else:
             self.segmenter_combo.addItem("No segmenters available")
             self.segmenter_combo.setEnabled(False)
+
+    def _create_training_parameter_form(self):
+        """Create the training parameter form widget."""
+        self.training_parameter_form = NDOperationWidget(
+            param_type_to_parse="training"
+        )
+        # Connect to the same handler as segmenter params (updates will sync)
+        self.training_parameter_form.parameters_changed.connect(
+            self._on_segmenter_parameters_changed
+        )
+        return self.training_parameter_form
+
+    def get_training_widget(self):
+        """
+        Get a widget showing training-specific controls.
+
+        Returns a widget with:
+        - Segmenter combo (synced with main segment view)
+        - Training parameters form
+        - Train button
+
+        This allows the same NDEasySegment instance to show different views
+        in different tabs without duplication.
+        """
+        from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+        training_widget = QWidget()
+        layout = QVBoxLayout(training_widget)
+
+        # Segmenter selection (same combo as in main view)
+        layout.addWidget(QLabel("Segmenter:"))
+        layout.addWidget(self.segmenter_combo)
+
+        # Training parameters form
+        layout.addWidget(self._create_training_parameter_form())
+
+        # Train button (same as in automatic mode controls)
+        train_btn = QPushButton("Train Model")
+        train_btn.clicked.connect(self._on_train)
+        layout.addWidget(train_btn)
+
+        # Add stretch to push everything to the top
+        layout.addStretch()
+
+        return training_widget
+
+    def _update_segmenter_parameter_form(self, segmenter):
+        """Update both segmenter and training parameter forms."""
+        # Update the main segmenter parameter form (inference params)
+        self.segmenter_parameter_form.set_nd_operation(segmenter)
+
+        # Also update training parameter form if it exists
+        if hasattr(self, "training_parameter_form"):
+            self.training_parameter_form.set_nd_operation(segmenter)
 
     # === Interactive Mode Methods ===
     def _on_points_changed(self, event):
