@@ -155,19 +155,23 @@ class NDEasySegment(BaseNDApp):
 
     def _populate_segmenter_combo(self):
         """Populate the segmenter combo box with registered frameworks."""
+        from ..Segmenters.GlobalSegmenters import GlobalSegmenterBase
+
         self.segmenter_combo.clear()
 
-        if self.image_data_model is None:
-            return
+        frameworks = GlobalSegmenterBase.get_registered_frameworks()
 
-        framework_names = self.image_data_model.get_global_frameworks()
+        if frameworks:
+            framework_names = list(frameworks.keys())
+            for name in framework_names:
+                self.segmenter_combo.addItem(name)
 
-        for name in framework_names:
-            self.segmenter_combo.addItem(name)
-
-        if self.segmenter_combo.count() > 0:
-            self.segmenter_combo.setCurrentIndex(0)
-            self._on_segmenter_changed(self.segmenter_combo.currentText())
+            if self.segmenter_combo.count() > 0:
+                self.segmenter_combo.setCurrentIndex(0)
+                self._on_segmenter_changed(self.segmenter_combo.currentText())
+        else:
+            self.segmenter_combo.addItem("No segmenters available")
+            self.segmenter_combo.setEnabled(False)
 
     # === Interactive Mode Methods ===
     def _on_points_changed(self, event):

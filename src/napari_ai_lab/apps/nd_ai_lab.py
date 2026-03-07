@@ -48,9 +48,15 @@ class NDAILab(QWidget):
 
         # Create sub-apps in EMBEDDED mode (no individual directory buttons)
         # Model can be set later via set_image_data_model()
-        self.label_widget = NDEasyLabel(viewer, embedded=True)
-        self.augment_widget = NDEasyAugment(viewer, embedded=True)
-        self.segment_widget = NDEasySegment(viewer, embedded=True)
+        self.label_widget = NDEasyLabel(
+            viewer, image_data_model, embedded=True
+        )
+        self.augment_widget = NDEasyAugment(
+            viewer, image_data_model, embedded=True
+        )
+        self.segment_widget = NDEasySegment(
+            viewer, image_data_model, embedded=True
+        )
 
         # If model provided, set it now
         if image_data_model is not None:

@@ -541,24 +541,6 @@ class ImageDataModel:
             selected_axis,
         )
 
-    def get_global_frameworks(self):
-        """Return the dict of registered global segmenter frameworks, or empty dict."""
-        from ..Segmenters.GlobalSegmenters import GlobalSegmenterBase
-
-        return GlobalSegmenterBase.get_registered_frameworks()
-
-    def get_global_framework_names(self) -> list[str]:
-        """
-        Get the names of all registered global segmenter frameworks.
-        """
-
-        frameworks = self.get_global_frameworks()
-        if frameworks:
-            framework_names = list(frameworks.keys())
-        else:
-            framework_names = ["No segmenters available"]
-        return framework_names
-
     def get_segmenter(self, segmenter_name: str):
         """
         Return a cached segmenter instance by name, creating and caching it if needed.
