@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (
 )
 
 from ..models import ImageDataModel
+from ..utilities import QtProgressLogger
 from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
@@ -44,6 +45,9 @@ class NDEasySegment(BaseNDApp):
     ):
         super().__init__(viewer, image_data_model)
         self.embedded = embedded
+
+        # Create Qt progress logger for training tab
+        self.progress_logger = QtProgressLogger()
 
         # Setup UI
         self._setup_ui()
@@ -214,8 +218,11 @@ class NDEasySegment(BaseNDApp):
         train_btn.clicked.connect(self._on_train)
         layout.addWidget(train_btn)
 
-        # Add stretch to push everything to the top
+        # Add stretch before progress widget to push it to bottom
         layout.addStretch()
+
+        # Add progress logger widget at bottom (stretch factor 1 to fill available space)
+        layout.addWidget(self.progress_logger.get_widget(), 1)
 
         return training_widget
 
