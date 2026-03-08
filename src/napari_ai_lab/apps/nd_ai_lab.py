@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from superqt import ensure_main_thread
 
 from ..models import ImageDataModel
 from .nd_easy_augment import NDEasyAugment
@@ -45,6 +46,10 @@ class NDAILab(QWidget):
         super().__init__()
         self.viewer = viewer
         self.image_data_model = image_data_model
+
+        # Tracking for sequence viewer changes
+        self._processing_image_change = False
+        self.current_image_index = 0
 
         # Create sub-apps in EMBEDDED mode (no individual directory buttons)
         # Model can be set later via set_image_data_model()
@@ -236,3 +241,127 @@ class NDAILab(QWidget):
 
             print("✅ Model created and shared across all tabs")
             # TODO Phase 3: Load images and create layers
+
+    def connect_sequence_viewer(self, sequence_viewer):
+        """Connect to sequence viewer for automatic layer updates."""
+        sequence_viewer.image_changed.connect(self._on_sequence_image_changed)
+        print("Connected to sequence viewer for automatic layer updates")
+
+    @ensure_main_thread
+    def _on_sequence_image_changed(self, image_layer, image_index):
+        """Handle sequence viewer image changes with simple processing lock to prevent crashes."""
+        # If we're already processing a signal, ignore this one to prevent conflicts
+        if self._processing_image_change:
+            print(
+                "Signal received while processing - ignoring to prevent conflicts"
+            )
+            return
+
+        self._processing_image_change = True
+
+        # Process the image change immediately
+        self._process_image_change(image_layer, image_index)
+
+    def _process_image_change(self, image_layer, image_index):
+        """
+        Process image change from sequence viewer.
+
+        Handles cleanup and recreation of layers centrally for all sub-apps.
+        """
+        try:
+            print(
+                f"🔄 nd_ai_lab: Processing image change to index {image_index}"
+            )
+
+            # Save current annotations before switching (delegate to sub-apps)
+            # Only save from the currently active tab to avoid duplicate saves
+            active_widget_name = self.tabs.tabText(self.tabs.currentIndex())
+
+            if (
+                active_widget_name == "Label"
+                and hasattr(self, "labels_layer")
+                and self.labels_layer
+                and self.image_data_model.parent_directory
+            ):
+                try:
+                    self.image_data_model.save_annotations(
+                        self.labels_layer.data,
+                        self.current_image_index,
+                        current_step=self.viewer.dims.current_step,
+                    )
+                    print("   Saved annotations from Label tab")
+                except (OSError, ValueError, RuntimeError) as e:
+                    print(f"   Failed to save annotations: {e}")
+
+            # Update current image index
+            self.current_image_index = image_index
+
+            if image_layer:
+                print(f"   Setting up new image: {image_layer.name}")
+
+                # Cleanup existing layers centrally
+                self._cleanup_layers()
+
+                # Create new layers centrally (this also distributes to sub-apps)
+                self._set_image_layer(image_layer)
+
+                print("✅ nd_ai_lab: Image change complete")
+            else:
+                print("⚠️  Received invalid image data from sequence viewer")
+                self._cleanup_layers()
+
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            AttributeError,
+            KeyError,
+        ) as e:
+            print(f"❌ Error processing image change: {e}")
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            # Always clear the processing flag
+            self._processing_image_change = False
+
+    def _cleanup_layers(self):
+        """
+        Cleanup existing layers before switching images.
+
+        Central cleanup for combined app - removes all layers from viewer.
+        """
+        print("   🧹 Cleaning up existing layers...")
+
+        layers_to_remove = []
+
+        # Collect layers to remove
+        if hasattr(self, "labels_layer") and self.labels_layer:
+            layers_to_remove.append(("Labels", self.labels_layer))
+        if hasattr(self, "predictions_layer") and self.predictions_layer:
+            layers_to_remove.append(("Predictions", self.predictions_layer))
+        if hasattr(self, "points_layer") and self.points_layer:
+            layers_to_remove.append(("Points", self.points_layer))
+        if hasattr(self, "shapes_layer") and self.shapes_layer:
+            layers_to_remove.append(("Shapes", self.shapes_layer))
+
+        # Remove layers from viewer
+        for layer_name, layer in layers_to_remove:
+            try:
+                if layer in self.viewer.layers:
+                    self.viewer.layers.remove(layer)
+                    print(f"      Removed {layer_name} layer")
+            except (ValueError, KeyError, RuntimeError) as e:
+                print(f"      Error removing {layer_name}: {e}")
+
+        # Clear references
+        if hasattr(self, "labels_layer"):
+            self.labels_layer = None
+        if hasattr(self, "predictions_layer"):
+            self.predictions_layer = None
+        if hasattr(self, "points_layer"):
+            self.points_layer = None
+        if hasattr(self, "shapes_layer"):
+            self.shapes_layer = None
+
+        print("   ✅ Layer cleanup complete")
