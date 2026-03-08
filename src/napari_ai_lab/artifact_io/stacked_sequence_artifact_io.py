@@ -23,8 +23,8 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
 
     def __init__(self, subdirectory: str = "class_0"):
         super().__init__(subdirectory)
-        self._cached_stack = None
-        self._cached_directory = None
+        self._current_stack = None
+        self._current_directory = None
         self._image_names = []
         self._original_shapes = []
         self._normalize = False
@@ -62,7 +62,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         image_names = collect_all_image_names(load_directory)
         self.load_image_collection_as_stack(load_directory, image_names)
-        return self._cached_stack
+        return self._current_stack
 
     def load_image_collection_as_stack(
         self, directory: str, image_names: list
@@ -71,17 +71,17 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
 
         if not dir_path.exists():
             print(f"Directory does not exist: {directory}")
-            self._cached_stack = np.array([])
+            self._current_stack = np.array([])
             self._image_names = []
             self._original_shapes = []
-            self._cached_directory = directory
+            self._current_directory = directory
             return
 
         if not image_names:
-            self._cached_stack = np.array([])
+            self._current_stack = np.array([])
             self._image_names = []
             self._original_shapes = []
-            self._cached_directory = directory
+            self._current_directory = directory
             return
 
         images = []
@@ -110,15 +110,15 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
                     normalized_images.append(img)
             images = normalized_images
 
-        self._cached_stack = pad_to_largest(images, axis_infos)
-        self._cached_directory = directory
-        print(f"Cached stack shape: {self._cached_stack.shape}")
+        self._current_stack = pad_to_largest(images, axis_infos)
+        self._current_directory = directory
+        print(f"Cached stack shape: {self._current_stack.shape}")
 
     def load_full_stack(
         self, load_directory: str, normalize: bool = False
     ) -> np.ndarray:
         if (
-            self._cached_directory != load_directory
+            self._current_directory != load_directory
             or self._normalize != normalize
         ):
             self._normalize = normalize
@@ -126,7 +126,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             self.load_image_collection_as_stack(load_directory, image_names)
 
         return (
-            self._cached_stack
-            if self._cached_stack is not None
+            self._current_stack
+            if self._current_stack is not None
             else np.array([])
         )
