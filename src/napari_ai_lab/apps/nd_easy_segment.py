@@ -42,9 +42,22 @@ class NDEasySegment(BaseNDApp):
         viewer: "napari.viewer.Viewer",
         image_data_model: ImageDataModel = None,
         embedded: bool = False,
+        training_widget_mode: str = "embedded",
     ):
+        """
+        Initialize NDEasySegment widget.
+
+        Args:
+            viewer: The napari viewer instance
+            image_data_model: Optional ImageDataModel instance
+            embedded: Whether running in embedded mode (no directory button)
+            training_widget_mode: How to handle training UI
+                - "dialog": Show popup dialog for training parameters (classic)
+                - "embedded": Use training parameters from embedded training form (default)
+        """
         super().__init__(viewer, image_data_model)
         self.embedded = embedded
+        self.training_widget_mode = training_widget_mode
 
         # Create Qt progress logger for training tab
         self.progress_logger = QtProgressLogger()
@@ -443,7 +456,7 @@ class NDEasySegment(BaseNDApp):
             )
 
     def _on_train(self):
-        """Open training dialog to configure training parameters."""
+        """Handle training - either via dialog or embedded form based on training_widget_mode."""
         if not hasattr(self, "segmenter") or self.segmenter is None:
             QMessageBox.warning(self, "Warning", "No segmenter selected")
             return
@@ -459,82 +472,124 @@ class NDEasySegment(BaseNDApp):
             )
             return
 
+        # Route to appropriate training method based on mode
+        if self.training_widget_mode == "dialog":
+            self._train_with_dialog()
+        else:  # embedded mode (default)
+            self._train_with_embedded_form()
+
+    def _train_with_dialog(self):
+        """Train using popup dialog (classic mode)."""
         # Create and show training dialog
         dialog = TrainDialog(self.segmenter, parent=self)
         result = dialog.exec_()
 
         if result == TrainDialog.Accepted:
-            # Get training parameters
+            # Get training parameters from dialog
             training_params = dialog.get_training_parameters()
             print(f"Training parameters accepted: {training_params}")
 
-            # Get the selected axis to find the correct patches directory
-            selected_axis = self.segmenter_parameter_form.get_selected_axis()
-            if selected_axis:
-                # Convert axis to lowercase for directory name (e.g., "YX" -> "yx")
-                axis_lower = selected_axis.lower()
-                print(f"Using axis: {axis_lower} for patches directory")
-            else:
-                axis_lower = None
-                print("No axis selected, using default patches directory")
-
-            # Set patch path from the image data model
-            if hasattr(self.segmenter, "patch_path"):
-                patch_dir = self.image_data_model.get_patches_directory(
-                    axis=axis_lower
-                )
-                self.segmenter.patch_path = str(patch_dir)
-                print(f"Set patch path to: {patch_dir}")
-
-            # Sync training parameters from widget to segmenter
-            for param_name, param_value in training_params.items():
-                setattr(self.segmenter, param_name, param_value)
-
-            # Set model save directory for training
-            models_dir = self.image_data_model.get_models_directory()
-            self.segmenter.model_save_dir = str(models_dir)
-            print(f"Set model save directory to: {models_dir}")
-
-            # Generate unique model name based on segmenter type and timestamp
-            model_name = self.image_data_model.generate_model_name(
-                self.segmenter
-            )
-            self.segmenter.model_name = model_name
-            print(f"Set model name to: {model_name}")
-
-            # Call the train method
-            try:
-                print("Starting training...")
-
-                result = self.segmenter.train()
-
-                if result.get("success"):
-
-                    QMessageBox.information(
-                        self,
-                        "Training Complete",
-                        f"Training completed successfully!\n\n{result.get('message', '')}",
-                    )
-                else:
-                    QMessageBox.warning(
-                        self,
-                        "Training Status",
-                        f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
-                    )
-
-                # Update UI to show where model was saved
-                self.segmenter_parameter_form.set_parameter(
-                    "model_file_path", self.segmenter.model_file_path
-                )
-
-            except (RuntimeError, ValueError, TypeError, OSError) as e:
-                QMessageBox.critical(
-                    self,
-                    "Training Error",
-                    f"Training failed with error:\n{str(e)}",
-                )
+            # Run training with dialog parameters
+            self._run_training(training_params)
         else:
             print("Training cancelled")
+
+    def _train_with_embedded_form(self):
+        """Train using embedded training parameter form (no dialog)."""
+        # Get training parameters directly from the training_parameter_form
+        if not hasattr(self, "training_parameter_form"):
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "Training parameter form not available",
+            )
+            return
+
+        # Sync current form values to segmenter
+        self.segmenter = (
+            self.training_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+
+        # Get training parameters from segmenter (already synced from form)
+        training_params = self.training_parameter_form.parameter_values
+
+        print(f"Training with embedded parameters: {training_params}")
+
+        # Run training with embedded parameters
+        self._run_training(training_params)
+
+    def _run_training(self, training_params: dict):
+        """
+        Execute training with given parameters.
+
+        Args:
+            training_params: Dictionary of training parameter names and values
+        """
+        # Get the selected axis to find the correct patches directory
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        if selected_axis:
+            # Convert axis to lowercase for directory name (e.g., "YX" -> "yx")
+            axis_lower = selected_axis.lower()
+            print(f"Using axis: {axis_lower} for patches directory")
+        else:
+            axis_lower = None
+            print("No axis selected, using default patches directory")
+
+        # Set patch path from the image data model
+        if hasattr(self.segmenter, "patch_path"):
+            patch_dir = self.image_data_model.get_patches_directory(
+                axis=axis_lower
+            )
+            self.segmenter.patch_path = str(patch_dir)
+            print(f"Set patch path to: {patch_dir}")
+
+        # Sync training parameters to segmenter
+        for param_name, param_value in training_params.items():
+            setattr(self.segmenter, param_name, param_value)
+
+        # Set model save directory for training
+        models_dir = self.image_data_model.get_models_directory()
+        self.segmenter.model_save_dir = str(models_dir)
+        print(f"Set model save directory to: {models_dir}")
+
+        # Generate unique model name based on segmenter type and timestamp
+        model_name = self.image_data_model.generate_model_name(self.segmenter)
+        self.segmenter.model_name = model_name
+        print(f"Set model name to: {model_name}")
+
+        # Call the train method
+        try:
+            print("Starting training...")
+
+            result = self.segmenter.train()
+
+            if result.get("success"):
+
+                QMessageBox.information(
+                    self,
+                    "Training Complete",
+                    f"Training completed successfully!\n\n{result.get('message', '')}",
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Training Status",
+                    f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
+                )
+
+            # Update UI to show where model was saved
+            self.segmenter_parameter_form.set_parameter(
+                "model_file_path", self.segmenter.model_file_path
+            )
+
+        except (RuntimeError, ValueError, TypeError, OSError) as e:
+            QMessageBox.critical(
+                self,
+                "Training Error",
+                f"Training failed with error:\n{str(e)}",
+            )
 
     # === Common Methods (from original nd_easy_label) ===
     # _on_open_directory and load_image_directory inherited from BaseNDApp

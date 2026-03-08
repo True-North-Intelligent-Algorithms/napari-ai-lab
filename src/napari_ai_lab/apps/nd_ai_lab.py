@@ -55,7 +55,10 @@ class NDAILab(QWidget):
             viewer, image_data_model, embedded=True
         )
         self.segment_widget = NDEasySegment(
-            viewer, image_data_model, embedded=True
+            viewer,
+            image_data_model,
+            embedded=True,
+            training_widget_mode="embedded",  # Use embedded training form, not dialog
         )
 
         # If model provided, set it now
