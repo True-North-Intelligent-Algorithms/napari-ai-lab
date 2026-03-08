@@ -489,8 +489,8 @@ class NDEasySegment(BaseNDApp):
             training_params = dialog.get_training_parameters()
             print(f"Training parameters accepted: {training_params}")
 
-            # Run training with dialog parameters
-            self._run_training(training_params)
+            # Run training with dialog parameters (no progress updater in dialog mode)
+            self._run_training(training_params, use_progress_logger=False)
         else:
             print("Training cancelled")
 
@@ -517,15 +517,21 @@ class NDEasySegment(BaseNDApp):
 
         print(f"Training with embedded parameters: {training_params}")
 
-        # Run training with embedded parameters
-        self._run_training(training_params)
+        # Clear progress logger before training
+        self.progress_logger.clear()
 
-    def _run_training(self, training_params: dict):
+        # Run training with embedded parameters (WITH progress updater)
+        self._run_training(training_params, use_progress_logger=True)
+
+    def _run_training(
+        self, training_params: dict, use_progress_logger: bool = False
+    ):
         """
         Execute training with given parameters.
 
         Args:
             training_params: Dictionary of training parameter names and values
+            use_progress_logger: If True, pass progress_logger to train method (embedded mode)
         """
         # Get the selected axis to find the correct patches directory
         selected_axis = self.segmenter_parameter_form.get_selected_axis()
@@ -563,9 +569,36 @@ class NDEasySegment(BaseNDApp):
         try:
             print("Starting training...")
 
-            result = self.segmenter.train()
+            # Log to progress widget if in embedded mode
+            if use_progress_logger:
+                self.progress_logger.log_info("Starting training...")
+                self.progress_logger.log_info(f"Model: {model_name}")
+                self.progress_logger.log_info(f"Patches: {patch_dir}")
+
+            # Call train with or without updater based on mode
+            if use_progress_logger:
+                # Create adapter function for progress_logger
+                # MonaiUNetSegmenter calls: updater(message, progress_percent)
+                # We adapt to: progress_logger methods
+                def progress_adapter(message: str, progress: int):
+                    """Adapter to convert updater(message, progress) to progress_logger API."""
+                    self.progress_logger.update_progress(
+                        progress, 100, message
+                    )
+                    self.progress_logger.log_info(message)
+
+                # Pass adapter as updater (embedded mode)
+                result = self.segmenter.train(updater=progress_adapter)
+            else:
+                # No updater (dialog mode)
+                result = self.segmenter.train()
 
             if result.get("success"):
+
+                if use_progress_logger:
+                    self.progress_logger.log_info(
+                        f"✅ {result.get('message', 'Training complete!')}"
+                    )
 
                 QMessageBox.information(
                     self,
@@ -573,6 +606,12 @@ class NDEasySegment(BaseNDApp):
                     f"Training completed successfully!\n\n{result.get('message', '')}",
                 )
             else:
+
+                if use_progress_logger:
+                    self.progress_logger.log_warning(
+                        f"Training status: {result.get('message', 'Unknown')}"
+                    )
+
                 QMessageBox.warning(
                     self,
                     "Training Status",
@@ -585,10 +624,15 @@ class NDEasySegment(BaseNDApp):
             )
 
         except (RuntimeError, ValueError, TypeError, OSError) as e:
+            error_msg = f"Training failed with error:\n{str(e)}"
+
+            if use_progress_logger:
+                self.progress_logger.log_error(error_msg)
+
             QMessageBox.critical(
                 self,
                 "Training Error",
-                f"Training failed with error:\n{str(e)}",
+                error_msg,
             )
 
     # === Common Methods (from original nd_easy_label) ===

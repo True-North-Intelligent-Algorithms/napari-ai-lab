@@ -478,6 +478,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         steps_per_update=-1,
         sparse=False,
         use_tqdm=False,
+        updater=None,
     ):
 
         # set train flags, initialize step
@@ -574,9 +575,9 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
                     net, Path(self.model_save_dir) / Path(checkpoint_name)
                 )
 
-            if self.updater is not None:
-                progress = int(epoch / self.num_epochs * 100)
-                self.updater(
+            if updater is not None:
+                progress = int(epoch / num_epochs * 100)
+                updater(
                     f"Epoch {epoch} - training loss: {average_loss:.4f}{val_loss_str}",
                     progress,
                 )
@@ -593,10 +594,11 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
         Args:
             updater (callable, optional): A callback function for progress updates.
-                Example: updater(epoch=10, loss=0.5, status="Training...")
+                Example: updater("Epoch 1 - loss: 0.5", 10)
+                If provided, use_tqdm will be automatically set to False.
             use_tqdm (bool, optional): If True, use tqdm progress bar for training.
                 Recommended for notebook environments to avoid excessive output.
-                Defaults to False.
+                Defaults to False. Ignored if updater is provided.
 
         Returns:
             dict: Training results containing success status and metrics.
@@ -607,7 +609,17 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
                 "error": "MONAI is not available. Cannot train model.",
             }
 
-        print("🚀 Starting MONAI UNet training...")
+        # If updater is provided, disable tqdm (can't have both)
+        if updater is not None:
+            use_tqdm = False
+            print("🚀 Starting MONAI UNet training (with progress updater)...")
+        elif use_tqdm:
+            print(
+                "🚀 Starting MONAI UNet training (with tqdm progress bar)..."
+            )
+        else:
+            print("🚀 Starting MONAI UNet training...")
+
         print(f"   Sparse: {self.sparse}")
         print(f"   Num Classes: {self.num_classes}")
         print(f"   Depth: {self.depth}")
@@ -792,6 +804,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
             validation_loader=validation_loader,
             sparse=self.sparse,
             use_tqdm=use_tqdm,
+            updater=updater,
         )
 
         # Save the trained model
