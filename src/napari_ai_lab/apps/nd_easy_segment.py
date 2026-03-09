@@ -175,7 +175,7 @@ class NDEasySegment(BaseNDApp):
         # Could be extended to filter segmenters by capabilities
 
     def _populate_segmenter_combo(self):
-        """Populate the segmenter combo box with registered frameworks."""
+        """Populate the segmenter combo box(es) with registered frameworks."""
         from ..Segmenters.GlobalSegmenters import GlobalSegmenterBase
 
         self.segmenter_combo.clear()
@@ -189,10 +189,51 @@ class NDEasySegment(BaseNDApp):
 
             if self.segmenter_combo.count() > 0:
                 self.segmenter_combo.setCurrentIndex(0)
-                self._on_segmenter_changed(self.segmenter_combo.currentText())
+                # Don't trigger change yet - will sync after populating training combo
         else:
             self.segmenter_combo.addItem("No segmenters available")
             self.segmenter_combo.setEnabled(False)
+
+        # Also populate training combo if it exists
+        if hasattr(self, "training_segmenter_combo"):
+            self.training_segmenter_combo.clear()
+            if frameworks:
+                for name in framework_names:
+                    self.training_segmenter_combo.addItem(name)
+                if self.training_segmenter_combo.count() > 0:
+                    self.training_segmenter_combo.setCurrentIndex(0)
+            else:
+                self.training_segmenter_combo.addItem(
+                    "No segmenters available"
+                )
+                self.training_segmenter_combo.setEnabled(False)
+
+        # Now trigger the change handler if we have items
+        if frameworks and self.segmenter_combo.count() > 0:
+            self._on_segmenter_changed(self.segmenter_combo.currentText())
+
+    def _on_segmenter_changed(self, segmenter_name):
+        """
+        Handle segmenter selection changes.
+
+        Overrides base class to keep both combo boxes in sync.
+        """
+        # Sync both combo boxes to the same selection (block signals to avoid recursion)
+        sender = self.sender()
+
+        # Only sync if training combo exists and sender is one of our combos
+        if hasattr(self, "training_segmenter_combo"):
+            if sender == self.segmenter_combo:
+                self.training_segmenter_combo.blockSignals(True)
+                self.training_segmenter_combo.setCurrentText(segmenter_name)
+                self.training_segmenter_combo.blockSignals(False)
+            elif sender == self.training_segmenter_combo:
+                self.segmenter_combo.blockSignals(True)
+                self.segmenter_combo.setCurrentText(segmenter_name)
+                self.segmenter_combo.blockSignals(False)
+
+        # Call base class implementation to actually change the segmenter
+        super()._on_segmenter_changed(segmenter_name)
 
     def _create_training_parameter_form(self):
         """Create the training parameter form widget."""
@@ -210,7 +251,7 @@ class NDEasySegment(BaseNDApp):
         Get a widget showing training-specific controls.
 
         Returns a widget with:
-        - Segmenter combo (synced with main segment view)
+        - Segmenter combo (separate instance, synced with main segment view)
         - Training parameters form
         - Train button
 
@@ -222,9 +263,18 @@ class NDEasySegment(BaseNDApp):
         training_widget = QWidget()
         layout = QVBoxLayout(training_widget)
 
-        # Segmenter selection (same combo as in main view)
+        # Segmenter selection (create separate combo that stays in sync)
         layout.addWidget(QLabel("Segmenter:"))
-        layout.addWidget(self.segmenter_combo)
+
+        # Create a second combo box for the training tab
+        self.training_segmenter_combo = QComboBox()
+        self.training_segmenter_combo.currentTextChanged.connect(
+            self._on_segmenter_changed
+        )
+        layout.addWidget(self.training_segmenter_combo)
+
+        # Populate it with the same items as the main combo
+        self._populate_segmenter_combo()
 
         # Training parameters form
         layout.addWidget(self._create_training_parameter_form())
