@@ -357,10 +357,30 @@ class NDEasySegment(BaseNDApp):
         # Calculate number of non-spatial dimensions
         num_non_spatial = len(image_shape) - num_spatial
 
+        num_collapsed = (
+            len(self.axes_to_collapse) if self.axes_to_collapse else 0
+        )
+
+        num_for_loop = (
+            num_non_spatial - num_collapsed
+            if self.axes_to_collapse
+            else num_non_spatial
+        )
+
+        # Here we make a naive assumption.
+        # 1.  Dimensions to loop through are first
+        # 2. Spatial dimensions are next
+        # 3. Collapsed dimensions are last (if any)
+
+        # this will work for say NZYXC loop through N, ignore C and segment ZYX
+        # TODO: make general to handle any ordering of dimensions and collapsing (e.g., NZCYX with C collapsed should still segment ZYX correctly)
+
         # Get shape of non-spatial dimensions
-        non_spatial_shape = image_shape[:num_non_spatial]
+        non_spatial_shape = image_shape[:num_for_loop]
 
         print(f"Non-spatial dimensions: {num_non_spatial}")
+        print(f"Number of collapsed axes: {num_collapsed}")
+        print(f"num for loop: {num_for_loop}")
         print(f"Non-spatial shape: {non_spatial_shape}")
 
         # Calculate total number of slices
