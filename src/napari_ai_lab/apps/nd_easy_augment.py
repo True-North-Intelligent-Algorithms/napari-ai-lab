@@ -36,9 +36,11 @@ class NDEasyAugment(BaseNDApp):
         viewer: "napari.viewer.Viewer",
         image_data_model: "ImageDataModel" = None,
         embedded: bool = False,
+        axes_to_collapse: str | list[str] | None = None,
     ):
         super().__init__(viewer, image_data_model)
         self.embedded = embedded
+        self.axes_to_collapse = axes_to_collapse
         self.augmenter_cache = {}  # Cache for augmenter instances
 
         # Create Qt progress logger
@@ -196,7 +198,9 @@ class NDEasyAugment(BaseNDApp):
 
         # Load existing labels or create empty ones
         labels_data = self.image_data_model.load_existing_annotations(
-            image_data.shape, self.current_image_index
+            image_data.shape,
+            self.current_image_index,
+            axes_to_collapse=self.axes_to_collapse,
         )
 
         self.annotation_layer = self.viewer.add_labels(

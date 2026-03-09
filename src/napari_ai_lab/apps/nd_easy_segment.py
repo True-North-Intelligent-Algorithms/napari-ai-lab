@@ -43,6 +43,7 @@ class NDEasySegment(BaseNDApp):
         image_data_model: ImageDataModel = None,
         embedded: bool = False,
         training_widget_mode: str = "embedded",
+        axes_to_collapse: str | list[str] | None = None,
     ):
         """
         Initialize NDEasySegment widget.
@@ -54,10 +55,12 @@ class NDEasySegment(BaseNDApp):
             training_widget_mode: How to handle training UI
                 - "dialog": Show popup dialog for training parameters (classic)
                 - "embedded": Use training parameters from embedded training form (default)
+            axes_to_collapse: Axis names to collapse when loading/saving annotations/predictions
         """
         super().__init__(viewer, image_data_model)
         self.embedded = embedded
         self.training_widget_mode = training_widget_mode
+        self.axes_to_collapse = axes_to_collapse
 
         # Create Qt progress logger for training tab
         self.progress_logger = QtProgressLogger()
@@ -433,6 +436,7 @@ class NDEasySegment(BaseNDApp):
                 self.current_image_index,
                 current_step=current_step,
                 selected_axis=segmentation_axis,
+                axes_to_collapse=self.axes_to_collapse,
             )
 
             segmentation_indices = get_current_slice_indices(
@@ -645,11 +649,15 @@ class NDEasySegment(BaseNDApp):
 
         # Load existing labels or create empty ones
         labels_data = self.image_data_model.load_existing_annotations(
-            image_data.shape, self.current_image_index
+            image_data.shape,
+            self.current_image_index,
+            axes_to_collapse=self.axes_to_collapse,
         )
 
         predictions_data = self.image_data_model.load_existing_predictions(
-            image_data.shape, self.current_image_index
+            image_data.shape,
+            self.current_image_index,
+            axes_to_collapse=self.axes_to_collapse,
         )
 
         self.annotation_layer = self.viewer.add_labels(

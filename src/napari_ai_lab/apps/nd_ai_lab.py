@@ -35,6 +35,7 @@ class NDAILab(QWidget):
         self,
         viewer: "napari.viewer.Viewer",
         image_data_model: ImageDataModel = None,
+        axes_to_collapse: str | list[str] | None = None,
     ):
         """
         Initialize the combined AI Lab widget.
@@ -42,10 +43,13 @@ class NDAILab(QWidget):
         Args:
             viewer: The napari viewer instance.
             image_data_model: Optional ImageDataModel. If not provided, can be set later.
+            axes_to_collapse: Axis names to collapse when creating annotations/predictions
+                            (e.g., "C" for channels). Passed to model load/save methods.
         """
         super().__init__()
         self.viewer = viewer
         self.image_data_model = image_data_model
+        self.axes_to_collapse = axes_to_collapse
 
         # Tracking for sequence viewer changes
         self._processing_image_change = False
@@ -54,16 +58,23 @@ class NDAILab(QWidget):
         # Create sub-apps in EMBEDDED mode (no individual directory buttons)
         # Model can be set later via set_image_data_model()
         self.label_widget = NDEasyLabel(
-            viewer, image_data_model, embedded=True
+            viewer,
+            image_data_model,
+            embedded=True,
+            axes_to_collapse=axes_to_collapse,
         )
         self.augment_widget = NDEasyAugment(
-            viewer, image_data_model, embedded=True
+            viewer,
+            image_data_model,
+            embedded=True,
+            axes_to_collapse=axes_to_collapse,
         )
         self.segment_widget = NDEasySegment(
             viewer,
             image_data_model,
             embedded=True,
             training_widget_mode="embedded",  # Use embedded training form, not dialog
+            axes_to_collapse=axes_to_collapse,
         )
 
         # If model provided, set it now
@@ -105,12 +116,16 @@ class NDAILab(QWidget):
         # Get current image index (default to 0 for now)
         current_image_index = 0
 
-        # Load existing data or create empty
+        # Load existing data or create empty with axis collapsing
         labels_data = self.image_data_model.load_existing_annotations(
-            image_layer.data.shape, current_image_index
+            image_layer.data.shape,
+            current_image_index,
+            axes_to_collapse=self.axes_to_collapse,
         )
         predictions_data = self.image_data_model.load_existing_predictions(
-            image_layer.data.shape, current_image_index
+            image_layer.data.shape,
+            current_image_index,
+            axes_to_collapse=self.axes_to_collapse,
         )
 
         # Create shared layers ONCE
@@ -288,6 +303,7 @@ class NDAILab(QWidget):
                         self.labels_layer.data,
                         self.current_image_index,
                         current_step=self.viewer.dims.current_step,
+                        axes_to_collapse=self.axes_to_collapse,
                     )
                     print("   Saved annotations from Label tab")
                 except (OSError, ValueError, RuntimeError) as e:

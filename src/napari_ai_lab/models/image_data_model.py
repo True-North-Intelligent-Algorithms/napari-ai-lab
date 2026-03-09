@@ -5,6 +5,39 @@ This model handles:
 - Image directory scanning
 - Result directory organization
 - Path generation for different result types
+- Annotation and prediction shape mapping (collapsing axes as needed)
+
+Annotation/Prediction Axis Collapsing
+--------------------------------------
+When working with multi-dimensional images, annotations and predictions may need
+different dimensionality than the source image. For example:
+- Image: ZYXC (3D + channels) -> Annotations/Predictions: ZYX (3D only)
+- Image: TYXC (time + channels) -> Annotations/Predictions: TYX (time, no channels)
+
+Usage example:
+    # For ZYXC image, get ZYX annotations (collapse channels)
+    labels = model.load_existing_annotations(
+        image_shape=(10, 512, 512, 3),
+        image_index=0,
+        axes_to_collapse="C"
+    )
+    # Returns shape (10, 512, 512)
+
+    # Same for predictions
+    predictions = model.load_existing_predictions(
+        image_shape=(10, 512, 512, 3),
+        image_index=0,
+        axes_to_collapse="C"
+    )
+    # Returns shape (10, 512, 512)
+
+    # For future: collapse multiple axes
+    labels = model.load_existing_annotations(
+        image_shape=(5, 10, 512, 512, 3),
+        image_index=0,
+        axes_to_collapse=["T", "C"]  # Collapse time and channels
+    )
+    # Returns shape (10, 512, 512)
 """
 
 from pathlib import Path
@@ -355,17 +388,62 @@ class ImageDataModel:
         self.annotation_io_type = io_type
         self._annotations_io = None
 
+    def _compute_annotation_shape(
+        self,
+        image_shape: tuple,
+        axes_to_collapse: str | list[str] | None = None,
+    ) -> tuple:
+        """
+        Compute annotation shape by collapsing specified axes from image shape.
+
+        Simple, flexible approach: caller specifies which axes to remove.
+        Today: collapse "C" for ZYXC -> ZYX
+        Future: collapse "T", ["C", "S"], or any other axes as needed
+
+        Args:
+            image_shape: Original image shape
+            axes_to_collapse: Axis names to remove (e.g., "C" or ["C", "T"])
+                            If None, annotation shape matches image shape
+
+        Returns:
+            Tuple representing the annotation shape with specified axes collapsed
+        """
+        if axes_to_collapse is None or not self.axis_types:
+            return image_shape
+
+        # Normalize to list
+        if isinstance(axes_to_collapse, str):
+            axes_to_collapse = [axes_to_collapse]
+
+        # Build new shape by keeping only non-collapsed axes
+        new_shape = []
+        for axis_name, dim_size in zip(
+            self.axis_types, image_shape, strict=False
+        ):
+            if axis_name not in axes_to_collapse:
+                new_shape.append(dim_size)
+
+        return tuple(new_shape)
+
     def load_existing_annotations(
-        self, image_shape, image_index: int = 0, subdirectory: str = "class_0"
+        self,
+        image_shape,
+        image_index: int = 0,
+        subdirectory: str = "class_0",
+        axes_to_collapse: str | list[str] | None = None,
     ):
         """
         Load existing annotation array for the image at image_index, or return an
-        empty array matching image_shape if no saved data exists.
+        empty array matching annotation shape if no saved data exists.
 
         Args:
             image_shape: Shape of the image to match for empty array creation.
             image_index: Index of the image in the model's image list.
             subdirectory: Subdirectory under 'annotations' to look in (default: class_0).
+            axes_to_collapse: Axis names to collapse from image shape (e.g., "C" for channels).
+                            Pass "C" to get ZYX annotations from ZYXC image.
+                            Pass ["C", "T"] to collapse multiple axes.
+                            Pass None to match image shape exactly.
 
         Returns:
             numpy ndarray containing annotation labels (dtype preserved by io or uint16 zeros).
@@ -384,11 +462,18 @@ class ImageDataModel:
         io = self.get_annotations_io()
         data = io.load(str(annotation_dir), dataset_name)
 
-        # If nothing saved, return zeros
+        # Compute target annotation shape (may be smaller than image if axes collapsed)
+        annotation_shape = self._compute_annotation_shape(
+            image_shape, axes_to_collapse
+        )
+
+        # If nothing saved, return zeros with appropriate shape
         if data is None or getattr(data, "size", 0) == 0:
             # Create an empty instance image using centralized helper so
             # annotations and predictions share the same shape rules.
-            return create_empty_instance_image(image_shape, dtype=np.uint16)
+            return create_empty_instance_image(
+                annotation_shape, dtype=np.uint16
+            )
 
         return data
 
@@ -424,15 +509,20 @@ class ImageDataModel:
         image_shape,
         image_index: int = 0,
         subdirectory: str = "predictions",
+        axes_to_collapse: str | list[str] | None = None,
     ):
         """
         Load existing prediction array for the image at image_index, or return an
-        empty array matching image_shape if no saved data exists.
+        empty array matching prediction shape if no saved data exists.
 
         Args:
             image_shape: Shape of the image to match for empty array creation.
             image_index: Index of the image in the model's image list.
             subdirectory: Subdirectory under 'predictions' to look in (default: 'predictions').
+            axes_to_collapse: Axis names to collapse from image shape (e.g., "C" for channels).
+                            Pass "C" to get ZYX predictions from ZYXC image.
+                            Pass ["C", "T"] to collapse multiple axes.
+                            Pass None to match image shape exactly.
 
         Returns:
             numpy ndarray containing prediction labels (dtype preserved by io or uint16 zeros).
@@ -456,8 +546,15 @@ class ImageDataModel:
 
         data = io.load(str(preds_dir), dataset_name)
 
+        # Compute target prediction shape (may be smaller than image if axes collapsed)
+        prediction_shape = self._compute_annotation_shape(
+            image_shape, axes_to_collapse
+        )
+
         if data is None or getattr(data, "size", 0) == 0:
-            return create_empty_instance_image(image_shape, dtype=np.uint16)
+            return create_empty_instance_image(
+                prediction_shape, dtype=np.uint16
+            )
 
         return data
 
@@ -467,6 +564,7 @@ class ImageDataModel:
         image_index: int,
         subdirectory: str = "class_0",
         current_step: tuple = None,
+        axes_to_collapse: str | list[str] | None = None,
     ):
         """
         Save the provided labels array for the image at image_index under the
@@ -477,6 +575,9 @@ class ImageDataModel:
             image_index: Index of the image to associate the labels with.
             subdirectory: Subdirectory under annotations to save into (default: class_0).
             current_step: Viewer dimension position (for stacked mode).
+            axes_to_collapse: Axis names that were collapsed (for documentation).
+                            Should match what was passed to load_existing_annotations.
+                            Not used during save, but kept for API consistency.
 
         Returns:
             The result of the io.save(...) call.
@@ -504,6 +605,7 @@ class ImageDataModel:
         subdirectory: str = "predictions",
         current_step: tuple = None,
         selected_axis: str = None,
+        axes_to_collapse: str | list[str] | None = None,
     ):
         """
         Save prediction array for the image at image_index under predictions/subdirectory.
@@ -514,6 +616,9 @@ class ImageDataModel:
             subdirectory: Subdirectory under predictions to save into.
             current_step: Viewer dimension position (for stacked mode).
             selected_axis: Axis string like "YX", "ZYX", "YXC", etc.
+            axes_to_collapse: Axis names that were collapsed (for documentation).
+                            Should match what was passed to load_existing_predictions.
+                            Not used during save, but kept for API consistency.
 
         Returns:
             Result of io.save(...)
