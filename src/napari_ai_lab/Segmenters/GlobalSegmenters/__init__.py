@@ -55,5 +55,8 @@ def __getattr__(name):
             globals()[name] = segmenter_class
             return segmenter_class
         else:
-            raise ImportError(f"Could not import {name} - check dependencies")
+            # Return None instead of raising - caller can check and skip registration
+            print(f"ℹ️  {name} not available (missing dependencies)")
+            globals()[name] = None
+            return None
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
