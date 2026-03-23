@@ -53,6 +53,10 @@ pytest = "*"
 
 ndevio = "*"
 
+onnxsim = "<0.6"
+
+cellcast = "*"
+
 [target.linux-64.dependencies]
 pytorch-gpu = "*"
 cudnn = "*"
