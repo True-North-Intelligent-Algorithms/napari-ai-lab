@@ -51,7 +51,7 @@ def test_segment_logic_without_widget():
         model_path = str(
             original_parent_dir / "models" / "monai_unet_test.pth"
         )
-        segmenter._on_model_path_changed(model_path)
+        segmenter.load_model(model_path)
         print(f"Loaded model from: {model_path}")
 
         # Define selected axis and current step
@@ -148,7 +148,7 @@ def test_segment_all_slices_logic():
         model_path = str(
             original_parent_dir / "models" / "monai_unet_test.pth"
         )
-        segmenter._on_model_path_changed(model_path)
+        segmenter.load_model(model_path)
 
         # Define selected axis
         selected_axis = "YX"
