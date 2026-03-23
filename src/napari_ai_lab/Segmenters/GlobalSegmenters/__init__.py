@@ -23,6 +23,7 @@ __all__ = ["GlobalSegmenterBase", "MicroSamSegmenter"]
 _OPTIONAL_SEGMENTERS = {
     "CellposeSegmenter": ".CellposeSegmenter",
     "StardistSegmenter": ".StardistSegmenter",
+    "CellCastStardistSegmenter": ".CellCastStardistSegmenter",
     "MicroSamSegmenter": ".MicroSamSegmenter",
     "MicroSamYoloSegmenter": ".MicroSamYoloSegmenter",
     "MonaiUNetSegmenter": ".MonaiUNetSegmenter",
