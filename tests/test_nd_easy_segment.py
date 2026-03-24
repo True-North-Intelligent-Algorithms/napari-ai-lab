@@ -46,7 +46,7 @@ def test_nd_easy_segment_creates_prediction():
             original_parent_dir / "models" / "monai_unet_test.pth"
         )
 
-        segmenter._on_model_path_changed(model_path)
+        segmenter.load_model(model_path)
         nd_easy_segment_widget._update_segmenter_parameter_form(segmenter)
         nd_easy_segment_widget.segmenter_parameter_form.set_selected_axis("YX")
 

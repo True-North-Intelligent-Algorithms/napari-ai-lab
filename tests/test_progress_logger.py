@@ -4,6 +4,8 @@ Test script for ProgressLogger functionality.
 Tests both NapariProgressLogger and ConsoleProgressLogger.
 """
 
+import pytest
+
 from napari_ai_lab.utilities import (
     ConsoleProgressLogger,
     NapariProgressLogger,
@@ -54,6 +56,7 @@ def test_napari_logger_without_viewer():
     print()
 
 
+@pytest.mark.skip(reason="Interactive test - disrupts automated testing")
 def test_napari_logger_with_viewer():
     """Test NapariProgressLogger with actual napari viewer."""
     print("\n" + "=" * 60)

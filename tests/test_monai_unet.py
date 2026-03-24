@@ -48,7 +48,7 @@ def test_monai_unet_segmentation():
     # Load the model
     print(f"\nLoading model: {model_path}")
     segmenter.load_model(str(model_path))
-    print(f"Model loaded: {segmenter.model_name}")
+    print(f"Model loaded from: {segmenter.model_file_path}")
 
     # Check if output already exists
     if output_path.exists():
