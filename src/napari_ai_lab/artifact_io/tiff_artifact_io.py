@@ -29,6 +29,7 @@ class TiffArtifactIO(BaseArtifactIO):
         dataset_name: str,
         data: np.ndarray,
         current_step: tuple = None,
+        selected_axis: str = None,
     ) -> bool:
         try:
             path = Path(save_directory) / f"{dataset_name}.tif"
