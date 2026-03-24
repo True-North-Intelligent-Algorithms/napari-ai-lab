@@ -51,6 +51,7 @@ StarDist Automatic Segmentation:
             "choices": [
                 "2D_versatile_fluo",
                 "2D_versatile_he",
+                "3D_demo",
             ],
             "default": "2D_versatile_fluo",
         },
@@ -103,6 +104,10 @@ StarDist Automatic Segmentation:
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
         # Initialize custom model storage
+
+        self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
+        self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
+
         self.custom_model = None
         self.is_3d_model = False
 
@@ -198,10 +203,10 @@ StarDist Automatic Segmentation:
 
     def segment(self, image, **kwargs):
         """
-        Perform StarDist segmentation on entire 2D image.
+        Perform StarDist segmentation on 2D or 3D image.
 
         Args:
-            image (numpy.ndarray): Input image to segment (YX or YXC).
+            image (numpy.ndarray): Input image to segment (YX, YXC for 2D or ZYX, ZYXC for 3D).
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -215,6 +220,9 @@ StarDist Automatic Segmentation:
                 f"StardistSegmenter requires at least 2D images. Got shape: {image.shape}"
             )
 
+        # Check if 3D model is selected
+        is_3d_model = self.model_preset.startswith("3D_")
+
         # Use custom model if loaded, otherwise use preset
         model = None
         if hasattr(self, "custom_model") and self.custom_model is not None:
@@ -223,39 +231,115 @@ StarDist Automatic Segmentation:
         else:
             print(f"Using preset model: {self.model_preset}")
 
-        # Ensure 2D input (YX or YXC). If higher dims were passed, caller should slice.
-        if image.ndim > 3:
-            raise ValueError(
-                f"StardistSegmenter expects YX or YXC image. Got shape: {image.shape}"
+        # Validate dimensions based on model type
+        if is_3d_model:
+            if image.ndim < 3:
+                raise ValueError(
+                    f"3D StarDist model requires at least 3D images (ZYX). Got shape: {image.shape}"
+                )
+            # For 3D: expect ZYX or ZYXC
+            if image.ndim > 4:
+                raise ValueError(
+                    f"StardistSegmenter expects ZYX or ZYXC image for 3D. Got shape: {image.shape}"
+                )
+        else:
+            # For 2D: expect YX or YXC
+            if image.ndim > 3:
+                raise ValueError(
+                    f"StardistSegmenter expects YX or YXC image for 2D. Got shape: {image.shape}"
+                )
+
+        # Convert multi-channel to grayscale if needed
+        # StarDist models expect single channel (grayscale)
+        if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
+            print(
+                f"⚠️  Converting {image.shape[-1]}-channel 3D image to grayscale for StarDist"
             )
+            x = np.mean(image, axis=-1)
+        elif not is_3d_model and image.ndim == 3 and image.shape[-1] in [3, 4]:
+            print(
+                f"⚠️  Converting {image.shape[-1]}-channel 2D image to grayscale for StarDist"
+            )
+            x = np.mean(image, axis=-1)
+        else:
+            x = image
 
         # Optional normalization
-        x = self._normalize(image) if self.normalize_input else image
+        x = self._normalize(x) if self.normalize_input else x
+
+        print(
+            f"🔍 StarDist input: shape={x.shape}, dtype={x.dtype}, ndim={x.ndim}"
+        )
 
         # Load model if not already loaded
         if model is None:
             try:
-                model = StarDist2D.from_pretrained(self.model_preset)
-                print(
-                    f"Loaded StarDist2D pretrained model: {self.model_preset}"
-                )
+                if is_3d_model:
+                    model = StarDist3D.from_pretrained(self.model_preset)
+                    print(
+                        f"Loaded StarDist3D pretrained model: {self.model_preset}"
+                    )
+                else:
+                    model = StarDist2D.from_pretrained(self.model_preset)
+                    print(
+                        f"Loaded StarDist2D pretrained model: {self.model_preset}"
+                    )
             except Exception as e:
                 raise RuntimeError(
-                    f"Could not load StarDist2D model '{self.model_preset}': {e}"
+                    f"Could not load StarDist model '{self.model_preset}': {e}"
                 ) from e
 
         # Predict instances
         try:
+            # Check TensorFlow GPU availability
+            print("🔍 TensorFlow GPU Check:")
+            try:
+                import tensorflow as tf
+
+                print(f"   TensorFlow version: {tf.__version__}")
+                print(
+                    f"   GPU available: {tf.config.list_physical_devices('GPU')}"
+                )
+                print(f"   Built with CUDA: {tf.test.is_built_with_cuda()}")
+                if tf.config.list_physical_devices("GPU"):
+                    print("   ✅ GPU ENABLED - using GPU acceleration")
+                else:
+                    print("   ⚠️  NO GPU - using CPU (will be slow!)")
+            except (ImportError, AttributeError, RuntimeError) as e:
+                print(f"   ❌ Could not check TensorFlow GPU: {e}")
+
+            # Set axes based on model type
+            if is_3d_model:
+                axes = "ZYX"
+                print(
+                    f"🔍 Calling model.predict_instances with shape={x.shape}, axes={axes}"
+                )
+            else:
+                axes = None  # Let 2D model use default
+                print(
+                    f"🔍 Calling model.predict_instances with shape={x.shape}, axes=None (will use model default)"
+                )
+
             labels, details = model.predict_instances(
                 x,
+                axes=axes,
                 prob_thresh=self.prob_thresh,
                 nms_thresh=self.nms_thresh,
-                n_tiles=(1, 2, 2),
             )
             print(
                 f"StarDist: Found {len(np.unique(labels)) - 1} objects (prob_thresh={self.prob_thresh}, nms_thresh={self.nms_thresh})"
             )
         except Exception as e:
+            print("❌ StarDist predict_instances failed!")
+            print(f"   Input shape: {x.shape}")
+            print(f"   Input dtype: {x.dtype}")
+            print(f"   Model preset: {self.model_preset}")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {str(e)}")
+            import traceback
+
+            print("   Full traceback:")
+            traceback.print_exception(type(e), e, e.__traceback__)
             raise RuntimeError(f"StarDist prediction failed: {e}") from e
 
         return labels.astype(np.uint16)
