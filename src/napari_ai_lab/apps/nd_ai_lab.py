@@ -113,18 +113,15 @@ class NDAILab(QWidget):
         # Store image layer reference
         self.image_layer = image_layer
 
-        # Get current image index (default to 0 for now)
-        current_image_index = 0
-
         # Load existing data or create empty with axis collapsing
         labels_data = self.image_data_model.load_existing_annotations(
             image_layer.data.shape,
-            current_image_index,
+            self.current_image_index,
             axes_to_collapse=self.axes_to_collapse,
         )
         predictions_data = self.image_data_model.load_existing_predictions(
             image_layer.data.shape,
-            current_image_index,
+            self.current_image_index,
             axes_to_collapse=self.axes_to_collapse,
         )
 
