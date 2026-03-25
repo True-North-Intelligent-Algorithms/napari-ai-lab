@@ -35,7 +35,7 @@ def test_load_czi_with_bioio():
         print(f"\nCZI file: {test_image_path.name}")
         print(f"Shape: {img.shape}")
         print(f"Dimension order: {img.dims.order}")
-        print(f"Data type: {img.data.dtype}")
+        print(f"Data type: {img.dtype}")
 
         # Basic assertions
         assert img.data is not None, "Image data should not be None"
