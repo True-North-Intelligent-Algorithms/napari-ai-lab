@@ -36,11 +36,6 @@ appose = "*"
 PyQt5 = "*"
 albumentations = "*"
 
-# tensorflow needs to be below 2.11 for GPU support on windows
-# Windows uses PyPI tensorflow because conda-forge doesn't have Windows builds
-[target.win-64.pypi-dependencies]
-tensorflow = "<2.11"
-
 # Use this to install from local folder in editable mode
 #napari-easy-augment-batch-dl = { path = "C:/Users/bnort/work/ImageJ2022/tnia/napari-easy-augment-batch-dl", editable = true }
 
@@ -48,10 +43,12 @@ tensorflow = "<2.11"
 
 # comment this in if you want to local editable install
 napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
-
 czifile = "*"
 bioio-czi = "*"
-
 pytest = "*"
-
 ndevio = "*"
+
+# tensorflow needs to be below 2.11 for GPU support on windows
+# Windows uses PyPI tensorflow because conda-forge doesn't have Windows builds
+[target.win-64.pypi-dependencies]
+tensorflow = "<2.11"
