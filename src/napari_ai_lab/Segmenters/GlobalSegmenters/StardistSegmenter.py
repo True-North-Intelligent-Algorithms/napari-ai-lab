@@ -25,6 +25,14 @@ except ImportError:
     _is_stardist_available = False
 
 
+# Model to axis mapping - defines the expected input axes for each model
+MODEL_AXIS_MAP = {
+    "2D_versatile_fluo": "YX",  # Grayscale fluorescence
+    "2D_versatile_he": "YXC",  # RGB H&E staining
+    "3D_demo": "ZYX",  # 3D grayscale
+}
+
+
 @dataclass
 class StardistSegmenter(GlobalSegmenterBase):
     """
@@ -48,11 +56,7 @@ StarDist Automatic Segmentation:
         metadata={
             "type": "str",
             "param_type": "inference",
-            "choices": [
-                "2D_versatile_fluo",
-                "2D_versatile_he",
-                "3D_demo",
-            ],
+            "choices": list(MODEL_AXIS_MAP.keys()),
             "default": "2D_versatile_fluo",
         },
     )
@@ -111,8 +115,27 @@ StarDist Automatic Segmentation:
         self.custom_model = None
         self.is_3d_model = False
 
+    def get_recommended_axis(self) -> str:
+        """
+        Get the recommended axis for the current model preset.
+
+        Returns:
+            str: Recommended axis string (e.g., "YX", "YXC", "ZYX")
+        """
+        return MODEL_AXIS_MAP.get(self.model_preset, "YX")
+
+    @staticmethod
+    def get_model_axis_map() -> dict:
+        """
+        Get the complete model-to-axis mapping.
+
+        Returns:
+            dict: Dictionary mapping model names to recommended axes
+        """
+        return MODEL_AXIS_MAP.copy()
+
     def __setattr__(self, name, value):
-        """Override setattr to detect model_path changes."""
+        """Override setattr to detect model_path and model_preset changes."""
         # Get old value if it exists
         old_value = getattr(self, name, None) if hasattr(self, name) else None
 
@@ -125,6 +148,17 @@ StarDist Automatic Segmentation:
                 f"🔄 Model path changed from '{old_value}' to '{value}'"
             )  # Debug print
             self._on_model_path_changed(value)
+
+        # Check if model_preset changed
+        elif (
+            name == "model_preset"
+            and old_value != value
+            and old_value is not None
+        ):
+            recommended_axis = self.get_recommended_axis()
+            print(
+                f"🔄 Model preset changed to '{value}' - recommended axis: {recommended_axis}"
+            )
 
     def _on_model_path_changed(self, stardist_path: str):
         """Handle model path changes - load custom model and check if 2D or 3D."""

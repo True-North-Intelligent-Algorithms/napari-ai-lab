@@ -481,6 +481,76 @@ class BaseNDApp(QWidget):
 
         # Sync the current segmenter instance with new parameter values
         if hasattr(self, "segmenter") and self.segmenter is not None:
+            # If model_preset changed for StardistSegmenter, validate before syncing
+            if "model_preset" in parameters and hasattr(
+                self.segmenter, "get_recommended_axis"
+            ):
+                # Store old value before sync
+                old_model_preset = getattr(
+                    self.segmenter, "model_preset", None
+                )
+
+                # Temporarily sync to get the recommended axis
+                temp_segmenter = (
+                    self.segmenter_parameter_form.sync_nd_operation_instance(
+                        self.segmenter
+                    )
+                )
+                recommended_axis = temp_segmenter.get_recommended_axis()
+                print(
+                    f"Model changed to {parameters['model_preset']}, recommended axis: {recommended_axis}"
+                )
+
+                # Check if the recommended axis is available for the current image
+                if recommended_axis not in self.segmenter.supported_axes:
+                    # Axis not compatible with current image - show warning and revert
+                    from qtpy.QtWidgets import QMessageBox
+
+                    model_name = parameters["model_preset"]
+                    if "C" in recommended_axis:
+                        msg = (
+                            f"⚠️ Model '{model_name}' requires a channel dimension (axis: {recommended_axis})\n\n"
+                            f"Your current image does not have a channel dimension.\n"
+                            f"Please load an RGB/multi-channel image to use this model.\n\n"
+                            f"Keeping previous model: {old_model_preset}"
+                        )
+                    elif "Z" in recommended_axis:
+                        msg = (
+                            f"⚠️ Model '{model_name}' requires a Z dimension (axis: {recommended_axis})\n\n"
+                            f"Your current image is 2D.\n"
+                            f"Please load a 3D image to use this model.\n\n"
+                            f"Keeping previous model: {old_model_preset}"
+                        )
+                    else:
+                        msg = (
+                            f"⚠️ Model '{model_name}' requires axis: {recommended_axis}\n\n"
+                            f"This is not compatible with your current image.\n"
+                            f"Available axes: {', '.join(self.segmenter.supported_axes)}\n\n"
+                            f"Keeping previous model: {old_model_preset}"
+                        )
+
+                    QMessageBox.warning(None, "Incompatible Model", msg)
+                    print(
+                        f"❌ Cannot use model '{model_name}': requires {recommended_axis}, but only {self.segmenter.supported_axes} available"
+                    )
+
+                    # Revert the model_preset combo to the old value
+                    if old_model_preset:
+                        self.segmenter_parameter_form.set_parameter(
+                            "model_preset", old_model_preset
+                        )
+
+                    return  # Don't proceed with sync
+                else:
+                    # Valid selection - update axis automatically
+                    self.segmenter = temp_segmenter
+                    print("Synced segmenter instance with new parameters")
+                    self.segmenter_parameter_form.set_selected_axis(
+                        recommended_axis
+                    )
+                    return
+
+            # For non-model_preset changes or segmenters without get_recommended_axis
             self.segmenter = (
                 self.segmenter_parameter_form.sync_nd_operation_instance(
                     self.segmenter
