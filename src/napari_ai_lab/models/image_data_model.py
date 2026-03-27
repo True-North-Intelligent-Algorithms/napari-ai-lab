@@ -76,8 +76,10 @@ class ImageDataModel:
         self.segmenter_cache: dict = {}
         self.annotation_io_type: str = "tiff"
         self.prediction_io_type: str = "tiff"
+        self.input_images_io_type: str | None = None
         self._annotations_io = None
         self._predictions_io = None
+        self._input_images_io = None
         self.axis_types: str | None = None
 
         # Load image list on initialization
@@ -503,6 +505,17 @@ class ImageDataModel:
             self._predictions_io, "set_axis_slice"
         ):
             self._predictions_io.set_axis_slice(axis_slice)
+
+    def get_input_images_io(self):
+        """Get input images io."""
+        if self._input_images_io is None and self.input_images_io_type:
+            self._input_images_io = get_artifact_io(self.input_images_io_type)
+        return self._input_images_io
+
+    def set_input_images_io_type(self, io_type: str):
+        """Set input images io type."""
+        self.input_images_io_type = io_type
+        self._input_images_io = get_artifact_io(self.input_images_io_type)
 
     def load_existing_predictions(
         self,
