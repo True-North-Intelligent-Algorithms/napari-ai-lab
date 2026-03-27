@@ -383,6 +383,17 @@ class ImageDataModel:
 
             self._annotations_io = get_artifact_io(self.annotation_io_type)
 
+        # Transfer metadata from input_images_io if both are stacked_sequence
+        if (
+            self.annotation_io_type == "stacked_sequence"
+            and self.input_images_io_type == "stacked_sequence"
+            and self._input_images_io is not None
+        ):
+            image_names = self._input_images_io.get_image_names()
+            original_shapes = self._input_images_io.get_original_shapes()
+            self._annotations_io.set_image_names(image_names)
+            self._annotations_io.set_original_shapes(original_shapes)
+
         return self._annotations_io
 
     def set_annotation_io_type(self, io_type: str):
@@ -494,6 +505,17 @@ class ImageDataModel:
                 self.prediction_io_type = detected_type
 
             self._predictions_io = get_artifact_io(self.prediction_io_type)
+
+        # Transfer metadata from input_images_io if both are stacked_sequence
+        if (
+            self.prediction_io_type == "stacked_sequence"
+            and self.input_images_io_type == "stacked_sequence"
+            and self._input_images_io is not None
+        ):
+            image_names = self._input_images_io.get_image_names()
+            original_shapes = self._input_images_io.get_original_shapes()
+            self._predictions_io.set_image_names(image_names)
+            self._predictions_io.set_original_shapes(original_shapes)
 
         return self._predictions_io
 
