@@ -44,6 +44,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             else:
                 idx = self._image_names.index(dataset_name)
 
+            """
             original_shape = self._original_shapes[idx]
             cropped_data = data[idx, ...]
             cropped_data = np.squeeze(cropped_data)
@@ -54,14 +55,25 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
 
             path = Path(save_directory) / f"{dataset_name}.tif"
             io.imsave(str(path), cropped_data.astype(np.uint16))
+            """
+            path = Path(save_directory) / f"{dataset_name}.tif"
+            io.imsave(str(path), data.astype(np.uint16))
             return True
         except Exception as e:  # noqa: BLE001
             print(f"Error saving {dataset_name}: {e}")
             return False
 
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
-        image_names = collect_all_image_names(load_directory)
-        self.load_image_collection_as_stack(load_directory, image_names)
+        if len(self._image_names) == 0:
+            image_names = collect_all_image_names(load_directory)
+            self.load_image_collection_as_stack(
+                load_directory, self._image_names
+            )
+        else:
+            image_names = self._image_names
+            self.load_sparse_image_collection_as_stack(
+                load_directory, image_names
+            )
         return self._current_stack
 
     def load_image_collection_as_stack(
@@ -114,6 +126,47 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
         self._current_directory = directory
         print(f"Cached stack shape: {self._current_stack.shape}")
 
+    def load_sparse_image_collection_as_stack(
+        self, directory: str, image_names: list
+    ):
+        """Load sparse collection - create empty frames for missing files."""
+        dir_path = Path(directory)
+
+        if not dir_path.exists():
+            print(f"Directory does not exist: {directory}")
+            self._current_stack = np.array([])
+            self._current_directory = directory
+            return
+
+        if not image_names or not self._original_shapes:
+            self._current_stack = np.array([])
+            self._current_directory = directory
+            return
+
+        images = []
+        axis_infos = []
+
+        for idx, name in enumerate(image_names):
+            # Add .tif if no extension
+            filename = f"{name}.tif" if "." not in name else name
+
+            path = dir_path / filename
+
+            if path.exists():
+                # Load existing file
+                img = io.imread(str(path))
+            else:
+                # Create empty frame using original shape
+                img = np.zeros(self._original_shapes[idx], dtype=np.uint16)
+
+            axis_info = get_axis_info(img)
+            images.append(img)
+            axis_infos.append(axis_info)
+
+        self._current_stack = pad_to_largest(images, axis_infos)
+        self._current_directory = directory
+        print(f"Cached sparse stack shape: {self._current_stack.shape}")
+
     def load_full_stack(
         self, load_directory: str, normalize: bool = False
     ) -> np.ndarray:
@@ -130,3 +183,19 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             if self._current_stack is not None
             else np.array([])
         )
+
+    def get_image_names(self):
+        """Get list of image names."""
+        return self._image_names
+
+    def get_original_shapes(self):
+        """Get list of original image shapes."""
+        return self._original_shapes
+
+    def set_image_names(self, image_names: list):
+        """Set image names."""
+        self._image_names = image_names
+
+    def set_original_shapes(self, original_shapes: list):
+        """Set original shapes."""
+        self._original_shapes = original_shapes
