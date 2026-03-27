@@ -124,6 +124,10 @@ class NDEasySegment(BaseNDApp):
         self.train_btn.clicked.connect(self._on_train)
         auto_layout.addWidget(self.train_btn)
 
+        # Add progress logger widget for segmentation
+        self.segment_progress_logger = QtProgressLogger()
+        auto_layout.addWidget(self.segment_progress_logger.get_widget())
+
         main_layout.addWidget(self.auto_controls_group)
 
         main_layout.addWidget(self.save_annotations_btn)
@@ -357,6 +361,10 @@ class NDEasySegment(BaseNDApp):
             QMessageBox.warning(self, "Warning", "No image loaded")
             return
 
+        # Clear and update progress logger
+        self.segment_progress_logger.clear()
+        self.segment_progress_logger.log_info("Segmenting current image...")
+
         print("Segmenting current image...")
 
         # Ensure segmenter is synced with current parameters
@@ -366,7 +374,10 @@ class NDEasySegment(BaseNDApp):
             )
         )
 
+        self.segment_progress_logger.update_progress(1, 2, "Processing...")
         self._segment_nd_slice(current_step=self.viewer.dims.current_step)
+        self.segment_progress_logger.update_progress(2, 2, "✅ Complete")
+        self.segment_progress_logger.log_info("✅ Segmentation complete")
 
     def _on_segment_all(self):
         """Segment all slices in the ND data automatically."""
@@ -377,6 +388,12 @@ class NDEasySegment(BaseNDApp):
         if not hasattr(self, "segmenter") or self.segmenter is None:
             QMessageBox.warning(self, "Warning", "No segmenter selected")
             return
+
+        # Clear progress logger
+        self.segment_progress_logger.clear()
+        self.segment_progress_logger.log_info(
+            "Starting segmentation of all slices..."
+        )
 
         print("Segmenting all slices...")
 
@@ -395,6 +412,11 @@ class NDEasySegment(BaseNDApp):
         print(f"Selected axis: {selected_axis}")
         print(f"Dataset axis types: {dataset_axis_types}")
         print(f"Image shape: {image_shape}")
+
+        self.segment_progress_logger.log_info(
+            f"Selected axis: {selected_axis}"
+        )
+        self.segment_progress_logger.log_info(f"Image shape: {image_shape}")
 
         # Determine number of spatial dimensions
         if selected_axis.endswith("ZYX"):
@@ -439,6 +461,9 @@ class NDEasySegment(BaseNDApp):
         )
 
         print(f"Total slices to segment: {total_slices}")
+        self.segment_progress_logger.log_info(
+            f"Total slices to segment: {total_slices}"
+        )
 
         # Iterate through all combinations of non-spatial indices
         for idx, non_spatial_indices in enumerate(
@@ -446,6 +471,13 @@ class NDEasySegment(BaseNDApp):
         ):
             # Build current_step tuple
             current_step = non_spatial_indices + (0,) * num_spatial
+
+            # Update progress
+            self.segment_progress_logger.update_progress(
+                idx + 1,
+                total_slices,
+                f"Processing slice {idx + 1}/{total_slices}",
+            )
 
             print(
                 f"Processing slice {idx + 1}/{total_slices}: step={current_step}"
@@ -455,6 +487,10 @@ class NDEasySegment(BaseNDApp):
             self._segment_nd_slice(current_step=current_step)
 
         print(f"✅ Completed segmentation of all {total_slices} slices")
+        self.segment_progress_logger.log_info(
+            f"✅ Completed segmentation of all {total_slices} slices"
+        )
+
         QMessageBox.information(
             self,
             "Success",
