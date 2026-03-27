@@ -11,7 +11,6 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .artifact_io import StackedSequenceArtifactIO
 from .models import ImageDataModel
 
 
@@ -87,7 +86,8 @@ class NDStackedSequenceViewer(QWidget):
                 # Note that the stacked_images are not loaded into the model itself
                 # because they are just a view of the data, the model still has file paths
                 # which can be used to access individual images.
-                stacked_sequence_io = StackedSequenceArtifactIO()
+                model.set_input_images_io_type("stacked_sequence")
+                stacked_sequence_io = model.get_input_images_io()
                 stacked_images = stacked_sequence_io.load_full_stack(
                     str(model.parent_directory), normalize=True
                 )
