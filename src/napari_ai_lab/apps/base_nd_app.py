@@ -61,7 +61,9 @@ class BaseNDApp(QWidget):
         # Initialize layer references (common to both widgets)
         self.image_layer = None
         self.annotation_layer = None
-        self.predictions_layer = None
+        self.predictions_layers = (
+            {}
+        )  # dict: segmenter_name -> napari labels layer
         self.points_layer = None
         self.shapes_layer = None
 
@@ -381,10 +383,15 @@ class BaseNDApp(QWidget):
         # Remove layers one by one with proper error handling
         layers_to_remove = [
             ("label", self.annotation_layer),
-            ("predictions", self.predictions_layer),
             ("points", self.points_layer),
             ("shapes", self.shapes_layer),
         ]
+
+        # Add all prediction layers from the dictionary
+        for segmenter_name, pred_layer in self.predictions_layers.items():
+            layers_to_remove.append(
+                (f"predictions ({segmenter_name})", pred_layer)
+            )
 
         for layer_name, layer in layers_to_remove:
             if layer:
@@ -405,7 +412,7 @@ class BaseNDApp(QWidget):
 
         # Reset references
         self.annotation_layer = None
-        self.predictions_layer = None
+        self.predictions_layers = {}
         self.points_layer = None
         self.shapes_layer = None
 

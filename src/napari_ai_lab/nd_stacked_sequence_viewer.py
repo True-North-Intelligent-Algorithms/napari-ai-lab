@@ -120,6 +120,9 @@ class NDStackedSequenceViewer(QWidget):
                     stacked_images, name="Stacked Image Series"
                 )
 
+                # Load predictions from all segmenter subdirectories
+                self._load_all_predictions(model, stacked_images.shape)
+
                 # Subscribe to dimension change events to track current image
                 # self.viewer.dims.events.current_step.connect(self._on_dims_changed)
 
@@ -184,6 +187,38 @@ class NDStackedSequenceViewer(QWidget):
         self.current_index = 0
         self.image_names = []
         self.image_info_label.setText("No directory selected")
+
+    def _load_all_predictions(self, model, image_shape):
+        """Load predictions from all segmenter subdirectories."""
+        predictions_dir = model.parent_directory / "predictions"
+
+        if not predictions_dir.exists():
+            print("No predictions directory found")
+            return
+
+        # Find all subdirectories (each is a segmenter method)
+        for method_dir in predictions_dir.iterdir():
+            if method_dir.is_dir():
+                method_name = method_dir.name
+                print(f"Loading predictions for: {method_name}")
+
+                # Set current segmenter name
+                model.set_current_segmenter_name(method_name)
+
+                try:
+                    # Load predictions for this method
+                    predictions = model.load_existing_predictions(
+                        image_shape=image_shape, image_index=0
+                    )
+
+                    if predictions is not None and predictions.size > 0:
+                        # Add as labels layer with method name
+                        self.viewer.add_labels(predictions, name=method_name)
+                        print(
+                            f"  Loaded {method_name} predictions: {predictions.shape}"
+                        )
+                except FileNotFoundError as e:
+                    print(f"  Could not load {method_name} predictions: {e}")
 
     def get_current_image_path(self):
         """Get the path of the currently selected image."""

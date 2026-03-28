@@ -80,6 +80,7 @@ class ImageDataModel:
         self._annotations_io = None
         self._predictions_io = None
         self._input_images_io = None
+        self._current_segmenter_name: str | None = None
         self.axis_types: str | None = None
 
         # Load image list on initialization
@@ -319,14 +320,15 @@ class ImageDataModel:
         Get the base directory for storing prediction results.
 
         Args:
-            algorithm: Optional algorithm name (not used yet, reserved for future)
+            algorithm: Optional algorithm/method name to create subdirectory for organizing
+                      predictions by segmentation method (e.g., "StarDist", "Cellpose").
+                      If None, returns base predictions/ folder.
 
         Returns:
-            Path to predictions/ folder (optionally organized by algorithm in future)
+            Path to predictions/ folder or predictions/{algorithm}/ subfolder
         """
-        # For now, predictions are stored in a flat `predictions/` folder
-        # under the parent directory. The `algorithm` parameter is reserved
-        # for future use where we might create subfolders per algorithm.
+        if algorithm:
+            return self.parent_directory / "predictions" / algorithm
         return self.parent_directory / "predictions"
 
     def _detect_artifact_io_type(
@@ -492,19 +494,13 @@ class ImageDataModel:
 
     def get_predictions_io(self):
         """Get prediction artifact io, auto-detecting type if not set."""
-        if self._predictions_io is None:
-            # Auto-detect IO type from existing files if not explicitly set
-            prediction_dir = self.parent_directory / "predictions"
-            detected_type = self._detect_artifact_io_type(
-                prediction_dir, self.prediction_io_type
-            )
+        # Use segmenter name as subdirectory
+        subdirectory = self._current_segmenter_name or "default"
 
-            # Update type if detected different from current
-            if detected_type != self.prediction_io_type:
-                print(f"📁 Auto-detected prediction IO type: {detected_type}")
-                self.prediction_io_type = detected_type
-
-            self._predictions_io = get_artifact_io(self.prediction_io_type)
+        # Create IO with subdirectory
+        self._predictions_io = get_artifact_io(
+            self.prediction_io_type, subdirectory=subdirectory
+        )
 
         # Transfer metadata from input_images_io if both are stacked_sequence
         if (
@@ -528,6 +524,13 @@ class ImageDataModel:
         ):
             self._predictions_io.set_axis_slice(axis_slice)
 
+    def set_current_segmenter_name(self, name: str):
+        """Set current segmenter name for organizing predictions."""
+        if name != self._current_segmenter_name:
+            self._current_segmenter_name = name
+            # Reset predictions_io to use new subdirectory
+            self._predictions_io = None
+
     def get_input_images_io(self):
         """Get input images io."""
         if self._input_images_io is None and self.input_images_io_type:
@@ -543,7 +546,7 @@ class ImageDataModel:
         self,
         image_shape,
         image_index: int = 0,
-        subdirectory: str = "predictions",
+        subdirectory: str | None = None,
         axes_to_collapse: str | list[str] | None = None,
     ):
         """
@@ -553,7 +556,8 @@ class ImageDataModel:
         Args:
             image_shape: Shape of the image to match for empty array creation.
             image_index: Index of the image in the model's image list.
-            subdirectory: Subdirectory under 'predictions' to look in (default: 'predictions').
+            subdirectory: Subdirectory under 'predictions' to look in.
+                         If None, uses _current_segmenter_name or "default".
             axes_to_collapse: Axis names to collapse from image shape (e.g., "C" for channels).
                             Pass "C" to get ZYX predictions from ZYXC image.
                             Pass ["C", "T"] to collapse multiple axes.
@@ -564,9 +568,11 @@ class ImageDataModel:
         """
         import numpy as np
 
-        preds_dir = self.get_predictions_directory(
-            subdirectory if subdirectory else "predictions"
-        )
+        # Use provided subdirectory, or fall back to current segmenter name, or "default"
+        if subdirectory is None:
+            subdirectory = self._current_segmenter_name or "default"
+
+        preds_dir = self.get_predictions_directory(subdirectory)
 
         image_paths = self.get_image_paths()
         if 0 <= image_index < len(image_paths):
@@ -664,10 +670,11 @@ class ImageDataModel:
         predictions_dir.mkdir(parents=True, exist_ok=True)
 
         image_paths = self.get_image_paths()
-        if 0 <= image_index < len(image_paths):
-            dataset_name = image_paths[image_index].stem
+
+        if self.prediction_io_type == "stacked_sequence":
+            dataset_name = image_paths[current_step[0]].stem
         else:
-            dataset_name = "unknown"
+            dataset_name = image_paths[image_index].stem
 
         io = self.get_predictions_io()
 

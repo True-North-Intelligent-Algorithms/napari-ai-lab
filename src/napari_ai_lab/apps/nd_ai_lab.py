@@ -119,19 +119,18 @@ class NDAILab(QWidget):
             self.current_image_index,
             axes_to_collapse=self.axes_to_collapse,
         )
-        predictions_data = self.image_data_model.load_existing_predictions(
-            image_layer.data.shape,
-            self.current_image_index,
-            axes_to_collapse=self.axes_to_collapse,
-        )
 
         # Create shared layers ONCE
+
         self.labels_layer = self.viewer.add_labels(
             labels_data, name="Labels (Persistent)"
         )
-        self.predictions_layer = self.viewer.add_labels(
-            predictions_data, name="Predictions (Persistent)"
-        )
+
+        # Dictionary to hold prediction layers for different segmenters
+        # Key: segmenter name (e.g., "CellposeSegmenter", "StarDist")
+        # Value: napari labels layer
+        # Populated on demand when segmentation runs or existing predictions are loaded
+        self.predictions_layers = {}
 
         # Create points layer for interactive segmentation
         self._point_choices = ["positive", "negative"]
@@ -191,7 +190,7 @@ class NDAILab(QWidget):
         # Segment widget needs: image, labels, predictions, points, shapes
         self.segment_widget.image_layer = self.image_layer
         self.segment_widget.annotation_layer = self.labels_layer
-        self.segment_widget.predictions_layer = self.predictions_layer
+        self.segment_widget.predictions_layers = self.predictions_layers
         self.segment_widget.points_layer = self.points_layer
         self.segment_widget.shapes_layer = self.shapes_layer
 
@@ -351,8 +350,14 @@ class NDAILab(QWidget):
         # Collect layers to remove
         if hasattr(self, "labels_layer") and self.labels_layer:
             layers_to_remove.append(("Labels", self.labels_layer))
-        if hasattr(self, "predictions_layer") and self.predictions_layer:
-            layers_to_remove.append(("Predictions", self.predictions_layer))
+
+        # Handle predictions_layers dictionary (multiple prediction layers)
+        if hasattr(self, "predictions_layers") and self.predictions_layers:
+            for segmenter_name, layer in self.predictions_layers.items():
+                layers_to_remove.append(
+                    (f"Predictions ({segmenter_name})", layer)
+                )
+
         if hasattr(self, "points_layer") and self.points_layer:
             layers_to_remove.append(("Points", self.points_layer))
         if hasattr(self, "shapes_layer") and self.shapes_layer:
@@ -370,8 +375,8 @@ class NDAILab(QWidget):
         # Clear references
         if hasattr(self, "labels_layer"):
             self.labels_layer = None
-        if hasattr(self, "predictions_layer"):
-            self.predictions_layer = None
+        if hasattr(self, "predictions_layers"):
+            self.predictions_layers = {}
         if hasattr(self, "points_layer"):
             self.points_layer = None
         if hasattr(self, "shapes_layer"):

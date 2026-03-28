@@ -512,6 +512,10 @@ class NDEasySegment(BaseNDApp):
                 QMessageBox.warning(self, "Warning", "No segmenter selected")
                 return
 
+            # Set segmenter name for organizing predictions
+            segmenter_name = self.segmenter.__class__.__name__
+            self.image_data_model.set_current_segmenter_name(segmenter_name)
+
             # Print the axis mode the user chose
             selected_axis = self.segmenter_parameter_form.get_selected_axis()
             print(f"User selected axis mode: {selected_axis}")
@@ -537,9 +541,14 @@ class NDEasySegment(BaseNDApp):
             )
 
             # save predictions via model
+            # Use the current segmenter name as subdirectory to organize predictions by method
+            subdirectory = (
+                self.image_data_model._current_segmenter_name or "default"
+            )
             self.image_data_model.save_predictions(
                 mask,
                 self.current_image_index,
+                subdirectory=subdirectory,
                 current_step=current_step,
                 selected_axis=segmentation_axis,
                 axes_to_collapse=self.axes_to_collapse,
@@ -549,9 +558,20 @@ class NDEasySegment(BaseNDApp):
                 current_step, segmentation_axis
             )
 
-            self.predictions_layer.data[segmentation_indices] = mask
-            self.predictions_layer.refresh()
-            print("Automatic segmentation completed")
+            # Get or create the predictions layer for this segmenter
+            segmenter_name = (
+                self.image_data_model._current_segmenter_name or "default"
+            )
+            predictions_layer = self._get_or_create_predictions_layer(
+                segmenter_name, self.annotation_layer.data.shape
+            )
+
+            # Update the layer with new predictions
+            predictions_layer.data[segmentation_indices] = mask
+            predictions_layer.refresh()
+            print(
+                f"Automatic segmentation completed - updated layer: {segmenter_name}"
+            )
 
         except (
             AttributeError,
@@ -760,19 +780,16 @@ class NDEasySegment(BaseNDApp):
             axes_to_collapse=self.axes_to_collapse,
         )
 
-        predictions_data = self.image_data_model.load_existing_predictions(
-            image_data.shape,
-            self.current_image_index,
-            axes_to_collapse=self.axes_to_collapse,
-        )
-
         self.annotation_layer = self.viewer.add_labels(
             labels_data, name="Labels (Persistent)"
         )
 
-        self.predictions_layer = self.viewer.add_labels(
-            predictions_data, name="Predictions (Persistent)"
-        )
+        # Dictionary to hold prediction layers for different segmenters
+        # Key: segmenter name, Value: napari labels layer
+        self.predictions_layers = {}
+
+        # Load any existing predictions from subdirectories (different segmenter methods)
+        self._load_existing_prediction_layers(image_data.shape)
 
         # Only create interactive layers if in interactive mode
         if self.is_interactive_mode():
@@ -782,6 +799,96 @@ class NDEasySegment(BaseNDApp):
 
         # move image layer to bottom
         # self.viewer.layers.move(self.image_layer, len(self.viewer.layers)-1)
+
+    def _load_existing_prediction_layers(self, image_shape):
+        """Load predictions from all segmenter subdirectories as separate layers."""
+
+        predictions_dir = (
+            self.image_data_model.parent_directory / "predictions"
+        )
+
+        if not predictions_dir.exists():
+            print(
+                "No predictions directory found - no prediction layers created"
+            )
+            return
+
+        # Find all subdirectories (each is a segmenter method)
+        # Skip individual files in predictions/ - only process subdirectories
+        subdirs = [d for d in predictions_dir.iterdir() if d.is_dir()]
+
+        if not subdirs:
+            print(
+                "No prediction subdirectories found - no prediction layers created"
+            )
+            return
+
+        print(f"Found {len(subdirs)} prediction subdirectories")
+
+        for method_dir in subdirs:
+            method_name = method_dir.name
+            print(f"Checking predictions for: {method_name}")
+
+            # Set current segmenter name for loading
+            self.image_data_model.set_current_segmenter_name(method_name)
+
+            try:
+                # Load predictions for this method
+                predictions = self.image_data_model.load_existing_predictions(
+                    image_shape=image_shape,
+                    image_index=self.current_image_index,
+                    axes_to_collapse=self.axes_to_collapse,
+                )
+
+                # Only create layer if there's actual prediction data (not just empty array)
+                if (
+                    predictions is not None
+                    and predictions.size > 0
+                    and predictions.max() > 0
+                ):
+                    # Add as labels layer with method name
+                    layer = self.viewer.add_labels(
+                        predictions, name=method_name
+                    )
+                    self.predictions_layers[method_name] = layer
+                    print(
+                        f"  ✓ Created layer '{method_name}' with predictions"
+                    )
+                else:
+                    print(
+                        f"  ✗ Skipped '{method_name}' - no prediction data found"
+                    )
+            except (ValueError, OSError, RuntimeError, AttributeError) as e:
+                print(f"  ✗ Error loading {method_name}: {e}")
+
+    def _get_or_create_predictions_layer(
+        self, segmenter_name, predictions_shape
+    ):
+        """Get existing prediction layer for segmenter or create new one."""
+        # Check if we already have a layer for this segmenter in the dictionary
+        if segmenter_name in self.predictions_layers:
+            layer = self.predictions_layers[segmenter_name]
+            # Verify the layer still exists in the viewer
+            if layer in self.viewer.layers:
+                return layer
+            else:
+                # Layer was removed, delete from dictionary
+                del self.predictions_layers[segmenter_name]
+
+        # Create new empty predictions layer for this segmenter
+        import numpy as np
+
+        from ..utility import create_empty_instance_image
+
+        empty_predictions = create_empty_instance_image(
+            predictions_shape, dtype=np.uint16
+        )
+        new_layer = self.viewer.add_labels(
+            empty_predictions, name=segmenter_name
+        )
+        self.predictions_layers[segmenter_name] = new_layer
+        print(f"Created new predictions layer: {segmenter_name}")
+        return new_layer
 
     def _setup_interactive_layers(self, image_data):
         """Setup interactive annotation layers (points and shapes)."""
