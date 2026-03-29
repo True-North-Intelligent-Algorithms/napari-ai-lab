@@ -39,9 +39,9 @@ CellCast StarDist Automatic Segmentation:
 
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
+        super().__init__()
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
-        super().__init__()
 
     @staticmethod
     def is_available():
