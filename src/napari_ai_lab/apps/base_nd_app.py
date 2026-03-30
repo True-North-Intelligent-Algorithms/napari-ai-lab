@@ -83,14 +83,20 @@ class BaseNDApp(QWidget):
         self.save_annotations_btn = QPushButton("Save Annotations")
         self.save_annotations_btn.clicked.connect(self._on_save_annotations)
 
-        # Connect to viewer close event
+        # Connect to viewer close event - only install once across all BaseNDApp instances
+        # sharing the same viewer (e.g. sub-apps inside NDAILab).
         try:
-            self.viewer.window._qt_window.closeEvent = (
-                self._create_close_event_handler(
-                    self.viewer.window._qt_window.closeEvent
+            qt_window = self.viewer.window._qt_window
+            if not getattr(qt_window, "_nd_close_handler_installed", False):
+                qt_window.closeEvent = self._create_close_event_handler(
+                    qt_window.closeEvent
                 )
-            )
-            print("Connected to viewer close event")
+                qt_window._nd_close_handler_installed = True
+                print("Connected to viewer close event")
+            else:
+                print(
+                    "Viewer close event handler already installed - skipping"
+                )
         except (AttributeError, RuntimeError) as e:
             print(f"Could not connect to viewer closing: {e}")
 
