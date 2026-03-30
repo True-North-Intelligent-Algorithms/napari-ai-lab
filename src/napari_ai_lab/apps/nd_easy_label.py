@@ -323,6 +323,15 @@ class NDEasyLabel(BaseNDApp):
             # Connect shapes event handler
             self.shapes_layer.events.data.connect(self._on_shapes_changed)
 
+            self.boxes_layer = self.viewer.add_shapes(
+                ndim=3,
+                name="Label box",
+                face_color="transparent",
+                edge_color="blue",
+                edge_width=5,
+                text={"string": "{split_set}", "size": 15, "color": "green"},
+            )
+
             print(
                 f"Successfully set up annotation layers for image layer: {image_layer.name}"
             )

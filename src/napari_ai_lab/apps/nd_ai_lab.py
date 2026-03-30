@@ -158,6 +158,16 @@ class NDAILab(QWidget):
             ndim=annotation_ndim,
         )
 
+        # Create boxes layer for label widget (bounding-box annotations)
+        self.boxes_layer = self.viewer.add_shapes(
+            ndim=3,
+            name="Label box",
+            face_color="transparent",
+            edge_color="blue",
+            edge_width=5,
+            text={"string": "{split_set}", "size": 15, "color": "green"},
+        )
+
         # Distribute layers to sub-apps (direct assignment, not calling their _set_image_layer)
         self._distribute_layers_to_sub_apps()
 
@@ -170,10 +180,11 @@ class NDAILab(QWidget):
         Uses direct attribute assignment instead of calling sub-apps' _set_image_layer()
         to avoid duplicate layer creation.
         """
-        # Label widget needs: image, labels, points
+        # Label widget needs: image, labels, points, boxes
         self.label_widget.image_layer = self.image_layer
         self.label_widget.annotation_layer = self.labels_layer
         self.label_widget.points_layer = self.points_layer
+        self.label_widget.boxes_layer = self.boxes_layer
 
         # Connect points layer events for label widget
         if self.points_layer and hasattr(
@@ -362,6 +373,8 @@ class NDAILab(QWidget):
             layers_to_remove.append(("Points", self.points_layer))
         if hasattr(self, "shapes_layer") and self.shapes_layer:
             layers_to_remove.append(("Shapes", self.shapes_layer))
+        if hasattr(self, "boxes_layer") and self.boxes_layer:
+            layers_to_remove.append(("Boxes", self.boxes_layer))
 
         # Remove layers from viewer
         for layer_name, layer in layers_to_remove:
@@ -381,5 +394,7 @@ class NDAILab(QWidget):
             self.points_layer = None
         if hasattr(self, "shapes_layer"):
             self.shapes_layer = None
+        if hasattr(self, "boxes_layer"):
+            self.boxes_layer = None
 
         print("   ✅ Layer cleanup complete")
