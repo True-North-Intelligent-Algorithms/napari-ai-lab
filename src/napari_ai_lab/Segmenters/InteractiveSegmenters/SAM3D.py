@@ -115,7 +115,7 @@ Instructions:
             image_name (str): Name of the image (without extension)
         """
         # Create embedding directory path using Path
-        embedding_parent_path = Path(save_path).parent / "embeddings"
+        embedding_parent_path = Path(save_path) / "embeddings"
         embedding_save_path = (
             embedding_parent_path / image_name / self.model_type
         )
@@ -131,6 +131,13 @@ Instructions:
             image: Current image data for embedding generation
             save_path (str): Directory path where embeddings are saved/loaded
             image_name (str): Name of the image (without extension)
+
+        Returns:
+            dict with keys:
+                "success" (bool): True if initialization succeeded.
+                "error_type" (str | None): Short category of failure, e.g.
+                    "out_of_memory", "cuda_error", "import_error", "unknown".
+                "message" (str): Human-readable description suitable for GUI display.
         """
         print(
             f"SAM3D: initialize_predictor called with image_shape={image.shape}, save_path={save_path}, image_name={image_name}"
@@ -151,11 +158,83 @@ Instructions:
                 ndim=ndim,
                 save_path=self.embedding_save_path,
             )
-        except Exception as e:  # noqa
-            print(f"Error initializing predictor: {e}")
+            return {
+                "success": True,
+                "error_type": None,
+                "message": "Predictor initialized successfully.",
+            }
+
+        except RuntimeError as e:
+            # Covers torch/CUDA RuntimeErrors including out-of-memory and
+            # AcceleratorError which inherits from RuntimeError.
+            msg = str(e)
             import traceback
 
             traceback.print_exc()
+
+            if (
+                "out of memory" in msg.lower()
+                or "cudaErrorMemoryAllocation" in msg
+            ):
+                error_type = "out_of_memory"
+                user_msg = (
+                    "GPU out of memory while initializing SAM predictor.\n"
+                    "Try a smaller image, reduce batch size, or free GPU memory.\n\n"
+                    f"Details: {msg}"
+                )
+            elif "cuda" in msg.lower():
+                error_type = "cuda_error"
+                user_msg = (
+                    f"CUDA error while initializing SAM predictor.\n\n"
+                    f"Details: {msg}"
+                )
+            else:
+                error_type = "runtime_error"
+                user_msg = (
+                    f"Runtime error while initializing SAM predictor.\n\n"
+                    f"Details: {msg}"
+                )
+
+            print(f"[SAM3D] initialize_predictor failed ({error_type}): {msg}")
+            return {
+                "success": False,
+                "error_type": error_type,
+                "message": user_msg,
+            }
+
+        except ImportError as e:
+            import traceback
+
+            traceback.print_exc()
+            msg = str(e)
+            user_msg = (
+                "A required package is missing for SAM predictor initialization.\n\n"
+                f"Details: {msg}"
+            )
+            print(f"[SAM3D] initialize_predictor import error: {msg}")
+            return {
+                "success": False,
+                "error_type": "import_error",
+                "message": user_msg,
+            }
+
+        except (OSError, ValueError) as e:
+            import traceback
+
+            traceback.print_exc()
+            msg = str(e)
+            user_msg = (
+                "Error accessing model files or invalid data during SAM predictor initialization.\n\n"
+                f"Details: {msg}"
+            )
+            print(
+                f"[SAM3D] initialize_predictor error ({type(e).__name__}): {msg}"
+            )
+            return {
+                "success": False,
+                "error_type": "io_or_value_error",
+                "message": user_msg,
+            }
 
     @property
     def supported_axes(self):
