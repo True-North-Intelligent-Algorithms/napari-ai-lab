@@ -138,9 +138,16 @@ class NDEasyLabel(BaseNDApp):
                 )
             )
 
-            self.segmenter.initialize_predictor(
+            result = self.segmenter.initialize_predictor(
                 image_data, str(parent_dir), image_name
             )
+            # result may be None for implementations that don't return a value
+            if result is not None and not result.get("success", True):
+                QMessageBox.critical(
+                    self,
+                    result.get("error_type", "Error"),
+                    result.get("message", "Unknown error"),
+                )
         except (
             AttributeError,
             ValueError,
