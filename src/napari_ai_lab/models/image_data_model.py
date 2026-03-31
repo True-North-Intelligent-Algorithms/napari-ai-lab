@@ -684,27 +684,43 @@ class ImageDataModel:
         stacked_names = self._get_stacked_image_names() if stacked else []
 
         # ------------------------------------------------------------------ #
-        # Determine which file_name(s) will be replaced by this save so we   #
-        # know which existing rows to discard.                                #
+        # TODO: multi-image support — revisit when the viewer can hold        #
+        # multiple independent image/label/box layer collections at once.     #
+        #                                                                     #
+        # The original logic below preserved rows belonging to images         #
+        # *outside* the current save set, so that a shared boxes.csv could   #
+        # hold boxes for several different images side-by-side.  This matters #
+        # when, e.g., image A and image B are both open and only image A is   #
+        # being saved — image B's rows must not be erased.                    #
+        #                                                                     #
+        # Stacked-sequence mode is a special case: many source files are      #
+        # merged into one viewer image along axis-0, so all rows can safely   #
+        # be replaced together.  But a true multi-image workflow (separate    #
+        # image layers, each with their own boxes layer) would need a smarter #
+        # strategy — either per-image CSV files, or the preserve logic below. #
+        #                                                                     #
+        # For now we do a full overwrite (simple, no doubles).  Restore the  #
+        # block below and replace `writer.writerows(new_rows)` with           #
+        # `writer.writerows(existing_rows + new_rows)` when multi-image       #
+        # support is needed.                                                  #
         # ------------------------------------------------------------------ #
-        if stacked:
-            # Replace rows for every image in the current stack
-            names_to_replace: set[str] = set(stacked_names)
-        else:
-            image_paths = self.get_image_paths()
-            if not (0 <= image_index < len(image_paths)):
-                print(f"⚠️  save_boxes: image_index {image_index} out of range")
-                return False
-            names_to_replace = {image_paths[image_index].name}
-
-        # Keep rows that belong to images *outside* the current replace set
-        existing_rows: list[dict] = []
-        if csv_path.exists():
-            with open(csv_path, newline="") as fh:
-                reader = csv.DictReader(fh)
-                for row in reader:
-                    if row.get("file_name") not in names_to_replace:
-                        existing_rows.append(row)
+        #
+        # if stacked:
+        #     names_to_replace: set[str] = set(stacked_names)
+        # else:
+        #     image_paths = self.get_image_paths()
+        #     if not (0 <= image_index < len(image_paths)):
+        #         print(f"⚠️  save_boxes: image_index {image_index} out of range")
+        #         return False
+        #     names_to_replace = {image_paths[image_index].name}
+        #
+        # existing_rows: list[dict] = []
+        # if csv_path.exists():
+        #     with open(csv_path, newline="") as fh:
+        #         reader = csv.DictReader(fh)
+        #         for row in reader:
+        #             if row.get("file_name") not in names_to_replace:
+        #                 existing_rows.append(row)
 
         # ------------------------------------------------------------------ #
         # Build new rows from every box in boxes_layer_data                  #
@@ -744,10 +760,11 @@ class ImageDataModel:
                 }
             )
 
+        # Overwrite the entire CSV — no merging, no doubles
         with open(csv_path, "w", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(existing_rows + new_rows)
+            writer.writerows(new_rows)
 
         print(f"📦 Saved {len(new_rows)} box(es) → {csv_path}")
         return True
@@ -826,9 +843,105 @@ class ImageDataModel:
                 }
         return None
 
+    def crop_and_save_label_patches(
+        self,
+        boxes_layer_data: list,
+        image_array: np.ndarray,
+        annotations_array: np.ndarray,
+        image_index: int,
+    ) -> Path:
+        """
+        For every box in *boxes_layer_data*, crop the supplied image and
+        annotation arrays and save paired patch files under
+        ``labels/input0/`` and ``labels/truth0/``.
+
+        Caller passes the live arrays directly (same pattern as save_annotations),
+        so no disk read is needed here.
+
+        Args:
+            boxes_layer_data: ``boxes_layer.data`` — list of vertex arrays.
+            image_array: The full image numpy array (from ``image_layer.data``).
+            annotations_array: The full annotation numpy array (from ``annotation_layer.data``).
+            image_index: Index of the current image in the model's image list
+                         (used to derive the stem for output filenames).
+
+        Returns:
+            Path to the ``labels/`` directory where patches were saved.
+        """
+        import shutil
+
+        import numpy as np
+        from skimage.io import imsave
+
+        from ..utilities.io_util import generate_patch_names
+
+        image_paths = self.get_image_paths()
+
+        # Output directories: labels/input0  and  labels/truth0
+        labels_dir = self.get_labels_directory()
+        input_dir = labels_dir / "input0"
+        truth_dir = labels_dir / "truth0"
+
+        # Erase and recreate to avoid stale/doubled patches
+        for d in (input_dir, truth_dir):
+            if d.exists():
+                shutil.rmtree(d)
+            d.mkdir(parents=True)
+
+        saved_count = 0
+
+        for box in boxes_layer_data:
+            box = np.asarray(box)
+
+            # Coordinates: last two columns are always (y, x)
+            ystart = int(np.min(box[:, -2]))
+            yend = int(np.max(box[:, -2]))
+            xstart = int(np.min(box[:, -1]))
+            xend = int(np.max(box[:, -1]))
+
+            n = int(box[0, 0]) if box.shape[-1] == 3 else image_index
+
+            stem = image_paths[n].stem
+
+            if yend <= ystart or xend <= xstart:
+                print(f"⚠️  Degenerate box for '{stem}' — skipping")
+                continue
+
+            # Crop image
+            if image_array.ndim == 3:
+                image_crop = image_array[n, ystart:yend, xstart:xend]
+            else:
+                image_crop = image_array[ystart:yend, xstart:xend]
+
+            # Crop annotation
+            if annotations_array.ndim == 3:
+                annotation_crop = annotations_array[
+                    n, ystart:yend, xstart:xend
+                ]
+            else:
+                annotation_crop = annotations_array[ystart:yend, xstart:xend]
+
+            image_name, mask_name = generate_patch_names(
+                str(input_dir), str(truth_dir), stem
+            )
+
+            imsave(image_name, image_crop)
+            imsave(mask_name, annotation_crop.astype(np.uint16))
+
+            print(
+                f"✅ Saved patch pair: {Path(image_name).name} "
+                f"({yend - ystart}×{xend - xstart})"
+            )
+            saved_count += 1
+
+        print(
+            f"📦 crop_and_save_label_patches: saved {saved_count} patch pair(s) → {labels_dir}"
+        )
+        return labels_dir
+
     def save_annotations(
         self,
-        labels_array,
+        annotations_array,
         image_index: int,
         subdirectory: str = "class_0",
         current_step: tuple = None,
@@ -860,7 +973,7 @@ class ImageDataModel:
         io = self.get_annotations_io()
 
         # Ensure uint16 to match previous behavior
-        labels_to_save = np.asarray(labels_array).astype(np.uint16)
+        labels_to_save = np.asarray(annotations_array).astype(np.uint16)
 
         return io.save(
             str(annotation_dir), dataset_name, labels_to_save, current_step

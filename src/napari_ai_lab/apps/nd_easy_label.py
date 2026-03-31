@@ -62,6 +62,11 @@ class NDEasyLabel(BaseNDApp):
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
 
+        # Single button saves annotations, boxes, and label patches
+        self.save_project_btn = QPushButton("Save Project")
+        self.save_project_btn.clicked.connect(self._on_save_project)
+        self.layout().addWidget(self.save_project_btn)
+
         # Add stretch to push everything to the top (prevents button stretching)
         self.layout().addStretch()
 
@@ -285,6 +290,43 @@ class NDEasyLabel(BaseNDApp):
             f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "
             f"(total boxes: {len(boxes_layer.data)})"
         )
+
+    def _on_save_project(self):
+        """Save annotations, boxes, and label patches in one go."""
+        # Save annotations
+        self._on_save_annotations()
+
+        # Save label patches (only if boxes exist)
+        boxes_layer = getattr(self, "boxes_layer", None)
+        if boxes_layer is not None and len(boxes_layer.data) > 0:
+            self.image_data_model.crop_and_save_label_patches(
+                boxes_layer.data,
+                self.image_layer.data,
+                self.annotation_layer.data,
+                self.current_image_index,
+            )
+            print("Label patches saved.")
+        else:
+            print("No boxes drawn — skipping label patch save.")
+
+    def _save_label_patches_on_close(self):
+        """Called by the close handler to save label patches silently (no dialog)."""
+        boxes_layer = getattr(self, "boxes_layer", None)
+        if (
+            boxes_layer is None
+            or len(boxes_layer.data) == 0
+            or self.image_data_model is None
+            or self.image_layer is None
+            or self.annotation_layer is None
+        ):
+            return
+        self.image_data_model.crop_and_save_label_patches(
+            boxes_layer.data,
+            self.image_layer.data,
+            self.annotation_layer.data,
+            self.current_image_index,
+        )
+        print("Label patches saved on close.")
 
     def _get_current_image_name(self) -> str | None:
         """Return the file name of the currently displayed image, or None."""

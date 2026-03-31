@@ -141,6 +141,12 @@ class BaseNDApp(QWidget):
                     # Save boxes at the same time
                     self._save_boxes()
 
+                    # Save label patches if boxes exist (NDEasyLabel only)
+                    if callable(
+                        getattr(self, "_save_label_patches_on_close", None)
+                    ):
+                        self._save_label_patches_on_close()
+
             # Call original close event handler
             if original_close_event:
                 original_close_event(event)

@@ -330,6 +330,7 @@ class NDAILab(QWidget):
 
                 # Save boxes at the same time as annotations
                 self._save_boxes()
+                self._save_label_patches_on_close()
 
             # Update current image index
             self.current_image_index = image_index
@@ -362,6 +363,11 @@ class NDAILab(QWidget):
         finally:
             # Always clear the processing flag
             self._processing_image_change = False
+
+    def _save_label_patches_on_close(self):
+        """Delegate label patch saving to label_widget (called by base close handler)."""
+        if hasattr(self, "label_widget"):
+            self.label_widget._save_label_patches_on_close()
 
     def _cleanup_layers(self):
         """
