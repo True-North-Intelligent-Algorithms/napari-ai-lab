@@ -138,6 +138,9 @@ class BaseNDApp(QWidget):
                             f"Failed to save annotations: {e}",
                         )
 
+                    # Save boxes at the same time
+                    self._save_boxes()
+
             # Call original close event handler
             if original_close_event:
                 original_close_event(event)
@@ -168,6 +171,22 @@ class BaseNDApp(QWidget):
                 )
         else:
             print("No annotations to save")
+
+        # Save boxes at the same time as annotations
+        self._save_boxes()
+
+    def _save_boxes(self):
+        """Save all boxes in boxes_layer to CSV via the model (called alongside annotation saves)."""
+        boxes_layer = getattr(self, "boxes_layer", None)
+        if boxes_layer is None or self.image_data_model is None:
+            return
+        try:
+            self.image_data_model.save_boxes(
+                boxes_layer.data,
+                self.current_image_index,
+            )
+        except (OSError, ValueError, RuntimeError) as e:
+            print(f"Failed to save boxes: {e}")
 
     def set_image_data_model(self, image_data_model: ImageDataModel):
         """

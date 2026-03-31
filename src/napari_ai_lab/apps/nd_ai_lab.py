@@ -194,6 +194,18 @@ class NDAILab(QWidget):
                 self.label_widget._on_points_changed
             )
 
+        # Connect boxes layer events for label widget
+        if self.boxes_layer and hasattr(
+            self.label_widget, "_on_boxes_changed"
+        ):
+            self.boxes_layer.events.data.connect(
+                self.label_widget._on_boxes_changed
+            )
+
+        # Load existing boxes into the boxes_layer from CSV
+        if hasattr(self.label_widget, "_load_existing_boxes"):
+            self.label_widget._load_existing_boxes()
+
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer
         self.augment_widget.annotation_layer = self.labels_layer
@@ -315,6 +327,9 @@ class NDAILab(QWidget):
                     print("   Saved annotations from Label tab")
                 except (OSError, ValueError, RuntimeError) as e:
                     print(f"   Failed to save annotations: {e}")
+
+                # Save boxes at the same time as annotations
+                self._save_boxes()
 
             # Update current image index
             self.current_image_index = image_index
