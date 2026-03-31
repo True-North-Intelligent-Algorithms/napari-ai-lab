@@ -599,6 +599,233 @@ class ImageDataModel:
 
         return data
 
+    # ------------------------------------------------------------------
+    # Boxes / bounding-box ROI  (saved as CSV in labels/ directory)
+    # ------------------------------------------------------------------
+
+    def get_labels_directory(self) -> Path:
+        """
+        Get the directory for storing label-related CSV files (e.g., boxes).
+
+        Returns:
+            Path to labels/ folder (created on demand)
+        """
+        labels_dir = self.parent_directory / "labels"
+        labels_dir.mkdir(parents=True, exist_ok=True)
+        return labels_dir
+
+    def get_boxes_csv_path(self) -> Path:
+        """Return the path to boxes.csv inside the labels directory."""
+        return self.get_labels_directory() / "boxes.csv"
+
+    def _is_stacked_sequence(self) -> bool:
+        """Return True when the input images are loaded as a stacked sequence."""
+        return self.input_images_io_type == "stacked_sequence"
+
+    def _get_stacked_image_names(self) -> list[str]:
+        """
+        Return the ordered list of image *stems* from the stacked-sequence IO.
+
+        Returns an empty list when not in stacked_sequence mode or the IO has
+        not been initialised yet.
+        """
+        if (
+            self._input_images_io is not None
+            and self.input_images_io_type == "stacked_sequence"
+        ):
+            names = self._input_images_io.get_image_names()
+            return list(names) if names else []
+        return []
+
+    def save_boxes(
+        self,
+        boxes_layer_data: list,
+        image_index: int,
+    ) -> bool:
+        """
+        Save all boxes in *boxes_layer_data* to ``labels/boxes.csv``.
+
+        **Normal mode** (one image per viewer slot)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        Every box in *boxes_layer_data* belongs to the image identified by
+        *image_index*.  ``file_name`` is set to
+        ``image_paths[image_index].name``.
+
+        **Stacked-sequence mode** (many images stacked on axis 0)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        Each box vertex array has shape ``(N, 3)`` where column 0 is the
+        **frame/sequence index** within the stack.  The model uses that index
+        to look up the original file name from the stacked-sequence IO so that
+        each row in the CSV correctly records which source image the box
+        belongs to.  All previously saved rows for *all* images that appear
+        in the current stack are replaced; rows for images not in the current
+        stack are preserved.
+
+        CSV columns::
+
+            file_name, xstart, ystart, xend, yend
+
+        Args:
+            boxes_layer_data: ``boxes_layer.data`` — list of vertex arrays.
+            image_index: Index of the current image in non-stacked mode
+                         (ignored for per-box lookup in stacked mode, but
+                         used to replace the right rows when the list is empty).
+
+        Returns:
+            True on success.
+        """
+        import csv
+
+        import numpy as np
+
+        csv_path = self.get_boxes_csv_path()
+        fieldnames = ["file_name", "xstart", "ystart", "xend", "yend"]
+        stacked = self._is_stacked_sequence()
+        stacked_names = self._get_stacked_image_names() if stacked else []
+
+        # ------------------------------------------------------------------ #
+        # Determine which file_name(s) will be replaced by this save so we   #
+        # know which existing rows to discard.                                #
+        # ------------------------------------------------------------------ #
+        if stacked:
+            # Replace rows for every image in the current stack
+            names_to_replace: set[str] = set(stacked_names)
+        else:
+            image_paths = self.get_image_paths()
+            if not (0 <= image_index < len(image_paths)):
+                print(f"⚠️  save_boxes: image_index {image_index} out of range")
+                return False
+            names_to_replace = {image_paths[image_index].name}
+
+        # Keep rows that belong to images *outside* the current replace set
+        existing_rows: list[dict] = []
+        if csv_path.exists():
+            with open(csv_path, newline="") as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    if row.get("file_name") not in names_to_replace:
+                        existing_rows.append(row)
+
+        # ------------------------------------------------------------------ #
+        # Build new rows from every box in boxes_layer_data                  #
+        # ------------------------------------------------------------------ #
+        new_rows: list[dict] = []
+        for box in boxes_layer_data:
+            box = np.asarray(box)
+
+            if stacked and box.shape[-1] >= 3:
+                # Column 0 is the frame/sequence index
+                frame_idx = int(round(float(box[0, 0])))
+                if 0 <= frame_idx < len(stacked_names):
+                    file_name = f"{stacked_names[frame_idx]}.tif"
+                else:
+                    print(
+                        f"⚠️  save_boxes: frame index {frame_idx} out of range "
+                        f"(stack has {len(stacked_names)} frames) — skipping box"
+                    )
+                    continue
+            else:
+                # Normal mode — all boxes belong to the current image
+                image_paths = self.get_image_paths()
+                file_name = image_paths[image_index].name
+
+            # Coordinates: last two columns are always (y, x)
+            ystart = int(np.min(box[:, -2]))
+            yend = int(np.max(box[:, -2]))
+            xstart = int(np.min(box[:, -1]))
+            xend = int(np.max(box[:, -1]))
+            new_rows.append(
+                {
+                    "file_name": file_name,
+                    "xstart": xstart,
+                    "ystart": ystart,
+                    "xend": xend,
+                    "yend": yend,
+                }
+            )
+
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(existing_rows + new_rows)
+
+        print(f"📦 Saved {len(new_rows)} box(es) → {csv_path}")
+        return True
+
+    def load_existing_boxes(self) -> list[dict]:
+        """
+        Load all bounding-box rows from boxes.csv.
+
+        Each returned dict always contains::
+
+            file_name, xstart, ystart, xend, yend
+
+        In **stacked-sequence mode** an additional key ``frame_index`` is
+        included — the position of the image within the current stack — so
+        callers can place the rectangle at the correct frame when rebuilding
+        the boxes layer.  Images whose file name is not found in the current
+        stack receive ``frame_index = None`` and should be skipped.
+
+        Returns:
+            List of dicts (empty if the file does not exist).
+        """
+        import csv
+
+        csv_path = self.get_boxes_csv_path()
+        if not csv_path.exists():
+            return []
+
+        stacked = self._is_stacked_sequence()
+        stacked_names = self._get_stacked_image_names() if stacked else []
+
+        # Build a stem → index lookup for fast resolution
+        stem_to_idx: dict[str, int] = {}
+        if stacked:
+            for idx, name in enumerate(stacked_names):
+                # names are stems; also accept full filename with extension
+                stem_to_idx[name] = idx
+                stem_to_idx[Path(name).stem] = idx
+
+        rows: list[dict] = []
+        with open(csv_path, newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                entry: dict = {
+                    "file_name": row["file_name"],
+                    "xstart": int(row["xstart"]),
+                    "ystart": int(row["ystart"]),
+                    "xend": int(row["xend"]),
+                    "yend": int(row["yend"]),
+                }
+                if stacked:
+                    # Resolve frame index from file name stem
+                    stem = Path(row["file_name"]).stem
+                    entry["frame_index"] = stem_to_idx.get(
+                        stem, stem_to_idx.get(row["file_name"])
+                    )
+                rows.append(entry)
+        return rows
+
+    def get_boxes_for_image(self, image_name: str) -> dict | None:
+        """
+        Return the saved bounding-box row for a specific image, or None.
+
+        Args:
+            image_name: File name to look up (e.g. ``"image1.jpg"``).
+
+        Returns:
+            Dict with keys ``xstart, ystart, xend, yend``, or None if not found.
+        """
+        for row in self.load_existing_boxes():
+            if row["file_name"] == image_name:
+                return {
+                    "xstart": row["xstart"],
+                    "ystart": row["ystart"],
+                    "xend": row["xend"],
+                    "yend": row["yend"],
+                }
+        return None
+
     def save_annotations(
         self,
         labels_array,
