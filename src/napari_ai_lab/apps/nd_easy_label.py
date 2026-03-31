@@ -1,4 +1,5 @@
 import napari
+import numpy as np
 from qtpy.QtWidgets import (
     QComboBox,
     QLabel,
@@ -265,6 +266,96 @@ class NDEasyLabel(BaseNDApp):
             for i, shape in enumerate(shapes_layer.data):
                 print(f"  Shape {i+1}: {shape.shape} with {len(shape)} points")
 
+    def _on_boxes_changed(self, event):
+        """Handle boxes layer data changes - just logs the new box; saving happens with annotations."""
+        if event.action != "added":
+            return
+
+        boxes_layer = event.source
+        if len(boxes_layer.data) == 0:
+            return
+
+        box = boxes_layer.data[-1]
+        ystart = int(np.min(box[:, -2]))
+        yend = int(np.max(box[:, -2]))
+        xstart = int(np.min(box[:, -1]))
+        xend = int(np.max(box[:, -1]))
+
+        print(
+            f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "
+            f"(total boxes: {len(boxes_layer.data)})"
+        )
+
+    def _get_current_image_name(self) -> str | None:
+        """Return the file name of the currently displayed image, or None."""
+        if self.image_data_model is None:
+            return None
+        try:
+            image_paths = self.image_data_model.get_image_paths()
+            if 0 <= self.current_image_index < len(image_paths):
+                return image_paths[self.current_image_index].name
+        except (AttributeError, IndexError, OSError):
+            pass
+        return None
+
+    def _load_existing_boxes(self):
+        """Load boxes from CSV and populate the boxes_layer with saved ROIs.
+
+        In normal mode the rectangle is placed at z=0 (or no leading axis).
+        In stacked-sequence mode the rectangle is placed at the frame index
+        stored in ``row["frame_index"]`` so that the box appears on the
+        correct frame of the stack.
+        """
+        if self.boxes_layer is None or self.image_data_model is None:
+            return
+
+        try:
+            all_boxes = self.image_data_model.load_existing_boxes()
+        except (OSError, ValueError) as e:
+            print(f"Failed to load existing boxes: {e}")
+            return
+
+        if not all_boxes:
+            return
+
+        stacked = self.image_data_model._is_stacked_sequence()
+
+        shapes = []
+        shape_types = []
+
+        for row in all_boxes:
+            y0, y1 = row["ystart"], row["yend"]
+            x0, x1 = row["xstart"], row["xend"]
+
+            if stacked:
+                frame_idx = row.get("frame_index")
+                if frame_idx is None:
+                    # Image not found in current stack — skip
+                    print(
+                        f"⚠️  _load_existing_boxes: '{row['file_name']}' "
+                        "not in current stack — skipping"
+                    )
+                    continue
+                n = float(frame_idx)
+            else:
+                n = 0.0  # single image: place at z/frame 0
+
+            rect = np.array(
+                [
+                    [n, y0, x0],
+                    [n, y0, x1],
+                    [n, y1, x1],
+                    [n, y1, x0],
+                ],
+                dtype=float,
+            )
+            shapes.append(rect)
+            shape_types.append("rectangle")
+
+        if shapes:
+            self.boxes_layer.add(shapes, shape_type=shape_types)
+            print(f"📦 Loaded {len(shapes)} existing boxes into boxes_layer")
+
     # _on_open_directory and load_image_directory inherited from BaseNDApp
     def _set_image_layer(self, image_layer):
         """Set up all annotation layers based on the provided image layer."""
@@ -331,6 +422,12 @@ class NDEasyLabel(BaseNDApp):
                 edge_width=5,
                 text={"string": "{split_set}", "size": 15, "color": "green"},
             )
+
+            # Connect boxes layer event handler
+            self.boxes_layer.events.data.connect(self._on_boxes_changed)
+
+            # Load any previously saved boxes from CSV
+            self._load_existing_boxes()
 
             print(
                 f"Successfully set up annotation layers for image layer: {image_layer.name}"
