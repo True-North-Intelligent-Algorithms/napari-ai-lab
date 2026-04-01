@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -365,3 +366,35 @@ class NDEasyAugment(BaseNDApp):
             import traceback
 
             traceback.print_exc()
+
+    def _on_show_patches(self):
+        """Open a second napari viewer showing input/truth patch stacks."""
+
+        import numpy as np
+        from skimage.io import imread
+
+        patches_dir = self.image_data_model.get_patches_directory(axis="yx")
+        input_dir = patches_dir / "input0"
+        truth_dir = patches_dir / "ground_truth0"
+
+        if not input_dir.exists() or not truth_dir.exists():
+            QMessageBox.warning(
+                self, "No Patches", "No patches found. Run augmentation first."
+            )
+            return
+
+        input_files = sorted(input_dir.glob("*.tif"))
+        truth_files = sorted(truth_dir.glob("*.tif"))
+
+        if len(input_files) == 0:
+            QMessageBox.warning(
+                self, "No Patches", "No .tif files found in patches."
+            )
+            return
+
+        inputs_stack = np.stack([imread(str(f)) for f in input_files])
+        truths_stack = np.stack([imread(str(f)) for f in truth_files])
+
+        viewer = napari.Viewer(title="Patch Viewer")
+        viewer.add_image(inputs_stack, name="input")
+        viewer.add_labels(truths_stack, name="truth")
