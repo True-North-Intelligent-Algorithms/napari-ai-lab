@@ -58,7 +58,9 @@ def test_nd_easy_segment_creates_prediction():
         nd_easy_segment_widget._on_segment_current()
 
         # Assert that prediction file was created
-        predictions_dir = temp_parent_dir / "predictions"
+        predictions_dir = model.get_predictions_directory(
+            algorithm=segmenter_name
+        )
         prediction_file = predictions_dir / "Test lightsheet_3.tif"
 
         assert (
