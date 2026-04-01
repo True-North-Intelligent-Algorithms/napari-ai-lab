@@ -89,6 +89,9 @@ class AugmenterBase(ABC):
         self.ground_truth_dir = "ground_truth0"
         self.seed = seed
         self.valid_coordinates = None
+        self.patch_mode = (
+            "valid_coordinates"  # set by model before generating patches
+        )
         self.global_norm_low = None
         self.global_norm_high = None
 
@@ -321,23 +324,14 @@ class AugmenterBase(ABC):
         """
         Generate random starting indices for cropping.
 
-        Parameters
-        ----------
-        im_shape : tuple[int, ...]
-            Shape of the input image
-        patch_size : tuple[int, ...]
-            Size of the patch to extract
-        axis : Optional[int]
-            Specific axis to crop along. If None, crop along all axes.
-
-        Returns
-        -------
-        tuple[int, ...]
-            Starting indices for cropping
+        Uses self.patch_mode (set by the model before patching) to decide:
+        - "valid_coordinates": sample from self.valid_coordinates if populated
+        - anything else (e.g. "random_crop"): fully random, even if valid_coordinates exists
         """
-        # Check if valid coordinates are pre-computed
-        if self.valid_coordinates is not None:
-            # Use cached valid coordinates with instance RNG
+        if (
+            self.patch_mode == "valid_coordinates"
+            and self.valid_coordinates is not None
+        ):
             return self.valid_coordinates[
                 self.rng.randint(len(self.valid_coordinates))
             ]
