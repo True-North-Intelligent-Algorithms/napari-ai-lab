@@ -317,12 +317,14 @@ class NDEasyAugment(BaseNDApp):
             self.progress_logger.clear()
 
             # Generate patches with progress tracking
-            patches_dir = self.image_data_model.generate_patches(
-                image=image,
-                annotations=annotations,
-                axis="yx",
-                axes_string="YX",
-                progress_logger=self.progress_logger,
+            patches_dir = (
+                self.image_data_model.generate_patches_from_layer_data(
+                    image=image,
+                    annotations=annotations,
+                    axis="yx",
+                    axes_string="YX",
+                    progress_logger=self.progress_logger,
+                )
             )
 
             # Write info.json with patch metadata
