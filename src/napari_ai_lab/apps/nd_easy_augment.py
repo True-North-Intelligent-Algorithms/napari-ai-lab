@@ -52,6 +52,14 @@ class NDEasyAugment(BaseNDApp):
         """Set up the user interface."""
         self.setLayout(QVBoxLayout())
 
+        # Patch mode selection (first — determines how patch positions are sampled)
+        self.patch_mode_label = QLabel("Patch Mode:")
+        self.layout().addWidget(self.patch_mode_label)
+
+        self.patch_mode_combo = QComboBox()
+        self.patch_mode_combo.addItems(ImageDataModel.get_patch_modes())
+        self.layout().addWidget(self.patch_mode_combo)
+
         # Add Augmenter selection
         self.augmenter_label = QLabel("Augmenter:")
         self.layout().addWidget(self.augmenter_label)
@@ -114,6 +122,10 @@ class NDEasyAugment(BaseNDApp):
             self._on_delete_augmentations
         )
         buttons_layout.addWidget(self.delete_augmentations_button)
+
+        self.show_patches_button = QPushButton("Show Patches")
+        self.show_patches_button.clicked.connect(self._on_show_patches)
+        buttons_layout.addWidget(self.show_patches_button)
 
         self.layout().addLayout(buttons_layout)
 
@@ -276,11 +288,26 @@ class NDEasyAugment(BaseNDApp):
             print(f"  Patch size: {patch_size}")
             print(f"  Number of patches: {num_patches}")
 
+            patch_mode = self.patch_mode_combo.currentText()
+
+            if patch_mode == "from_label_boxes":
+                # Clear previous progress
+                self.progress_logger.clear()
+                patches_dir = (
+                    self.image_data_model.generate_patches_from_labels(
+                        axis="yx",
+                        axes_string="YX",
+                        progress_logger=self.progress_logger,
+                    )
+                )
+                print(f"📁 Patches saved to: {patches_dir}")
+                return
+
             # Setup augmentation (compute stats, valid coordinates, etc.)
             self.image_data_model.setup_augmentation(
                 image=image,
                 annotations=annotations,
-                mode="valid_coordinates",
+                mode=patch_mode,
                 compute_global_stats=True,
             )
 
