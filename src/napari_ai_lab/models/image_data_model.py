@@ -40,6 +40,7 @@ Usage example:
     # Returns shape (10, 512, 512)
 """
 
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +54,16 @@ from napari_ai_lab.utility import (
 )
 
 from ..artifact_io import get_artifact_io
+
+
+class PatchMode(str, Enum):
+    """Strategies for selecting patch locations during augmentation."""
+
+    FROM_LABEL_BOXES = "from_label_boxes"  # positions derived from drawn boxes
+    VALID_COORDINATES = (
+        "valid_coordinates"  # only positions containing a label
+    )
+    RANDOM_CROP = "random_crop"  # fully random crop anywhere in image
 
 
 class ImageDataModel:
@@ -1093,6 +1104,11 @@ class ImageDataModel:
         """
         self.num_patches = num_patches
 
+    @staticmethod
+    def get_patch_modes() -> list[str]:
+        """Return the available patch sampling mode names for GUI population."""
+        return [mode.value for mode in PatchMode]
+
     def setup_augmentation(
         self,
         image: np.ndarray,
@@ -1137,6 +1153,9 @@ class ImageDataModel:
                 image, percentile_low, percentile_high
             )
 
+        # Tell the augmenter which mode it's running in
+        self.augmenter.patch_mode = mode
+
         # Setup augmentation mode
         if mode == "valid_coordinates":
             if hasattr(self.augmenter, "create_valid_coordinates"):
@@ -1164,7 +1183,7 @@ class ImageDataModel:
                 f"Unknown augmentation mode: {mode}. Use 'valid_coordinates', 'marked_roi', or 'random_crop'."
             )
 
-    def generate_patches(
+    def generate_patches_from_layer_data(
         self,
         image: np.ndarray,
         annotations: np.ndarray,
@@ -1263,6 +1282,114 @@ class ImageDataModel:
             )
         else:
             print(f"✅ Created {self.num_patches} patches in {patches_dir}")
+
+        return patches_dir
+
+    def generate_patches_from_labels(
+        self,
+        axis: str | None = None,
+        axes_string: str = "YX",
+        progress_logger=None,
+    ) -> Path:
+        """
+        Generate augmented patches from the saved label crops in labels/input0 and labels/truth0.
+
+        Outer loop: every saved label pair (image crop + annotation crop).
+        Inner loop: num_patches augmented patches drawn from that crop.
+
+        Convention matches crop_and_save_label_patches:
+            labels/input0/  — image crops
+            labels/truth0/  — annotation crops
+
+        Args:
+            axis: Optional axis identifier for the patches directory (e.g. "yx").
+            axes_string: Axes string written to info.json (e.g. "YX").
+            progress_logger: Optional ProgressLogger; falls back to print.
+
+        Returns:
+            Path to the patches directory.
+        """
+        if not hasattr(self, "augmenter") or self.augmenter is None:
+            raise ValueError("Augmenter not set. Call set_augmenter() first.")
+        if not hasattr(self, "patch_size") or self.patch_size is None:
+            raise ValueError(
+                "Patch size not set. Call set_patch_size() first."
+            )
+        if not hasattr(self, "num_patches") or self.num_patches is None:
+            raise ValueError(
+                "Number of patches not set. Call set_num_patches() first."
+            )
+
+        labels_dir = self.get_labels_directory()
+        input_dir = labels_dir / "input0"
+        truth_dir = labels_dir / "truth0"
+
+        if not input_dir.exists() or not truth_dir.exists():
+            raise FileNotFoundError(
+                f"Label crops not found. Run 'Save Project' first to generate "
+                f"labels/input0 and labels/truth0 under {labels_dir}"
+            )
+
+        # Collect paired files — sort so input[i] matches truth[i]
+        input_files = sorted(input_dir.glob("*.tif"))
+        truth_files = sorted(truth_dir.glob("*.tif"))
+
+        if len(input_files) == 0:
+            raise FileNotFoundError(f"No .tif files found in {input_dir}")
+        if len(input_files) != len(truth_files):
+            raise ValueError(
+                f"Mismatch: {len(input_files)} input crops vs {len(truth_files)} truth crops"
+            )
+
+        patches_dir = self.get_patches_directory(axis=axis)
+        total = len(input_files) * self.num_patches
+
+        msg = (
+            f"🎨 Generating {self.num_patches} patches × "
+            f"{len(input_files)} label crop(s) = {total} total..."
+        )
+        if progress_logger:
+            progress_logger.log_info(msg)
+        else:
+            print(msg)
+
+        done = 0
+        for image_path, truth_path in zip(
+            input_files, truth_files, strict=False
+        ):
+            image_crop = imread(str(image_path))
+            truth_crop = imread(str(truth_path))
+
+            for _ in range(self.num_patches):
+                self.augmenter.augment_and_save(
+                    image_crop,
+                    truth_crop,
+                    str(patches_dir),
+                    "patch",
+                    self.patch_size,
+                    axis=None,
+                )
+                done += 1
+                msg = f"Generating patches for {image_path.name} ({done}/{total})"
+                if progress_logger:
+                    progress_logger.update_progress(done, total, msg)
+                elif done % 10 == 0 or done == total:
+                    print(f"  {msg}")
+
+        if hasattr(self.augmenter, "write_info"):
+            self.augmenter.write_info(
+                patch_path=str(patches_dir),
+                axes=axes_string,
+                num_inputs=1,
+                num_truths=1,
+                sub_sample=1,
+            )
+
+        msg = f"✅ Created {done} patches in {patches_dir}"
+        if progress_logger:
+            progress_logger.log_info(msg)
+        else:
+            print(msg)
 
         return patches_dir
 
