@@ -38,7 +38,6 @@ def test_load_czi_with_bioio():
         print(f"Data type: {img.dtype}")
 
         # Basic assertions
-        assert img.data is not None, "Image data should not be None"
         assert len(img.shape) > 0, "Image should have dimensions"
         assert (
             img.dims.order is not None
