@@ -267,7 +267,9 @@ class NDEasyAugment(BaseNDApp):
             # Adjust patch size based on image dimensions
             # If image is 3D, use (1, Y, X) for 2D slices from 3D data
             # If image is 2D, use (Y, X)
-            if len(image.shape) == 3:
+
+            axis_types = self.image_data_model.axis_types
+            if "ZYX" in (axis_types):
                 patch_size = (1, patch_size_y, patch_size_x)
                 print(
                     f"\n📐 Detected 3D image, using patch size: {patch_size}"
