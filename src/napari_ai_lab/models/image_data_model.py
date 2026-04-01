@@ -994,7 +994,7 @@ class ImageDataModel:
         self,
         predictions_array,
         image_index: int,
-        subdirectory: str = "predictions",
+        subdirectory: str = None,
         current_step: tuple = None,
         selected_axis: str = None,
         axes_to_collapse: str | list[str] | None = None,

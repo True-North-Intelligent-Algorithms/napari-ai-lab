@@ -1,9 +1,21 @@
 """
 Utilities module for napari-ai-lab.
-
-This module contains utility functions and classes for various operations.
 """
 
+from .image_util import (
+    IMAGE_EXTENSIONS,
+    collect_all_image_names,
+    create_artifact_name,
+    create_empty_instance_image,
+    get_axis_info,
+    get_axis_info_from_shape,
+    get_current_slice_indices,
+    get_ndim,
+    get_supported_axes_from_shape,
+    load_images_from_directory,
+    pad_to_largest,
+    remove_trivial_axes,
+)
 from .progress_logger import (
     ConsoleProgressLogger,
     NapariProgressLogger,
@@ -12,6 +24,20 @@ from .progress_logger import (
 from .qt_progress_logger import QtProgressLogger
 
 __all__ = [
+    # image_util
+    "IMAGE_EXTENSIONS",
+    "collect_all_image_names",
+    "create_artifact_name",
+    "create_empty_instance_image",
+    "get_axis_info",
+    "get_axis_info_from_shape",
+    "get_current_slice_indices",
+    "get_ndim",
+    "get_supported_axes_from_shape",
+    "load_images_from_directory",
+    "pad_to_largest",
+    "remove_trivial_axes",
+    # progress loggers
     "ProgressLogger",
     "NapariProgressLogger",
     "ConsoleProgressLogger",
