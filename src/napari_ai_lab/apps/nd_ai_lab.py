@@ -209,6 +209,9 @@ class NDAILab(QWidget):
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer
         self.augment_widget.annotation_layer = self.labels_layer
+        self.augment_widget.boxes_layer = (
+            self.boxes_layer
+        )  # Provide boxes layer for augmentation if needed
 
         # Segment widget needs: image, labels, predictions, points, shapes
         self.segment_widget.image_layer = self.image_layer
