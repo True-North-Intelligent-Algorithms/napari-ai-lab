@@ -104,16 +104,65 @@ StarDist Automatic Segmentation:
         },
     )
 
+    num_epochs: int = field(
+        default=100,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 1000,
+            "step": 1,
+            "default": 100,
+        },
+    )
+
+    train_patch_size_y: int = field(
+        default=256,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 32,
+            "max": 1024,
+            "step": 32,
+            "default": 256,
+        },
+    )
+
+    train_patch_size_x: int = field(
+        default=256,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 32,
+            "max": 1024,
+            "step": 32,
+            "default": 256,
+        },
+    )
+
+    steps_per_epoch: int = field(
+        default=100,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 1000,
+            "step": 10,
+            "default": 100,
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
-        # Initialize custom model storage
-
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
-
         self.custom_model = None
         self.is_3d_model = False
+        # Set by nd_easy_segment before calling train()
+        self.patch_path = ""
+        self.model_save_dir = ""
+        self.model_name = ""
 
     def get_recommended_axis(self) -> str:
         """
@@ -447,6 +496,147 @@ task.outputs["mask"] = ndarr_mask
             "nms_thresh": self.nms_thresh,
             "normalize_input": self.normalize_input,
         }
+
+    def train(self, updater=None):
+        """
+        Train a StarDist2D model on pre-generated patches.
+
+        Reads info.json from ``self.patch_path`` to determine axes, collects
+        training data, splits into train/val, and trains a new StarDist2D
+        model.  The model is saved under ``self.model_save_dir / self.model_name``.
+
+        This signature mirrors MonaiUNetSegmenter.train() so that
+        ``_run_training`` can call every segmenter the same way.
+
+        Args:
+            updater: Optional callable ``updater(message, progress_percent)``
+                     for reporting progress back to the UI.  It is wrapped
+                     in a Keras callback internally.
+
+        Returns:
+            dict with keys ``success`` (bool) and ``message`` (str).
+        """
+        import json
+
+        import keras
+        from stardist.models import Config2D, StarDist2D
+
+        from ...utilities.dl_util import (
+            collect_training_data,
+            divide_training_data,
+        )
+
+        # ---- resolve paths from self (set by _run_training) ----
+        patch_path = self.patch_path
+        model_name = self.model_name
+        model_base_path = self.model_save_dir
+
+        if not patch_path:
+            return {"success": False, "message": "patch_path is not set."}
+        if not model_base_path:
+            return {"success": False, "message": "model_save_dir is not set."}
+        if not model_name:
+            model_name = "stardist_model"
+
+        # ---- read axes from info.json ----
+        json_path = os.path.join(patch_path, "info.json")
+        with open(json_path) as f:
+            info = json.load(f)
+        axes = info["axes"]
+
+        if axes == "YXC":
+            n_channel_in = 3
+            add_trivial_channel = False
+        else:
+            n_channel_in = 1
+            add_trivial_channel = True
+
+        # ---- collect & split data ----
+        X, Y = collect_training_data(
+            patch_path,
+            normalize_input=False,
+            add_trivial_channel=add_trivial_channel,
+        )
+        X_train, Y_train, X_val, Y_val = divide_training_data(X, Y, val_size=2)
+
+        msg = (
+            f"🏋️ Training StarDist2D: {len(X_train)} train, {len(X_val)} val\n"
+            f"   axes={axes}, n_channel_in={n_channel_in}\n"
+            f"   epochs={self.num_epochs}, steps_per_epoch={self.steps_per_epoch}\n"
+            f"   train_patch_size=({self.train_patch_size_y}, {self.train_patch_size_x})"
+        )
+        print(msg)
+        if updater is not None:
+            updater(0, self.num_epochs, msg)
+
+        # ---- build Keras callback that wraps the updater ----
+        class _ProgressCallback(keras.callbacks.Callback):
+            """Relay Keras epoch events to the napari-ai-lab updater."""
+
+            def __init__(self, updater_fn, num_epochs):
+                super().__init__()
+                self._updater = updater_fn
+                self._num_epochs = num_epochs
+
+            def on_epoch_begin(self, epoch, logs=None):
+                if self._updater is not None:
+                    self._updater(
+                        epoch,
+                        self._num_epochs,
+                        f"Starting epoch {epoch + 1}/{self._num_epochs}",
+                    )
+
+            def on_epoch_end(self, epoch, logs=None):
+                if self._updater is not None:
+                    loss = (logs or {}).get("loss", float("nan"))
+                    val_loss = (logs or {}).get("val_loss", float("nan"))
+                    self._updater(
+                        epoch,
+                        self._num_epochs,
+                        f"Epoch {epoch + 1}/{self._num_epochs} — "
+                        f"loss: {loss:.4f}, val_loss: {val_loss:.4f}",
+                    )
+
+        custom_callback = _ProgressCallback(updater, self.num_epochs)
+
+        # ---- create model & train ----
+        config = Config2D(
+            n_rays=32,
+            axes=axes,
+            n_channel_in=n_channel_in,
+            train_patch_size=(
+                self.train_patch_size_y,
+                self.train_patch_size_x,
+            ),
+            unet_n_depth=3,
+        )
+        model = StarDist2D(
+            config=config, name=model_name, basedir=model_base_path
+        )
+        model.prepare_for_training()
+
+        if custom_callback is not None:
+            custom_callback.num_epochs = self.num_epochs
+            model.callbacks.append(custom_callback)
+
+        model.train(
+            X_train,
+            Y_train,
+            validation_data=(X_val, Y_val),
+            epochs=self.num_epochs,
+            steps_per_epoch=self.steps_per_epoch,
+        )
+
+        # ---- store trained model for immediate use ----
+        self.custom_model = model
+        self.model_path = os.path.join(model_base_path, model_name)
+        self.model_file_path = self.model_path
+        done_msg = f"✅ Training complete. Model saved to: {self.model_path}"
+        print(done_msg)
+        if updater is not None:
+            updater(done_msg, 100)
+
+        return {"success": True, "message": done_msg}
 
     @classmethod
     def register(cls):

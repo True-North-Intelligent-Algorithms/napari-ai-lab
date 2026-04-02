@@ -262,7 +262,7 @@ class NDEasySegment(BaseNDApp):
         This allows the same NDEasySegment instance to show different views
         in different tabs without duplication.
         """
-        from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
+        from qtpy.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
 
         training_widget = QWidget()
         layout = QVBoxLayout(training_widget)
@@ -282,6 +282,11 @@ class NDEasySegment(BaseNDApp):
 
         # Training parameters form
         layout.addWidget(self._create_training_parameter_form())
+
+        # Model name input
+        layout.addWidget(QLabel("Model name:"))
+        self.model_name_edit = QLineEdit("my_model")
+        layout.addWidget(self.model_name_edit)
 
         # Train button (same as in automatic mode controls)
         train_btn = QPushButton("Train Model")
@@ -673,27 +678,23 @@ class NDEasySegment(BaseNDApp):
             axis_lower = None
             print("No axis selected, using default patches directory")
 
-        # Set patch path from the image data model
-        if hasattr(self.segmenter, "patch_path"):
-            patch_dir = self.image_data_model.get_patches_directory(
-                axis=axis_lower
-            )
-            self.segmenter.patch_path = str(patch_dir)
-            print(f"Set patch path to: {patch_dir}")
+        # Set patch path, model save dir, and model name directly on segmenter
+        self.segmenter.patch_path = str(
+            self.image_data_model.get_patches_directory(axis=axis_lower)
+        )
+        self.segmenter.model_save_dir = str(
+            self.image_data_model.get_models_directory()
+        )
+        self.segmenter.model_name = (
+            self.model_name_edit.text().strip() or "model"
+        )
+        print(f"patch_path:    {self.segmenter.patch_path}")
+        print(f"model_save_dir:{self.segmenter.model_save_dir}")
+        print(f"model_name:    {self.segmenter.model_name}")
 
-        # Sync training parameters to segmenter
+        # Sync hyper-parameters from the training form to segmenter
         for param_name, param_value in training_params.items():
             setattr(self.segmenter, param_name, param_value)
-
-        # Set model save directory for training
-        models_dir = self.image_data_model.get_models_directory()
-        self.segmenter.model_save_dir = str(models_dir)
-        print(f"Set model save directory to: {models_dir}")
-
-        # Generate unique model name based on segmenter type and timestamp
-        model_name = self.image_data_model.generate_model_name(self.segmenter)
-        self.segmenter.model_name = model_name
-        print(f"Set model name to: {model_name}")
 
         # Call the train method
         try:
@@ -702,23 +703,18 @@ class NDEasySegment(BaseNDApp):
             # Log to progress widget if in embedded mode
             if use_progress_logger:
                 self.progress_logger.log_info("Starting training...")
-                self.progress_logger.log_info(f"Model: {model_name}")
-                self.progress_logger.log_info(f"Patches: {patch_dir}")
+                self.progress_logger.log_info(
+                    f"Model: {self.segmenter.model_name}"
+                )
+                self.progress_logger.log_info(
+                    f"Patches: {self.segmenter.patch_path}"
+                )
 
             # Call train with or without updater based on mode
             if use_progress_logger:
-                # Create adapter function for progress_logger
-                # MonaiUNetSegmenter calls: updater(message, progress_percent)
-                # We adapt to: progress_logger methods
-                def progress_adapter(message: str, progress: int):
-                    """Adapter to convert updater(message, progress) to progress_logger API."""
-                    self.progress_logger.update_progress(
-                        progress, 100, message
-                    )
-                    self.progress_logger.log_info(message)
-
-                # Pass adapter as updater (embedded mode)
-                result = self.segmenter.train(updater=progress_adapter)
+                result = self.segmenter.train(
+                    updater=self.progress_logger.update_progress
+                )
             else:
                 # No updater (dialog mode)
                 result = self.segmenter.train()

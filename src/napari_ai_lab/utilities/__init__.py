@@ -2,6 +2,12 @@
 Utilities module for napari-ai-lab.
 """
 
+from .dl_util import (
+    collect_training_data,
+    divide_training_data,
+    normalize_image,
+    normalize_percentile,
+)
 from .image_util import (
     IMAGE_EXTENSIONS,
     collect_all_image_names,
@@ -42,4 +48,9 @@ __all__ = [
     "NapariProgressLogger",
     "ConsoleProgressLogger",
     "QtProgressLogger",
+    # dl_util
+    "normalize_image",
+    "normalize_percentile",
+    "collect_training_data",
+    "divide_training_data",
 ]
