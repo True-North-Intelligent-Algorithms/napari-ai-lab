@@ -269,7 +269,9 @@ class BaseNDApp(QWidget):
                         print(
                             "Warning: No supported axes available for current image shape"
                         )
-
+            self.segmenter.model_save_dir = (
+                self.image_data_model.get_models_directory()
+            )
             # Update parameter form with segmenter instance
             self._update_segmenter_parameter_form(self.segmenter)
             print(f"Selected segmenter: {segmenter_name}")
