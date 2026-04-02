@@ -206,6 +206,30 @@ class NDOperationWidget(QWidget):
                     f"Could not get supported axes for {self.nd_operation.__class__.__name__}: {e}"
                 )
 
+        # Add model preset combo if nd_operation has get_model_axis_map
+        if hasattr(self.nd_operation, "get_model_axis_map"):
+            try:
+                from qtpy.QtWidgets import QComboBox
+
+                model_map = self.nd_operation.get_model_axis_map()
+                if model_map:
+                    self._model_combo = QComboBox()
+                    for name in model_map:
+                        self._model_combo.addItem(name)
+                    self._model_combo.currentTextChanged.connect(
+                        self._on_model_changed
+                    )
+                    self.form_layout.addRow(
+                        QLabel("Model:"), self._model_combo
+                    )
+            except (TypeError, ValueError, AttributeError, RuntimeError) as e:
+                print(f"Could not add model combo: {e}")
+
+    def _on_model_changed(self, model_name):
+        """Handle model selection changes."""
+        if hasattr(self.nd_operation, "model_preset"):
+            self.nd_operation.model_preset = model_name
+
     def _on_axis_changed(self, axis_text):
         """Handle axis selection changes."""
         self.selected_axis = axis_text
