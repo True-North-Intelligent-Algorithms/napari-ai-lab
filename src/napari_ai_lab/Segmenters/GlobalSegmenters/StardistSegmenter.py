@@ -50,16 +50,9 @@ StarDist Automatic Segmentation:
 • NMS Threshold (nms_thresh): non-maximum suppression IoU threshold
     """
 
-    # Parameters for StarDist segmentation
-    model_preset: str = field(
-        default="2D_versatile_fluo",
-        metadata={
-            "type": "str",
-            "param_type": "inference",
-            "choices": list(BUILTIN_MODEL_MAP.keys()),
-            "default": "2D_versatile_fluo",
-        },
-    )
+    # model_preset is NOT a dataclass field — it's set as a plain attribute
+    # in __post_init__ and managed by the model_preset_combo in nd_easy_segment.
+    # This avoids the form trying to create an unsupported widget for it.
 
     prob_thresh: float = field(
         default=0.5,
@@ -85,15 +78,9 @@ StarDist Automatic Segmentation:
         },
     )
 
-    model_path: str = field(
-        default="",
-        metadata={
-            "type": "file",
-            "param_type": "inference",
-            "file_type": "directory",
-            "default": "",
-        },
-    )
+    # model_path removed — model selection is done via model_preset_combo
+    # in nd_easy_segment, populated by get_model_axis_map() which includes
+    # both BUILTIN_MODEL_MAP entries and user-trained models from model_save_dir.
 
     normalize_input: bool = field(
         default=True,
@@ -159,10 +146,12 @@ StarDist Automatic Segmentation:
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self.custom_model = None
         self.is_3d_model = False
-        # Set by nd_easy_segment before calling train()
+        # Set by nd_easy_segment before calling train() or segment()
         self.patch_path = ""
         self.model_save_dir = ""
         self.model_name = ""
+        # Model preset: selected via combo in nd_easy_segment
+        self.model_preset = "2D_versatile_fluo"
 
     def get_recommended_axis(self) -> str:
         """
@@ -171,35 +160,66 @@ StarDist Automatic Segmentation:
         Returns:
             str: Recommended axis string (e.g., "YX", "YXC", "ZYX")
         """
-        return BUILTIN_MODEL_MAP.get(self.model_preset, "YX")
+        full_map = self.get_model_axis_map()
+        return full_map.get(self.model_preset, "YX")
 
-    @staticmethod
-    def get_model_axis_map() -> dict:
+    def get_model_axis_map(self) -> dict:
         """
-        Get the complete model-to-axis mapping.
+        Get the complete model-to-axis mapping (builtins + pretrained).
 
         Returns:
-            dict: Dictionary mapping model names to recommended axes
+            dict: Dictionary mapping model names to recommended axes.
         """
-        return BUILTIN_MODEL_MAP.copy()
+        result = BUILTIN_MODEL_MAP.copy()
+        result.update(self.build_pretrained_model_map())
+        return result
+
+    def build_pretrained_model_map(self) -> dict:
+        """
+        Scan ``model_save_dir`` for user-trained StarDist models.
+
+        A subdirectory is recognised as a model when it contains a
+        ``config.json`` with at least ``axes`` and ``n_channel_in``.
+        The axis string is cleaned: if ``n_channel_in == 1`` the trailing
+        ``C`` (if present) is dropped.
+
+        Returns:
+            dict: {model_name: axis_string} for every valid model found.
+        """
+        import json
+
+        if not self.model_save_dir or not os.path.isdir(self.model_save_dir):
+            return {}
+
+        pretrained = {}
+        for entry in os.listdir(self.model_save_dir):
+            model_dir = os.path.join(self.model_save_dir, entry)
+            config_path = os.path.join(model_dir, "config.json")
+            if not os.path.isfile(config_path):
+                continue
+            try:
+                with open(config_path) as f:
+                    cfg = json.load(f)
+                axes = cfg.get("axes", "YX")
+                n_channel_in = cfg.get("n_channel_in", 1)
+                # Drop trailing C when the model expects single-channel input
+                if n_channel_in == 1 and axes.endswith("C"):
+                    axes = axes[:-1]
+                pretrained[entry] = axes
+            except (json.JSONDecodeError, OSError):
+                continue
+        return pretrained
 
     def __setattr__(self, name, value):
-        """Override setattr to detect model_path and model_preset changes."""
+        """Override setattr to detect model_preset changes."""
         # Get old value if it exists
         old_value = getattr(self, name, None) if hasattr(self, name) else None
 
         # Set the new value
         super().__setattr__(name, value)
 
-        # Check if this is model_path and value changed
-        if name == "model_path" and old_value != value:
-            print(
-                f"🔄 Model path changed from '{old_value}' to '{value}'"
-            )  # Debug print
-            self._on_model_path_changed(value)
-
         # Check if model_preset changed
-        elif (
+        if (
             name == "model_preset"
             and old_value != value
             and old_value is not None
@@ -208,58 +228,6 @@ StarDist Automatic Segmentation:
             print(
                 f"🔄 Model preset changed to '{value}' - recommended axis: {recommended_axis}"
             )
-
-    def _on_model_path_changed(self, stardist_path: str):
-        """Handle model path changes - load custom model and check if 2D or 3D."""
-        print(f"📁 Loading custom StarDist model from: {stardist_path}")
-
-        self.model_path = stardist_path
-        model_base_path = os.path.dirname(stardist_path)
-        model_name = os.path.basename(stardist_path)
-
-        # Try to load as StarDist2D first
-        try:
-            model_2d = StarDist2D(
-                None, name=model_name, basedir=model_base_path
-            )
-            print(
-                f"✅ Successfully loaded 2D StarDist model from: {stardist_path}"
-            )
-            print(f"   Model config: {model_2d.config}")
-            self.custom_model = model_2d
-            self.is_3d_model = False
-            return
-        except (ValueError, FileNotFoundError, RuntimeError, TypeError) as e2d:
-            print(f"   ❌ Failed to load as 2D model: {e2d}")
-
-        # If 2D failed, try 3D
-        try:
-            model_3d = StarDist3D(
-                None, name=model_name, basedir=model_base_path
-            )
-            print(
-                f"✅ Successfully loaded 3D StarDist model from: {stardist_path}"
-            )
-            print(f"   Model config: {model_3d.config}")
-            self.custom_model = model_3d
-            self.is_3d_model = True
-            print(
-                "   ⚠️  Warning: This segmenter is designed for 2D - 3D model may not work properly"
-            )
-            return
-        except (ValueError, FileNotFoundError, RuntimeError, TypeError) as e3d:
-            print(f"   ❌ Failed to load as 3D model: {e3d}")
-
-        # Both failed
-        print(
-            f"   ❌ Could not load model from {stardist_path} as either 2D or 3D StarDist model"
-        )
-        self.custom_model = None
-        self.is_3d_model = False
-
-        # Set supported axes
-        self._supported_axes = ["YX", "ZYX"]
-        self._potential_axes = ["YX", "ZYX"]
 
     def are_dependencies_available(self):
         """
@@ -303,16 +271,16 @@ StarDist Automatic Segmentation:
                 f"StardistSegmenter requires at least 2D images. Got shape: {image.shape}"
             )
 
-        # Check if 3D model is selected
-        is_3d_model = self.model_preset.startswith("3D_")
+        # Check if 3D model is selected based on axis from the full model map
+        # (covers both builtins like "3D_demo" and user-trained models)
+        model_axis = self.get_model_axis_map().get(self.model_preset, "YX")
+        is_3d_model = "Z" in model_axis
 
-        # Use custom model if loaded, otherwise use preset
-        model = None
-        if hasattr(self, "custom_model") and self.custom_model is not None:
-            print(f"Using custom StarDist model from: {self.model_path}")
-            model = self.custom_model
-        else:
-            print(f"Using preset model: {self.model_preset}")
+        # Use custom_model if already loaded, otherwise will load below
+        model = self.custom_model
+        print(
+            f"Using model: {self.model_preset} (axis: {model_axis}, custom_model loaded: {model is not None})"
+        )
 
         # Validate dimensions based on model type
         if is_3d_model:
@@ -354,18 +322,41 @@ StarDist Automatic Segmentation:
             f"🔍 StarDist input: shape={x.shape}, dtype={x.dtype}, ndim={x.ndim}"
         )
 
-        # Load model if not already loaded
+        # Load model if not already loaded (custom_model)
         if model is None:
             try:
-                if is_3d_model:
+                is_user_trained = (
+                    self.model_preset in self.build_pretrained_model_map()
+                )
+                if is_user_trained:
+                    # User-trained model: load by name from model_save_dir
+                    if is_3d_model:
+                        model = StarDist3D(
+                            config=None,
+                            name=self.model_preset,
+                            basedir=self.model_save_dir,
+                        )
+                        print(
+                            f"Loaded user-trained StarDist3D model: {self.model_preset} from {self.model_save_dir}"
+                        )
+                    else:
+                        model = StarDist2D(
+                            config=None,
+                            name=self.model_preset,
+                            basedir=self.model_save_dir,
+                        )
+                        print(
+                            f"Loaded user-trained StarDist2D model: {self.model_preset} from {self.model_save_dir}"
+                        )
+                elif is_3d_model:
                     model = StarDist3D.from_pretrained(self.model_preset)
                     print(
-                        f"Loaded StarDist3D pretrained model: {self.model_preset}"
+                        f"Loaded builtin StarDist3D model: {self.model_preset}"
                     )
                 else:
                     model = StarDist2D.from_pretrained(self.model_preset)
                     print(
-                        f"Loaded StarDist2D pretrained model: {self.model_preset}"
+                        f"Loaded builtin StarDist2D model: {self.model_preset}"
                     )
             except Exception as e:
                 raise RuntimeError(
@@ -629,12 +620,13 @@ task.outputs["mask"] = ndarr_mask
 
         # ---- store trained model for immediate use ----
         self.custom_model = model
-        self.model_path = os.path.join(model_base_path, model_name)
-        self.model_file_path = self.model_path
-        done_msg = f"✅ Training complete. Model saved to: {self.model_path}"
+        self.is_3d_model = False  # Currently only 2D training supported
+        self.model_preset = model_name
+        model_full_path = os.path.join(model_base_path, model_name)
+        done_msg = f"✅ Training complete. Model saved to: {model_full_path}"
         print(done_msg)
         if updater is not None:
-            updater(done_msg, 100)
+            updater(self.num_epochs, self.num_epochs, msg)
 
         return {"success": True, "message": done_msg}
 
