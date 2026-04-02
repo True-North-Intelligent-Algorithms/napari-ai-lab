@@ -26,7 +26,8 @@ def test_model_axis_recommendations():
 
 def test_model_axis_map():
     """Test that the model axis map is accessible."""
-    axis_map = StardistSegmenter.get_model_axis_map()
+    segmenter = StardistSegmenter()
+    axis_map = segmenter.get_model_axis_map()
 
     assert "2D_versatile_fluo" in axis_map
     assert "2D_versatile_he" in axis_map
