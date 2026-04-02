@@ -144,6 +144,19 @@ class SegmenterBase:
         """
         return {}
 
+    def build_pretrained_model_map(self) -> dict:
+        """
+        Scan the model directory for user-trained models and return a map
+        of model_name -> axis string.
+
+        Base implementation returns an empty dict.  Subclasses that support
+        user-trained models should override this.
+
+        Returns:
+            dict: {model_name: axis_string} for every valid model found.
+        """
+        return {}
+
     def are_dependencies_available(self):
         """
         Check if required dependencies are available.
