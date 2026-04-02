@@ -26,7 +26,7 @@ except ImportError:
 
 
 # Model to axis mapping - defines the expected input axes for each model
-MODEL_AXIS_MAP = {
+BUILTIN_MODEL_MAP = {
     "2D_versatile_fluo": "YX",  # Grayscale fluorescence
     "2D_versatile_he": "YXC",  # RGB H&E staining
     "3D_demo": "ZYX",  # 3D grayscale
@@ -56,7 +56,7 @@ StarDist Automatic Segmentation:
         metadata={
             "type": "str",
             "param_type": "inference",
-            "choices": list(MODEL_AXIS_MAP.keys()),
+            "choices": list(BUILTIN_MODEL_MAP.keys()),
             "default": "2D_versatile_fluo",
         },
     )
@@ -171,7 +171,7 @@ StarDist Automatic Segmentation:
         Returns:
             str: Recommended axis string (e.g., "YX", "YXC", "ZYX")
         """
-        return MODEL_AXIS_MAP.get(self.model_preset, "YX")
+        return BUILTIN_MODEL_MAP.get(self.model_preset, "YX")
 
     @staticmethod
     def get_model_axis_map() -> dict:
@@ -181,7 +181,7 @@ StarDist Automatic Segmentation:
         Returns:
             dict: Dictionary mapping model names to recommended axes
         """
-        return MODEL_AXIS_MAP.copy()
+        return BUILTIN_MODEL_MAP.copy()
 
     def __setattr__(self, name, value):
         """Override setattr to detect model_path and model_preset changes."""
