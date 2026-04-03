@@ -305,67 +305,51 @@ class NDAILab(QWidget):
 
         Handles cleanup and recreation of layers centrally for all sub-apps.
         """
-        try:
-            print(
-                f"🔄 nd_ai_lab: Processing image change to index {image_index}"
-            )
+        print(f"🔄 nd_ai_lab: Processing image change to index {image_index}")
 
-            # Save current annotations before switching (delegate to sub-apps)
-            # Only save from the currently active tab to avoid duplicate saves
-            active_widget_name = self.tabs.tabText(self.tabs.currentIndex())
+        # Save current annotations before switching (delegate to sub-apps)
+        # Only save from the currently active tab to avoid duplicate saves
+        active_widget_name = self.tabs.tabText(self.tabs.currentIndex())
 
-            if (
-                active_widget_name == "Label"
-                and hasattr(self, "labels_layer")
-                and self.labels_layer
-                and self.image_data_model.parent_directory
-            ):
-                try:
-                    self.image_data_model.save_annotations(
-                        self.labels_layer.data,
-                        self.current_image_index,
-                        current_step=self.viewer.dims.current_step,
-                        axes_to_collapse=self.axes_to_collapse,
-                    )
-                    print("   Saved annotations from Label tab")
-                except (OSError, ValueError, RuntimeError) as e:
-                    print(f"   Failed to save annotations: {e}")
+        if (
+            active_widget_name == "Label"
+            and hasattr(self, "labels_layer")
+            and self.labels_layer
+            and self.image_data_model.parent_directory
+        ):
+            try:
+                self.image_data_model.save_annotations(
+                    self.labels_layer.data,
+                    self.current_image_index,
+                    current_step=self.viewer.dims.current_step,
+                    axes_to_collapse=self.axes_to_collapse,
+                )
+                print("   Saved annotations from Label tab")
+            except (OSError, ValueError, RuntimeError) as e:
+                print(f"   Failed to save annotations: {e}")
 
-                # Save boxes at the same time as annotations
-                self._save_boxes()
-                self._save_label_patches_on_close()
+            # Save boxes at the same time as annotations
+            self._save_boxes()
+            self._save_label_patches_on_close()
 
-            # Update current image index
-            self.current_image_index = image_index
+        # Update current image index
+        self.current_image_index = image_index
 
-            if image_layer:
-                print(f"   Setting up new image: {image_layer.name}")
+        if image_layer:
+            print(f"   Setting up new image: {image_layer.name}")
 
-                # Cleanup existing layers centrally
-                self._cleanup_layers()
+            # Cleanup existing layers centrally
+            self._cleanup_layers()
 
-                # Create new layers centrally (this also distributes to sub-apps)
-                self._set_image_layer(image_layer)
+            # Create new layers centrally (this also distributes to sub-apps)
+            self._set_image_layer(image_layer)
 
-                print("✅ nd_ai_lab: Image change complete")
-            else:
-                print("⚠️  Received invalid image data from sequence viewer")
-                self._cleanup_layers()
+            print("✅ nd_ai_lab: Image change complete")
+        else:
+            print("⚠️  Received invalid image data from sequence viewer")
+            self._cleanup_layers()
 
-        except (
-            OSError,
-            ValueError,
-            RuntimeError,
-            AttributeError,
-            KeyError,
-        ) as e:
-            print(f"❌ Error processing image change: {e}")
-            import traceback
-
-            traceback.print_exc()
-        finally:
-            # Always clear the processing flag
-            self._processing_image_change = False
+        self._processing_image_change = False
 
     def _save_label_patches_on_close(self):
         """Delegate label patch saving to label_widget (called by base close handler)."""
