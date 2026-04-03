@@ -64,7 +64,7 @@ def load_images_from_directory(directory):
 
     # Load each image into a list
     images = []
-    axis_infos = []
+    axes_infos = []
     successful_paths = []
 
     for image_path in image_names:
@@ -72,7 +72,7 @@ def load_images_from_directory(directory):
             image = io.imread(image_path)
             axis_info = get_axis_info(image)
             images.append(image)
-            axis_infos.append(axis_info)
+            axes_infos.append(axis_info)
             successful_paths.append(image_path)
             print(f"Loaded: {image_path} (axis: {axis_info})")
             # TODO: Check file for axis info metadata or override deduced info
@@ -83,7 +83,7 @@ def load_images_from_directory(directory):
     if len(images) == 0:
         return None, None, None
 
-    return images, axis_infos, successful_paths
+    return images, axes_infos, successful_paths
 
 
 def get_axis_info(image):
@@ -193,7 +193,7 @@ def get_ndim(shape):
 
 
 def pad_to_largest(
-    images, axis_infos, force8bit=False, normalize_per_channel=False
+    images, axes_infos, force8bit=False, normalize_per_channel=False
 ):
     """
     Pads a list of images to the largest dimensions in the list.
@@ -202,7 +202,7 @@ def pad_to_largest(
 
     Args:
         images (list): list of images to pad
-        axis_infos (list): list of axis info strings corresponding to each image
+        axes_infos (list): list of axis info strings corresponding to each image
         force8bit (bool): whether to normalize the images to 8 bit
         normalize_per_channel (bool): whether to normalize the images per channel
 
@@ -219,9 +219,9 @@ def pad_to_largest(
     # STEP 1: Find maximum dimensions across all images (robust to axis ordering)
     # =============================================================================
 
-    # Determine presence of Z (3D) and C (color) from axis_infos
-    has_3d_images = any(("Z" in ai) for ai in axis_infos)
-    has_color_images = any(("C" in ai) for ai in axis_infos)
+    # Determine presence of Z (3D) and C (color) from axes_infos
+    has_3d_images = any(("Z" in ai) for ai in axes_infos)
+    has_color_images = any(("C" in ai) for ai in axes_infos)
 
     def _rows_cols_for_image(image_shape, axis_info):
         """Return (rows, cols) for the image shape using axis_info or fallbacks."""
@@ -247,17 +247,17 @@ def pad_to_largest(
     # Compute maximum rows/cols/depth across all images using per-image axis info
     max_rows = max(
         _rows_cols_for_image(img.shape, ai)[0]
-        for img, ai in zip(images, axis_infos, strict=False)
+        for img, ai in zip(images, axes_infos, strict=False)
     )
     max_cols = max(
         _rows_cols_for_image(img.shape, ai)[1]
-        for img, ai in zip(images, axis_infos, strict=False)
+        for img, ai in zip(images, axes_infos, strict=False)
     )
     max_depth = 0
     if has_3d_images:
         max_depth = max(
             _depth_for_image(img.shape, ai)
-            for img, ai in zip(images, axis_infos, strict=False)
+            for img, ai in zip(images, axes_infos, strict=False)
             if "Z" in ai
         )
 
@@ -266,7 +266,7 @@ def pad_to_largest(
     # =============================================================================
     padded_images = []
 
-    for image, axis_info in zip(images, axis_infos, strict=False):
+    for image, axis_info in zip(images, axes_infos, strict=False):
 
         # Convert grayscale to RGB if we have color images in the set
         if has_color_images and axis_info == "YX":
