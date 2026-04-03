@@ -334,7 +334,7 @@ class BaseNDApp(QWidget):
         """Load images from the selected directory into napari."""
         try:
             # Load images from directory using utility function
-            images, axis_infos, image_paths = load_images_from_directory(
+            images, axes_infos, image_paths = load_images_from_directory(
                 directory
             )
 
@@ -349,7 +349,7 @@ class BaseNDApp(QWidget):
             # Process images with pad_to_largest
             print("Processing images with pad_to_largest...")
             padded_images = pad_to_largest(
-                images, axis_infos, force8bit=True, normalize_per_channel=False
+                images, axes_infos, force8bit=True, normalize_per_channel=False
             )
 
             # Add the processed image stack to napari viewer and store reference
