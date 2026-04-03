@@ -15,6 +15,45 @@ IMAGE_EXTENSIONS = {
 }
 
 
+def compute_collapsed_shape(
+    image_shape: tuple,
+    axis_types: str | list[str],
+    axes_to_collapse: str | list[str] | None = None,
+) -> tuple:
+    """
+    Compute collapsed shape by removing specified axes from image shape.
+
+    Args:
+        image_shape: Original image shape tuple
+        axis_types: Axis names (e.g., "ZYXC" or ["Z", "Y", "X", "C"])
+        axes_to_collapse: Axis names to remove (e.g., "C" or ["C", "T"])
+                         If None, returns original shape
+
+    Returns:
+        Tuple representing the shape with specified axes collapsed
+
+    Examples:
+        >>> compute_collapsed_shape((10, 256, 256, 3), "ZYXC", "C")
+        (10, 256, 256)
+        >>> compute_collapsed_shape((10, 256, 256, 3), "ZYXC", ["Z", "C"])
+        (256, 256)
+    """
+    if axes_to_collapse is None or not axis_types:
+        return image_shape
+
+    # Normalize to list
+    if isinstance(axes_to_collapse, str):
+        axes_to_collapse = [axes_to_collapse]
+
+    # Build new shape by keeping only non-collapsed axes
+    new_shape = []
+    for axis_name, dim_size in zip(axis_types, image_shape, strict=False):
+        if axis_name not in axes_to_collapse:
+            new_shape.append(dim_size)
+
+    return tuple(new_shape)
+
+
 def collect_all_image_names(image_path):
     """
     Collect all image file paths in a directory using the canonical
