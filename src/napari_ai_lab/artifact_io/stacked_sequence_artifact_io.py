@@ -10,6 +10,8 @@ from pathlib import Path
 import numpy as np
 from skimage import io
 
+from napari_ai_lab.utilities.image_util import compute_collapsed_shape
+
 from ..utility import collect_all_image_names, get_axis_info, pad_to_largest
 from .base_artifact_io import BaseArtifactIO
 
@@ -97,7 +99,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             return
 
         images = []
-        axis_infos = []
+        self._axes_infos = []
         self._image_names = []
         self._original_shapes = []
 
@@ -106,7 +108,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             img = io.imread(str(path))
             axis_info = get_axis_info(img)
             images.append(img)
-            axis_infos.append(axis_info)
+            self._axes_infos.append(axis_info)
             self._image_names.append(path.stem)
             self._original_shapes.append(img.shape)
 
@@ -122,7 +124,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
                     normalized_images.append(img)
             images = normalized_images
 
-        self._current_stack = pad_to_largest(images, axis_infos)
+        self._current_stack = pad_to_largest(images, self._axes_infos)
         self._current_directory = directory
         print(f"Cached stack shape: {self._current_stack.shape}")
 
@@ -144,7 +146,6 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             return
 
         images = []
-        axis_infos = []
 
         for idx, name in enumerate(image_names):
             # Add .tif if no extension
@@ -156,14 +157,25 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
                 # Load existing file
                 img = io.imread(str(path))
             else:
-                # Create empty frame using original shape
-                img = np.zeros(self._original_shapes[idx], dtype=np.uint16)
+                # if an axis is collapsed (not in output) then create empty frame using collapsed shape
+                if self._axes_to_collapse is not None:
+                    collapsed_shape = compute_collapsed_shape(
+                        self._original_shapes[idx],
+                        self._axes_infos[idx],
+                        self.axes_to_collapse,
+                    )
+                    self._axes_infos[idx] = self._axes_infos[idx].replace(
+                        self.axes_to_collapse, ""
+                    )
+                # Otherwise create empty frame using original shape
+                else:
+                    collapsed_shape = self._original_shapes[idx]
 
-            axis_info = get_axis_info(img)
+                img = np.zeros(collapsed_shape, dtype=np.uint16)
+
             images.append(img)
-            axis_infos.append(axis_info)
 
-        self._current_stack = pad_to_largest(images, axis_infos)
+        self._current_stack = pad_to_largest(images, self._axes_infos)
         self._current_directory = directory
         print(f"Cached sparse stack shape: {self._current_stack.shape}")
 
@@ -199,3 +211,20 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
     def set_original_shapes(self, original_shapes: list):
         """Set original shapes."""
         self._original_shapes = original_shapes
+
+    def get_axes_infos(self):
+        """Get list of axis infos."""
+        return self._axes_infos
+
+    def set_axes_infos(self, axes_infos: list):
+        """Set list of axis infos."""
+        self._axes_infos = axes_infos
+
+    def set_axes_to_collapse(self, axes_to_collapse: str | list[str] | None):
+        """Set axes to collapse when loading/saving."""
+        self._axes_to_collapse = axes_to_collapse
+
+    @property
+    def axes_to_collapse(self):
+        """Get axes to collapse."""
+        return getattr(self, "_axes_to_collapse", None)
