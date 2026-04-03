@@ -46,6 +46,7 @@ from pathlib import Path
 import numpy as np
 from skimage.io import imread
 
+from napari_ai_lab.utilities.image_util import compute_collapsed_shape
 from napari_ai_lab.utility import (
     collect_all_image_names,
     create_empty_instance_image,
@@ -404,52 +405,25 @@ class ImageDataModel:
         ):
             image_names = self._input_images_io.get_image_names()
             original_shapes = self._input_images_io.get_original_shapes()
+            axes_infos = self._input_images_io.get_axes_infos()
             self._annotations_io.set_image_names(image_names)
             self._annotations_io.set_original_shapes(original_shapes)
+            self._annotations_io.set_axes_infos(axes_infos)
+            self._annotations_io.set_axes_to_collapse(
+                self._annotations_io_axes_to_collapse
+            )
 
         return self._annotations_io
 
-    def set_annotation_io_type(self, io_type: str):
+    def set_annotation_io_type(
+        self, io_type: str, axes_to_collapse: str = None
+    ):
         """Set annotation artifact io type."""
         self.annotation_io_type = io_type
+        self._annotations_io_axes_to_collapse = (
+            axes_to_collapse  # Store axis to collapse for later use
+        )
         self._annotations_io = None
-
-    def _compute_annotation_shape(
-        self,
-        image_shape: tuple,
-        axes_to_collapse: str | list[str] | None = None,
-    ) -> tuple:
-        """
-        Compute annotation shape by collapsing specified axes from image shape.
-
-        Simple, flexible approach: caller specifies which axes to remove.
-        Today: collapse "C" for ZYXC -> ZYX
-        Future: collapse "T", ["C", "S"], or any other axes as needed
-
-        Args:
-            image_shape: Original image shape
-            axes_to_collapse: Axis names to remove (e.g., "C" or ["C", "T"])
-                            If None, annotation shape matches image shape
-
-        Returns:
-            Tuple representing the annotation shape with specified axes collapsed
-        """
-        if axes_to_collapse is None or not self.axis_types:
-            return image_shape
-
-        # Normalize to list
-        if isinstance(axes_to_collapse, str):
-            axes_to_collapse = [axes_to_collapse]
-
-        # Build new shape by keeping only non-collapsed axes
-        new_shape = []
-        for axis_name, dim_size in zip(
-            self.axis_types, image_shape, strict=False
-        ):
-            if axis_name not in axes_to_collapse:
-                new_shape.append(dim_size)
-
-        return tuple(new_shape)
 
     def load_existing_annotations(
         self,
@@ -489,8 +463,8 @@ class ImageDataModel:
         data = io.load(str(annotation_dir), dataset_name)
 
         # Compute target annotation shape (may be smaller than image if axes collapsed)
-        annotation_shape = self._compute_annotation_shape(
-            image_shape, axes_to_collapse
+        annotation_shape = compute_collapsed_shape(
+            image_shape, self.axis_types, axes_to_collapse
         )
 
         # If nothing saved, return zeros with appropriate shape
@@ -521,12 +495,22 @@ class ImageDataModel:
         ):
             image_names = self._input_images_io.get_image_names()
             original_shapes = self._input_images_io.get_original_shapes()
+            axes_infos = self._input_images_io.get_axes_infos()
             self._predictions_io.set_image_names(image_names)
             self._predictions_io.set_original_shapes(original_shapes)
+            self._predictions_io.set_axes_infos(axes_infos)
+            self._predictions_io.set_axes_to_collapse(
+                self._predictions_io_axes_to_collapse
+            )
 
         return self._predictions_io
 
-    def set_prediction_io_type(self, io_type: str, axis_slice: str = None):
+    def set_prediction_io_type(
+        self,
+        io_type: str,
+        axes_to_collapse: str | None = None,
+        axis_slice: str = None,
+    ):
         """Set prediction artifact io type."""
         self.prediction_io_type = io_type
         self._predictions_io = get_artifact_io(self.prediction_io_type)
@@ -534,6 +518,10 @@ class ImageDataModel:
             self._predictions_io, "set_axis_slice"
         ):
             self._predictions_io.set_axis_slice(axis_slice)
+
+        self._predictions_io_axes_to_collapse = (
+            axes_to_collapse  # Store axis to collapse for later use
+        )
 
     def set_current_segmenter_name(self, name: str):
         """Set current segmenter name for organizing predictions."""
@@ -599,8 +587,8 @@ class ImageDataModel:
         data = io.load(str(preds_dir), dataset_name)
 
         # Compute target prediction shape (may be smaller than image if axes collapsed)
-        prediction_shape = self._compute_annotation_shape(
-            image_shape, axes_to_collapse
+        prediction_shape = compute_collapsed_shape(
+            image_shape, self.axis_types, axes_to_collapse
         )
 
         if data is None or getattr(data, "size", 0) == 0:
