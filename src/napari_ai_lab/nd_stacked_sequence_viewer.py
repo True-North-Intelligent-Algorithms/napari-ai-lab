@@ -120,12 +120,6 @@ class NDStackedSequenceViewer(QWidget):
                     stacked_images, name="Stacked Image Series"
                 )
 
-                # Load predictions from all segmenter subdirectories
-                self._load_all_predictions(model, stacked_images.shape)
-
-                # Subscribe to dimension change events to track current image
-                # self.viewer.dims.events.current_step.connect(self._on_dims_changed)
-
                 # Reset current index
                 self.current_index = 0
 
