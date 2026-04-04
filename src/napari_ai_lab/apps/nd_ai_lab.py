@@ -130,7 +130,10 @@ class NDAILab(QWidget):
         # Key: segmenter name (e.g., "CellposeSegmenter", "StarDist")
         # Value: napari labels layer
         # Populated on demand when segmentation runs or existing predictions are loaded
-        self.predictions_layers = {}
+        self.segment_widget._load_existing_prediction_layers(
+            self.image_layer.data.shape
+        )
+        self.predictions_layers = self.segment_widget.predictions_layers
 
         # Create points layer for interactive segmentation
         self._point_choices = ["positive", "negative"]
