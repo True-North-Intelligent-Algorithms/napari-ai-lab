@@ -299,29 +299,6 @@ StarDist Automatic Segmentation:
                 raise ValueError(
                     f"StardistSegmenter expects YX or YXC image for 2D. Got shape: {image.shape}"
                 )
-
-        # Convert multi-channel to grayscale if needed
-        # StarDist models expect single channel (grayscale)
-        if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
-            print(
-                f"⚠️  Converting {image.shape[-1]}-channel 3D image to grayscale for StarDist"
-            )
-            x = np.mean(image, axis=-1)
-        elif not is_3d_model and image.ndim == 3 and image.shape[-1] in [3, 4]:
-            print(
-                f"⚠️  Converting {image.shape[-1]}-channel 2D image to grayscale for StarDist"
-            )
-            x = np.mean(image, axis=-1)
-        else:
-            x = image
-
-        # Optional normalization
-        x = self._normalize(x) if self.normalize_input else x
-
-        print(
-            f"🔍 StarDist input: shape={x.shape}, dtype={x.dtype}, ndim={x.ndim}"
-        )
-
         # Load model if not already loaded (custom_model)
         if model is None:
             try:
@@ -362,6 +339,33 @@ StarDist Automatic Segmentation:
                 raise RuntimeError(
                     f"Could not load StarDist model '{self.model_preset}': {e}"
                 ) from e
+
+        # Convert multi-channel to grayscale if needed
+        # StarDist models expect single channel (grayscale)
+        if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
+            print(
+                f"⚠️  Converting {image.shape[-1]}-channel 3D image to grayscale for StarDist"
+            )
+            x = np.mean(image, axis=-1)
+        elif (
+            not is_3d_model
+            and image.ndim == 3
+            and image.shape[-1] in [3, 4]
+            and model.config.n_channel_in == 1
+        ):
+            print(
+                f"⚠️  Converting {image.shape[-1]}-channel 2D image to grayscale for StarDist"
+            )
+            x = np.mean(image, axis=-1)
+        else:
+            x = image
+
+        # Optional normalization
+        x = self._normalize(x) if self.normalize_input else x
+
+        print(
+            f"🔍 StarDist input: shape={x.shape}, dtype={x.dtype}, ndim={x.ndim}"
+        )
 
         # Predict instances
         try:
