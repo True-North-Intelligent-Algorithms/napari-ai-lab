@@ -156,6 +156,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             if path.exists():
                 # Load existing file
                 img = io.imread(str(path))
+                self._axes_infos[idx] = get_axis_info(img)
             else:
                 # if an axis is collapsed (not in output) then create empty frame using collapsed shape
                 if self._axes_to_collapse is not None:
