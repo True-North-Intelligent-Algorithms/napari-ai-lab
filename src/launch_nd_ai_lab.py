@@ -64,8 +64,16 @@ AlbumentationsAugmenter.register()
 # Create viewer
 viewer = napari.Viewer()
 
-test_sets = ["vessels", "neurips blood cells", "fluorescent blobs"]
-test_set = test_sets[2]
+test_sets = [
+    "vessels",
+    "neurips blood cells",
+    "fluorescent blobs",
+    "czi cells",
+    "cells cropped",
+    "Stardist_3D",
+    "nuclei",
+]
+test_set = test_sets[1]
 
 if test_set == "vessels":
     # Load test data (vessels_project)
@@ -73,19 +81,43 @@ if test_set == "vessels":
         "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/vessels_project"
     )
     viewer_type = "none"
-    axis_to_collapse = None
+    axes_to_collapse = None
 elif test_set == "neurips blood cells":
     parent_dir = Path(
         "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/neurips blood cells"
     )
     viewer_type = "stacked"
-    axis_to_collapse = "C"
+    axes_to_collapse = "C"
 elif test_set == "fluorescent blobs":
     parent_dir = Path(
         "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/fluorescent blobs"
     )
     viewer_type = "stacked"
-    axis_to_collapse = None
+    axes_to_collapse = None
+elif test_set == "czi cells":
+    parent_dir = Path(
+        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/czi_cells"
+    )
+    viewer_type = "none"
+    axes_to_collapse = None
+elif test_set == "cells cropped":
+    parent_dir = Path(
+        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/cells_cropped"
+    )
+    viewer_type = "none"
+    axes_to_collapse = None
+elif test_set == "Stardist_3D":
+    parent_dir = Path(
+        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/Stardist_3D"
+    )
+    viewer_type = "sequence"
+    axes_to_collapse = None
+elif test_set == "nuclei":
+    parent_dir = Path(
+        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/nuclei"
+    )
+    viewer_type = "stacked"
+    axes_to_collapse = None
 
 # Create model
 model = ImageDataModel(parent_dir)
@@ -95,11 +127,15 @@ model.axis_types = "NYXC"  # Manually set axis types for testing purposes
 
 # Configure annotation and prediction writer types based on viewer_type
 if viewer_type == "stacked":
-    model.set_annotation_io_type("stacked_sequence")
-    model.set_prediction_io_type("stacked_sequence")
+    model.set_annotation_io_type(
+        "stacked_sequence", axes_to_collapse=axes_to_collapse
+    )
+    model.set_prediction_io_type(
+        "stacked_sequence", axes_to_collapse=axes_to_collapse
+    )
 
 # Create combined widget WITH model
-nd_ai_lab_widget = NDAILab(viewer, model, axes_to_collapse=axis_to_collapse)
+nd_ai_lab_widget = NDAILab(viewer, model, axes_to_collapse=axes_to_collapse)
 viewer.window.add_dock_widget(nd_ai_lab_widget, area="right", name="AI Lab")
 
 # Add the appropriate sequence viewer widget based on viewer_type
