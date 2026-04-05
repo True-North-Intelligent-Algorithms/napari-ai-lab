@@ -50,6 +50,7 @@ from napari_ai_lab.utilities.image_util import compute_collapsed_shape
 from napari_ai_lab.utility import (
     collect_all_image_names,
     create_empty_instance_image,
+    get_axis_info,
     get_axis_info_from_shape,
     remove_trivial_axes,
 )
@@ -907,8 +908,10 @@ class ImageDataModel:
                 continue
 
             # Crop image
-            if image_array.ndim == 3:
+            if self.axis_types == "NYX" and image_array.ndim == 3:
                 image_crop = image_array[n, ystart:yend, xstart:xend]
+            elif self.axis_types == "NYXC" and image_array.ndim == 4:
+                image_crop = image_array[n, ystart:yend, xstart:xend, :]
             else:
                 image_crop = image_array[ystart:yend, xstart:xend]
 
@@ -1275,8 +1278,6 @@ class ImageDataModel:
 
     def generate_patches_from_labels(
         self,
-        axis: str | None = None,
-        axes_string: str = "YX",
         progress_logger=None,
     ) -> Path:
         """
@@ -1285,14 +1286,7 @@ class ImageDataModel:
         Outer loop: every saved label pair (image crop + annotation crop).
         Inner loop: num_patches augmented patches drawn from that crop.
 
-        Convention matches crop_and_save_label_patches:
-            labels/input0/  — image crops
-            labels/truth0/  — annotation crops
-
-        Args:
-            axis: Optional axis identifier for the patches directory (e.g. "yx").
-            axes_string: Axes string written to info.json (e.g. "YX").
-            progress_logger: Optional ProgressLogger; falls back to print.
+        Axis is auto-detected from the first input file.
 
         Returns:
             Path to the patches directory.
@@ -1329,7 +1323,11 @@ class ImageDataModel:
                 f"Mismatch: {len(input_files)} input crops vs {len(truth_files)} truth crops"
             )
 
-        patches_dir = self.get_patches_directory(axis=axis)
+        # Auto-detect axis from the first input file
+        first_image = imread(str(input_files[0]))
+        axes_string = get_axis_info(first_image)
+
+        patches_dir = self.get_patches_directory(axis=axes_string.lower())
         total = len(input_files) * self.num_patches
 
         msg = (

@@ -298,8 +298,6 @@ class NDEasyAugment(BaseNDApp):
                 self.progress_logger.clear()
                 patches_dir = (
                     self.image_data_model.generate_patches_from_labels(
-                        axis="yx",
-                        axes_string="YX",
                         progress_logger=self.progress_logger,
                     )
                 )
