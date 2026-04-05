@@ -744,10 +744,15 @@ class NDEasySegment(BaseNDApp):
                     f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
                 )
 
-            # Update UI to show where model was saved
-            self.segmenter_parameter_form.set_parameter(
-                "model_file_path", self.segmenter.model_file_path
+            # Refresh model combos in both forms to include the newly trained model
+            trained_name = self.segmenter.model_preset
+            self.segmenter_parameter_form.refresh_model_combo(
+                select_name=trained_name
             )
+            if hasattr(self, "training_parameter_form"):
+                self.training_parameter_form.refresh_model_combo(
+                    select_name=trained_name
+                )
 
         except (RuntimeError, ValueError, TypeError, OSError) as e:
             error_msg = f"Training failed with error:\n{str(e)}"

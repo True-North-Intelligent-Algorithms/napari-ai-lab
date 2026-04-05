@@ -227,8 +227,21 @@ class NDOperationWidget(QWidget):
 
     def _on_model_changed(self, model_name):
         """Handle model selection changes."""
-        if hasattr(self.nd_operation, "model_preset"):
-            self.nd_operation.model_preset = model_name
+        if hasattr(self.nd_operation, "set_model"):
+            self.nd_operation.set_model(model_name)
+
+    def refresh_model_combo(self, select_name=None):
+        """Re-populate model combo from nd_operation.get_model_axis_map(), optionally select a model."""
+        if not hasattr(self, "_model_combo"):
+            return
+        model_map = self.nd_operation.get_model_axis_map()
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        for name in model_map:
+            self._model_combo.addItem(name)
+        if select_name:
+            self._model_combo.setCurrentText(select_name)
+        self._model_combo.blockSignals(False)
 
     def _on_axis_changed(self, axis_text):
         """Handle axis selection changes."""

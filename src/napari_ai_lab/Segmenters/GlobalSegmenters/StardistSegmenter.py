@@ -144,8 +144,7 @@ StarDist Automatic Segmentation:
         super().__init__()
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
-        self.custom_model = None
-        self.is_3d_model = False
+        self.models = {}
         # Set by nd_easy_segment before calling train() or segment()
         self.patch_path = ""
         self.model_save_dir = ""
@@ -210,6 +209,40 @@ StarDist Automatic Segmentation:
                 continue
         return pretrained
 
+    def set_model(self, model_name):
+        """Load the model for model_name and cache it in self.models dict."""
+        self.model_preset = model_name
+
+        # Already cached — nothing to do
+        if model_name in self.models:
+            print(f"🔄 Model '{model_name}' already loaded, reusing cached.")
+            return
+
+        model_axis = self.get_model_axis_map().get(model_name, "YX")
+        is_3d = "Z" in model_axis
+        is_user_trained = model_name in self.build_pretrained_model_map()
+
+        if is_user_trained:
+            if is_3d:
+                model = StarDist3D(
+                    config=None, name=model_name, basedir=self.model_save_dir
+                )
+            else:
+                model = StarDist2D(
+                    config=None, name=model_name, basedir=self.model_save_dir
+                )
+            print(
+                f"Loaded user-trained model: {model_name} from {self.model_save_dir}"
+            )
+        elif is_3d:
+            model = StarDist3D.from_pretrained(model_name)
+            print(f"Loaded builtin StarDist3D: {model_name}")
+        else:
+            model = StarDist2D.from_pretrained(model_name)
+            print(f"Loaded builtin StarDist2D: {model_name}")
+
+        self.models[model_name] = model
+
     def __setattr__(self, name, value):
         """Override setattr to detect model_preset changes."""
         # Get old value if it exists
@@ -257,91 +290,21 @@ StarDist Automatic Segmentation:
         Perform StarDist segmentation on 2D or 3D image.
 
         Args:
-            image (numpy.ndarray): Input image to segment (YX, YXC for 2D or ZYX, ZYXC for 3D).
-            **kwargs: Additional keyword arguments.
+            image (numpy.ndarray): Input image (YX, YXC, ZYX, or ZYXC).
 
         Returns:
             numpy.ndarray: Labeled segmentation mask.
-
-        Raises:
-            ValueError: If image dimensions are not supported.
         """
-        if image.ndim < 2:
-            raise ValueError(
-                f"StardistSegmenter requires at least 2D images. Got shape: {image.shape}"
-            )
+        # Load model on first use if not yet cached
+        if self.model_preset not in self.models:
+            self.set_model(self.model_preset)
 
-        # Check if 3D model is selected based on axis from the full model map
-        # (covers both builtins like "3D_demo" and user-trained models)
+        model = self.models[self.model_preset]
         model_axis = self.get_model_axis_map().get(self.model_preset, "YX")
         is_3d_model = "Z" in model_axis
-
-        # Use custom_model if already loaded, otherwise will load below
-        model = self.custom_model
-        print(
-            f"Using model: {self.model_preset} (axis: {model_axis}, custom_model loaded: {model is not None})"
-        )
-
-        # Validate dimensions based on model type
-        if is_3d_model:
-            if image.ndim < 3:
-                raise ValueError(
-                    f"3D StarDist model requires at least 3D images (ZYX). Got shape: {image.shape}"
-                )
-            # For 3D: expect ZYX or ZYXC
-            if image.ndim > 4:
-                raise ValueError(
-                    f"StardistSegmenter expects ZYX or ZYXC image for 3D. Got shape: {image.shape}"
-                )
-        else:
-            # For 2D: expect YX or YXC
-            if image.ndim > 3:
-                raise ValueError(
-                    f"StardistSegmenter expects YX or YXC image for 2D. Got shape: {image.shape}"
-                )
-        # Load model if not already loaded (custom_model)
-        if model is None:
-            try:
-                is_user_trained = (
-                    self.model_preset in self.build_pretrained_model_map()
-                )
-                if is_user_trained:
-                    # User-trained model: load by name from model_save_dir
-                    if is_3d_model:
-                        model = StarDist3D(
-                            config=None,
-                            name=self.model_preset,
-                            basedir=self.model_save_dir,
-                        )
-                        print(
-                            f"Loaded user-trained StarDist3D model: {self.model_preset} from {self.model_save_dir}"
-                        )
-                    else:
-                        model = StarDist2D(
-                            config=None,
-                            name=self.model_preset,
-                            basedir=self.model_save_dir,
-                        )
-                        print(
-                            f"Loaded user-trained StarDist2D model: {self.model_preset} from {self.model_save_dir}"
-                        )
-                elif is_3d_model:
-                    model = StarDist3D.from_pretrained(self.model_preset)
-                    print(
-                        f"Loaded builtin StarDist3D model: {self.model_preset}"
-                    )
-                else:
-                    model = StarDist2D.from_pretrained(self.model_preset)
-                    print(
-                        f"Loaded builtin StarDist2D model: {self.model_preset}"
-                    )
-            except Exception as e:
-                raise RuntimeError(
-                    f"Could not load StarDist model '{self.model_preset}': {e}"
-                ) from e
+        print(f"Using model: {self.model_preset} (axis: {model_axis})")
 
         # Convert multi-channel to grayscale if needed
-        # StarDist models expect single channel (grayscale)
         if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
             print(
                 f"⚠️  Converting {image.shape[-1]}-channel 3D image to grayscale for StarDist"
@@ -622,9 +585,8 @@ task.outputs["mask"] = ndarr_mask
             steps_per_epoch=self.steps_per_epoch,
         )
 
-        # ---- store trained model for immediate use ----
-        self.custom_model = model
-        self.is_3d_model = False  # Currently only 2D training supported
+        # ---- store trained model in cache for immediate use ----
+        self.models[model_name] = model
         self.model_preset = model_name
         model_full_path = os.path.join(model_base_path, model_name)
         done_msg = f"✅ Training complete. Model saved to: {model_full_path}"

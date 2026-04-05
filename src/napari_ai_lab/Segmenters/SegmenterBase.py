@@ -215,6 +215,9 @@ class SegmenterBase:
             return self.axis_map.get(input_axis, input_axis)
         return input_axis
 
+    def set_model(self, model_name):
+        """Load/activate the model for the given name. Override in subclasses."""
+
     def __str__(self):
         """String representation of the segmenter."""
         return f"{self.__class__.__name__}(name='{self.name}')"
