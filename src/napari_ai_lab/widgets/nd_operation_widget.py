@@ -248,6 +248,20 @@ class NDOperationWidget(QWidget):
             self._model_combo.setCurrentText(select_name)
         self._model_combo.blockSignals(False)
 
+    def set_model_combo(self, name):
+        """Set model combo to name without triggering signals."""
+        if hasattr(self, "_model_combo"):
+            self._model_combo.blockSignals(True)
+            self._model_combo.setCurrentText(name)
+            self._model_combo.blockSignals(False)
+
+    def set_axis_combo(self, axis):
+        """Set axis combo to axis without triggering signals."""
+        if hasattr(self, "_axis_combo") and self._axis_combo:
+            self._axis_combo.blockSignals(True)
+            self._axis_combo.setCurrentText(axis)
+            self._axis_combo.blockSignals(False)
+
     def _on_axis_changed(self, axis_text):
         """Handle axis selection changes."""
         self.selected_axis = axis_text

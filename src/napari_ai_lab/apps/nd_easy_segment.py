@@ -302,13 +302,32 @@ class NDEasySegment(BaseNDApp):
         return training_widget
 
     def _update_segmenter_parameter_form(self, segmenter):
-        """Update both segmenter and training parameter forms."""
-        # Update the main segmenter parameter form (inference params)
+        """Update both segmenter and training parameter forms, cross-wire combos."""
         self.segmenter_parameter_form.set_nd_operation(segmenter)
 
-        # Also update training parameter form if it exists
         if hasattr(self, "training_parameter_form"):
             self.training_parameter_form.set_nd_operation(segmenter)
+            self._cross_connect_combos()
+
+    def _cross_connect_combos(self):
+        """Cross-wire model and axis combos so changing one updates the other."""
+        seg = self.segmenter_parameter_form
+        trn = self.training_parameter_form
+
+        # Model combo sync
+        if hasattr(seg, "_model_combo") and hasattr(trn, "_model_combo"):
+            seg._model_combo.currentTextChanged.connect(trn.set_model_combo)
+            trn._model_combo.currentTextChanged.connect(seg.set_model_combo)
+
+        # Axis combo sync
+        if (
+            hasattr(seg, "_axis_combo")
+            and seg._axis_combo
+            and hasattr(trn, "_axis_combo")
+            and trn._axis_combo
+        ):
+            seg._axis_combo.currentTextChanged.connect(trn.set_axis_combo)
+            trn._axis_combo.currentTextChanged.connect(seg.set_axis_combo)
 
     # === Interactive Mode Methods ===
     def _on_points_changed(self, event):
