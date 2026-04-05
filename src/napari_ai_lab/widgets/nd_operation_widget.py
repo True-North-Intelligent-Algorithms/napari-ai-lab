@@ -230,6 +230,11 @@ class NDOperationWidget(QWidget):
         if hasattr(self.nd_operation, "set_model"):
             self.nd_operation.set_model(model_name)
 
+        model_axis = self.nd_operation.get_model_axis_map().get(
+            model_name, "YX"
+        )
+        self._axis_combo.setCurrentText(model_axis)
+
     def refresh_model_combo(self, select_name=None):
         """Re-populate model combo from nd_operation.get_model_axis_map(), optionally select a model."""
         if not hasattr(self, "_model_combo"):
