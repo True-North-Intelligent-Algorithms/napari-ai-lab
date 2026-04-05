@@ -52,3 +52,7 @@ ndevio = "*"
 # Windows uses PyPI tensorflow because conda-forge doesn't have Windows builds
 [target.win-64.pypi-dependencies]
 tensorflow = "<2.11"
+
+[tasks]
+# Register the environment as a Jupyter kernel for use in VS Code and Jupyter
+register-kernel = "python -m ipykernel install --user --name=stardist --display-name 'AI-LAB (stardist)'"
