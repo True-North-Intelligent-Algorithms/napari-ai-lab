@@ -83,11 +83,11 @@ Albumentations Advanced Augmentation:
     )
 
     do_random_sized_crop: bool = field(
-        default=False,
+        default=True,
         metadata={
             "type": "bool",
             "param_type": "augmentation",
-            "default": False,
+            "default": True,
         },
     )
 
@@ -188,12 +188,15 @@ Albumentations Advanced Augmentation:
             # need to invert the size factor because it controls the crop size which is then resized to the patch size.
             # So a smaller factor will lead to a larger resize.
             inverse_size_factor = 0.99 / self.size_factor
-            min_max_height = int(inverse_size_factor * patch_size), patch_size
+            min_max_height = (
+                int(inverse_size_factor * patch_size[0]),
+                patch_size[0],
+            )
             augmentations.append(
                 A.RandomSizedCrop(
                     min_max_height=min_max_height,
-                    size=(patch_size, patch_size),
-                    p=0.5,
+                    size=patch_size,
+                    p=1.0,
                 )
             )
 
@@ -234,82 +237,14 @@ Albumentations Advanced Augmentation:
         ValueError
             If patch_size dimensions don't match image dimensions or if patch is larger than image
         """
-        if im.shape != mask.shape:
-            raise ValueError(
-                f"Image and mask shapes must match. Got image: {im.shape}, mask: {mask.shape}"
-            )
-
-        # Convert patch_size to tuple if it's a single value
-        if isinstance(patch_size, int):
-            patch_size = (patch_size,) * im.ndim
-
-        if len(patch_size) != im.ndim:
-            raise ValueError(
-                f"patch_size dimensions ({len(patch_size)}) must match "
-                f"image dimensions ({im.ndim})"
-            )
-
-        # Check if patch size is valid
-        for i, (img_dim, patch_dim) in enumerate(
-            zip(im.shape, patch_size, strict=False)
-        ):
-            if patch_dim > img_dim:
-                raise ValueError(
-                    f"Patch size ({patch_dim}) at dimension {i} is larger than "
-                    f"image size ({img_dim})"
-                )
-
-        # Generate random starting indices for cropping
-        start_indices = self._get_random_crop_indices(
-            im.shape, patch_size, axis
-        )
-
-        # Create slicing tuples for cropping
-        slices = tuple(
-            slice(start, start + size)
-            for start, size in zip(start_indices, patch_size, strict=False)
-        )
-
-        # Crop both image and mask using the same indices
-        cropped_im = im[slices]
-        cropped_mask = mask[slices]
-
-        # Normalize image if enabled (before augmentation)
-        if self.normalize:
-            cropped_im = self.normalize_image(
-                cropped_im, use_global_stats=self.use_global_stats
-            )
-
         # Apply Albumentations augmentations
         # Assume the last two dimensions are spatial (H, W)
-        if cropped_im.ndim == 2:
-            # 2D image
-            patch_size_2d = cropped_im.shape[0]  # Assume square
-            transform = self._create_augmentation_pipeline(patch_size_2d)
 
-            augmented = transform(image=cropped_im, mask=cropped_mask)
-            augmented_im = augmented["image"]
-            augmented_mask = augmented["mask"]
-        elif cropped_im.ndim == 3:
-            # 3D image - apply augmentation to 2D slice
-            # Assume shape is (Z, Y, X) and we want to augment (Y, X)
-            patch_size_2d = cropped_im.shape[1]  # Assume square in YX
-            transform = self._create_augmentation_pipeline(patch_size_2d)
+        # 2D image
+        transform = self._create_augmentation_pipeline(patch_size)
 
-            # Apply to the 2D slice (assuming first dimension is Z and only 1 slice)
-            if cropped_im.shape[0] == 1:
-                augmented = transform(
-                    image=cropped_im[0], mask=cropped_mask[0]
-                )
-                augmented_im = augmented["image"][np.newaxis, ...]
-                augmented_mask = augmented["mask"][np.newaxis, ...]
-            else:
-                # For multi-slice, just return cropped (no augmentation)
-                augmented_im = cropped_im
-                augmented_mask = cropped_mask
-        else:
-            raise ValueError(
-                f"Unsupported image dimensions: {cropped_im.ndim}"
-            )
+        augmented = transform(image=im, mask=mask)
+        augmented_im = augmented["image"]
+        augmented_mask = augmented["mask"]
 
         return augmented_im, augmented_mask
