@@ -525,8 +525,15 @@ class NDEasySegment(BaseNDApp):
             selected_axis = self.segmenter_parameter_form.get_selected_axis()
             print(f"User selected axis mode: {selected_axis}")
 
+            if len(self.image_layer.data.shape) > len(current_step):
+                ignore_channel = True
+            else:
+                ignore_channel = False
+
             # Extract current slice based on selected axis mode
-            indices = get_current_slice_indices(current_step, selected_axis)
+            indices = get_current_slice_indices(
+                current_step, selected_axis, ignore_channel
+            )
 
             current_yx_slice = self.image_layer.data[indices]
 
@@ -560,7 +567,7 @@ class NDEasySegment(BaseNDApp):
             )
 
             segmentation_indices = get_current_slice_indices(
-                current_step, segmentation_axis
+                current_step, segmentation_axis, ignore_channel=True
             )
 
             # Get or create the predictions layer for this segmenter
