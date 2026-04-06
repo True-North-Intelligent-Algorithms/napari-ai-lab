@@ -185,8 +185,17 @@ class NDOperationWidget(QWidget):
                     for axis in supported_axes:
                         self._axis_combo.addItem(axis)
 
-                    # Set default to first axis
-                    self.selected_axis = supported_axes[0]
+                    # Restore previously selected axis if the segmenter already
+                    # has one (e.g. when switching segmenters and coming back);
+                    # otherwise default to the first supported axis.
+                    existing_axis = getattr(
+                        self.nd_operation, "selected_axis", None
+                    )
+                    if existing_axis and existing_axis in supported_axes:
+                        self.selected_axis = existing_axis
+                        self._axis_combo.setCurrentText(existing_axis)
+                    else:
+                        self.selected_axis = supported_axes[0]
 
                     # Connect value changes
                     self._axis_combo.currentTextChanged.connect(
@@ -216,6 +225,16 @@ class NDOperationWidget(QWidget):
                     self._model_combo = QComboBox()
                     for name in model_map:
                         self._model_combo.addItem(name)
+                    # Restore previously selected model if the segmenter
+                    # already has one, using blockSignals to avoid
+                    # overriding the already-restored axis selection.
+                    existing_model = getattr(
+                        self.nd_operation, "model_preset", None
+                    )
+                    if existing_model and existing_model in model_map:
+                        self._model_combo.blockSignals(True)
+                        self._model_combo.setCurrentText(existing_model)
+                        self._model_combo.blockSignals(False)
                     self._model_combo.currentTextChanged.connect(
                         self._on_model_changed
                     )
