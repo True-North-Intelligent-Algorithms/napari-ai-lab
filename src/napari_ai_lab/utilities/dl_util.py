@@ -7,17 +7,17 @@ from skimage import io
 from tqdm import tqdm
 
 
-def normalize_image(image, p_low=None, p_high=None):
+def normalize_image(image, intensity_low=None, intensity_high=None):
     """
     Normalize image using explicit low and high values or percentile normalization.
 
-    This normalizes the image by scaling values between p_low and p_high to [0, 1].
-    If p_low and p_high are not provided, they are computed from the image itself.
+    This normalizes the image by scaling values between intensity_low and intensity_high to [0, 1].
+    If intensity_low and intensity_high are not provided, they are computed from the image itself.
 
     Args:
         image (numpy.ndarray): Input image
-        p_low (float, optional): Low value for normalization. If None, computed as 1st percentile.
-        p_high (float, optional): High value for normalization. If None, computed as 99th percentile.
+        intensity_low (float, optional): Low value for normalization. If None, computed as 1st percentile.
+        intensity_high (float, optional): High value for normalization. If None, computed as 99th percentile.
 
     Returns:
         numpy.ndarray: Normalized image in range [0, 1]
@@ -25,14 +25,20 @@ def normalize_image(image, p_low=None, p_high=None):
     image_float = image.astype(np.float32)
 
     # Compute percentiles if not provided
-    if p_low is None or p_high is None:
+    if intensity_low is None or intensity_high is None:
         computed_low, computed_high = np.percentile(image_float, [1, 99])
-        p_low = computed_low if p_low is None else p_low
-        p_high = computed_high if p_high is None else p_high
+        intensity_low = (
+            computed_low if intensity_low is None else intensity_low
+        )
+        intensity_high = (
+            computed_high if intensity_high is None else intensity_high
+        )
 
     # Normalize using provided or computed values
-    if p_high > p_low:
-        image_norm = (image_float - p_low) / (p_high - p_low)
+    if intensity_high > intensity_low:
+        image_norm = (image_float - intensity_low) / (
+            intensity_high - intensity_low
+        )
         image_norm = np.clip(image_norm, 0, 1)
     else:
         image_norm = image_float
