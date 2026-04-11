@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ...utilities.dl_util import normalize_image
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import stardist at module level
@@ -272,18 +273,8 @@ StarDist Automatic Segmentation:
         return _is_stardist_available
 
     def _normalize(self, image: np.ndarray) -> np.ndarray:
-        """Simple min-max normalization to [0, 1] with float32 output."""
-        if image.dtype.kind in {"f"}:
-            # Assume already in a reasonable range for floats
-            return image.astype(np.float32, copy=False)
-        img = image.astype(np.float32, copy=False)
-        vmin = float(np.min(img))
-        vmax = float(np.max(img))
-        if vmax > vmin:
-            img = (img - vmin) / (vmax - vmin)
-        else:
-            img = np.zeros_like(img, dtype=np.float32)
-        return img
+        """Normalize image using percentile normalization (p1=1, p99=99) from dl_util."""
+        return normalize_image(image, intensity_low=1, p_high=99)
 
     def segment(self, image, **kwargs):
         """
