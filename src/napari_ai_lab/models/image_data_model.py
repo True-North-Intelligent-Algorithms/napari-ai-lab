@@ -679,7 +679,7 @@ class ImageDataModel:
         import numpy as np
 
         csv_path = self.get_boxes_csv_path()
-        fieldnames = ["file_name", "xstart", "ystart", "xend", "yend"]
+        fieldnames = ["file_name", "xstart", "ystart", "xend", "yend", "zpos"]
         stacked = self._is_stacked_sequence()
         stacked_names = self._get_stacked_image_names() if stacked else []
 
@@ -745,11 +745,15 @@ class ImageDataModel:
                 image_paths = self.get_image_paths()
                 file_name = image_paths[image_index].name
 
+                is_3d = "Z" in self.axis_types
+                zpos = int(box[0][0]) if is_3d else 0
+
             # Coordinates: last two columns are always (y, x)
             ystart = int(np.min(box[:, -2]))
             yend = int(np.max(box[:, -2]))
             xstart = int(np.min(box[:, -1]))
             xend = int(np.max(box[:, -1]))
+
             new_rows.append(
                 {
                     "file_name": file_name,
@@ -757,6 +761,7 @@ class ImageDataModel:
                     "ystart": ystart,
                     "xend": xend,
                     "yend": yend,
+                    "zpos": zpos,
                 }
             )
 
@@ -813,6 +818,7 @@ class ImageDataModel:
                     "ystart": int(row["ystart"]),
                     "xend": int(row["xend"]),
                     "yend": int(row["yend"]),
+                    "zpos": int(row.get("zpos", 0)),
                 }
                 if stacked:
                     # Resolve frame index from file name stem
@@ -875,6 +881,8 @@ class ImageDataModel:
 
         from ..utilities.io_util import generate_patch_names
 
+        stacked = self._is_stacked_sequence()
+
         image_paths = self.get_image_paths()
 
         # Output directories: labels/input0  and  labels/truth0
@@ -899,7 +907,12 @@ class ImageDataModel:
             xstart = int(np.min(box[:, -1]))
             xend = int(np.max(box[:, -1]))
 
-            n = int(box[0, 0]) if box.shape[-1] == 3 else image_index
+            if stacked:
+                n = int(box[0, 0]) if box.shape[-1] == 3 else image_index
+                z = 0
+            else:
+                n = 0
+                z = int(box[0, 0]) if "Z" in self.axis_types else 0
 
             stem = image_paths[n].stem
 
@@ -910,18 +923,22 @@ class ImageDataModel:
             # Crop image
             if self.axis_types == "NYX" and image_array.ndim == 3:
                 image_crop = image_array[n, ystart:yend, xstart:xend]
-            elif self.axis_types == "NYXC" and image_array.ndim == 4:
-                image_crop = image_array[n, ystart:yend, xstart:xend, :]
-            else:
-                image_crop = image_array[ystart:yend, xstart:xend]
-
-            # Crop annotation
-            if annotations_array.ndim == 3:
                 annotation_crop = annotations_array[
                     n, ystart:yend, xstart:xend
                 ]
-            else:
+            elif self.axis_types == "NYXC" and image_array.ndim == 4:
+                image_crop = image_array[n, ystart:yend, xstart:xend, :]
+                annotation_crop = annotations_array[
+                    n, ystart:yend, xstart:xend, :
+                ]
+            elif self.axis_types == "YX":
+                image_crop = image_array[ystart:yend, xstart:xend]
                 annotation_crop = annotations_array[ystart:yend, xstart:xend]
+            elif self.axis_types == "ZYX":
+                image_crop = image_array[z, ystart:yend, xstart:xend]
+                annotation_crop = annotations_array[
+                    z, ystart:yend, xstart:xend
+                ]
 
             image_name, mask_name = generate_patch_names(
                 str(input_dir), str(truth_dir), stem
