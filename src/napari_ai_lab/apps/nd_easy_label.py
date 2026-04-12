@@ -380,7 +380,7 @@ class NDEasyLabel(BaseNDApp):
                     continue
                 n = float(frame_idx)
             else:
-                n = 0.0  # single image: place at z/frame 0
+                n = row.get("zpos", 0)  # Default to 0 if zpos is not available
 
             rect = np.array(
                 [

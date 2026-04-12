@@ -60,6 +60,7 @@ class NDOperationWidget(QWidget):
 
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
+        self._dependency_label = None  # Dependency status label widget
         self._instructions_text = None  # Instructions label widget
         self._axis_combo = None  # Axis selection combo box
         self.selected_axis = None  # Currently selected axis
@@ -89,6 +90,11 @@ class NDOperationWidget(QWidget):
 
     def clear_form(self):
         """Clear all parameter widgets from the form."""
+        # Clear dependency status label if it exists
+        if self._dependency_label is not None:
+            self._dependency_label.deleteLater()
+            self._dependency_label = None
+
         # Clear instructions widget if it exists
         if self._instructions_text is not None:
             self._instructions_text.deleteLater()
@@ -148,8 +154,38 @@ class NDOperationWidget(QWidget):
 
     def _add_instructions_if_present(self):
         """
-        Add instructions label if the ND Operation has instructions.
+        Add dependency status banner and instructions label if present.
         """
+        # --- Dependency status banner ---
+        if hasattr(self.nd_operation, "are_dependencies_available"):
+            deps_ok = self.nd_operation.are_dependencies_available()
+            if deps_ok:
+                dep_text = "\u2705 Dependencies available"
+                dep_style = (
+                    "QLabel { font-size: 13px; font-weight: bold;"
+                    " color: #1a7a1a;"
+                    " background-color: #e6f4ea;"
+                    " border: 1px solid #82c882;"
+                    " border-radius: 4px; padding: 4px 6px; }"
+                )
+            else:
+                dep_text = (
+                    "\u26a0\ufe0f Dependencies not available —"
+                    " install required packages to use this segmenter"
+                )
+                dep_style = (
+                    "QLabel { font-size: 13px; font-weight: bold;"
+                    " color: #b30000;"
+                    " background-color: #fff0f0;"
+                    " border: 1px solid #e08080;"
+                    " border-radius: 4px; padding: 4px 6px; }"
+                )
+            self._dependency_label = QLabel(dep_text)
+            self._dependency_label.setStyleSheet(dep_style)
+            self._dependency_label.setWordWrap(True)
+            self.main_layout.addWidget(self._dependency_label)
+
+        # --- Instructions label ---
         if hasattr(self.nd_operation, "instructions"):
             instructions_text = self.nd_operation.instructions
             if instructions_text and isinstance(instructions_text, str):
@@ -185,8 +221,17 @@ class NDOperationWidget(QWidget):
                     for axis in supported_axes:
                         self._axis_combo.addItem(axis)
 
-                    # Set default to first axis
-                    self.selected_axis = supported_axes[0]
+                    # Restore previously selected axis if the segmenter already
+                    # has one (e.g. when switching segmenters and coming back);
+                    # otherwise default to the first supported axis.
+                    existing_axis = getattr(
+                        self.nd_operation, "selected_axis", None
+                    )
+                    if existing_axis and existing_axis in supported_axes:
+                        self.selected_axis = existing_axis
+                        self._axis_combo.setCurrentText(existing_axis)
+                    else:
+                        self.selected_axis = supported_axes[0]
 
                     # Connect value changes
                     self._axis_combo.currentTextChanged.connect(
@@ -216,6 +261,16 @@ class NDOperationWidget(QWidget):
                     self._model_combo = QComboBox()
                     for name in model_map:
                         self._model_combo.addItem(name)
+                    # Restore previously selected model if the segmenter
+                    # already has one, using blockSignals to avoid
+                    # overriding the already-restored axis selection.
+                    existing_model = getattr(
+                        self.nd_operation, "model_preset", None
+                    )
+                    if existing_model and existing_model in model_map:
+                        self._model_combo.blockSignals(True)
+                        self._model_combo.setCurrentText(existing_model)
+                        self._model_combo.blockSignals(False)
                     self._model_combo.currentTextChanged.connect(
                         self._on_model_changed
                     )
