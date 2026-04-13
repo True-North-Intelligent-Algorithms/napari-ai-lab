@@ -265,21 +265,7 @@ class NDEasyAugment(BaseNDApp):
             image = self.image_layer.data
             annotations = self.annotation_layer.data
 
-            # Adjust patch size based on image dimensions
-            # If image is 3D, use (1, Y, X) for 2D slices from 3D data
-            # If image is 2D, use (Y, X)
-
-            axis_types = self.image_data_model.axis_types
-            if "ZYX" in (axis_types):
-                patch_size = (1, patch_size_y, patch_size_x)
-                print(
-                    f"\n📐 Detected 3D image, using patch size: {patch_size}"
-                )
-            else:
-                patch_size = (patch_size_y, patch_size_x)
-                print(
-                    f"\n📐 Detected 2D image, using patch size: {patch_size}"
-                )
+            patch_size = (patch_size_y, patch_size_x)
 
             # Configure the model
             self.image_data_model.set_augmenter(self.augmenter)
@@ -292,18 +278,6 @@ class NDEasyAugment(BaseNDApp):
             print(f"  Number of patches: {num_patches}")
 
             patch_mode = self.patch_mode_combo.currentText()
-
-            if patch_mode == "from_label_boxes":
-                # Clear previous progress
-                self.progress_logger.clear()
-                patches_dir = (
-                    self.image_data_model.generate_patches_from_labels(
-                        progress_logger=self.progress_logger,
-                    )
-                )
-                print(f"📁 Patches saved to: {patches_dir}")
-                return
-
             # Setup augmentation (compute stats, valid coordinates, etc.)
             self.image_data_model.setup_augmentation(
                 image=image,
@@ -315,8 +289,15 @@ class NDEasyAugment(BaseNDApp):
             # Clear previous progress
             self.progress_logger.clear()
 
-            # Generate patches with progress tracking
-            patches_dir = (
+            if patch_mode == "from_label_boxes":
+                # Clear previous progress
+                self.progress_logger.clear()
+                self.image_data_model.generate_patches_from_labels(
+                    progress_logger=self.progress_logger,
+                )
+                return
+            else:
+                # Generate patches with progress tracking
                 self.image_data_model.generate_patches_from_layer_data(
                     image=image,
                     annotations=annotations,
@@ -324,22 +305,7 @@ class NDEasyAugment(BaseNDApp):
                     axes_string="YX",
                     progress_logger=self.progress_logger,
                 )
-            )
-
-            # Write info.json with patch metadata
-            # (Note: generate_patches already writes info.json via augmenter.write_info)
-            # This is redundant but kept for compatibility
-            if not hasattr(self.augmenter, "write_info"):
-                print("📝 Writing patch metadata (info.json)...")
-                self.augmenter.write_info(
-                    patch_path=str(patches_dir),
-                    axes="YX",
-                    num_inputs=1,
-                    num_truths=1,
-                    sub_sample=1,
-                )
-
-            print(f"📁 Patches saved to: {patches_dir}")
+                return
 
         except (ValueError, RuntimeError, OSError, AttributeError) as e:
             error_msg = f"Error during augmentation: {e}"
