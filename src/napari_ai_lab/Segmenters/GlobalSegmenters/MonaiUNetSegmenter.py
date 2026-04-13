@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 
 from ...datasets.pytorch_semantic_dataset import PyTorchSemanticDataset
 from ...mixins import TrainingBase
-from ...utilities.dl_util import normalize_image
+from ...utilities.dl_util import normalize_percentile
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import MONAI dependencies
@@ -333,7 +333,7 @@ MONAI UNet Automatic Segmentation:
 
         # Prepare image for inference
         if normalize:
-            image_norm = normalize_image(image)
+            image_norm = normalize_percentile(image)
         else:
             image_norm = image.astype(np.float32)
 

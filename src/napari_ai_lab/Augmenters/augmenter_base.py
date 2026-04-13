@@ -2,7 +2,11 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from ..utilities.dl_util import normalize_image, normalize_percentile
+from ..utilities.dl_util import (
+    compute_percentiles,
+    normalize_intensity,
+    normalize_percentile,
+)
 
 
 class AugmenterBase(ABC):
@@ -105,8 +109,8 @@ class AugmenterBase(ABC):
     def compute_global_normalization_stats(
         self,
         image: np.ndarray,
-        percentile_low: float = 1,
-        percentile_high: float = 99,
+        percentile_low: float = 0,
+        percentile_high: float = 100,
     ):
         """
         Compute global normalization statistics from full image.
@@ -123,7 +127,7 @@ class AugmenterBase(ABC):
         percentile_high : float
             Upper percentile (default: 99)
         """
-        self.global_norm_low, self.global_norm_high = normalize_percentile(
+        self.global_norm_low, self.global_norm_high = compute_percentiles(
             image, percentile_low, percentile_high
         )
         print(
@@ -150,11 +154,11 @@ class AugmenterBase(ABC):
             Normalized image in range [0, 1]
         """
         if use_global_stats and self.global_norm_low is not None:
-            return normalize_image(
+            return normalize_intensity(
                 image, self.global_norm_low, self.global_norm_high
             )
         else:
-            return normalize_image(image)
+            return normalize_percentile(image)
 
     @abstractmethod
     def augment(
@@ -219,6 +223,11 @@ class AugmenterBase(ABC):
         import os
 
         from ..utilities.io_util import generate_next_name
+
+        if self.normalize:
+            im = self.normalize_image(
+                im, use_global_stats=self.use_global_stats
+            )
 
         # Augment the image and mask
         augmented_im, augmented_mask = self.augment(im, mask, patch_size, axis)

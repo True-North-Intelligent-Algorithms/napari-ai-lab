@@ -4,8 +4,9 @@ Utilities module for napari-ai-lab.
 
 from .dl_util import (
     collect_training_data,
+    compute_percentiles,
     divide_training_data,
-    normalize_image,
+    normalize_intensity,
     normalize_percentile,
 )
 from .image_util import (
@@ -49,7 +50,8 @@ __all__ = [
     "ConsoleProgressLogger",
     "QtProgressLogger",
     # dl_util
-    "normalize_image",
+    "normalize_intensity",
+    "compute_percentiles",
     "normalize_percentile",
     "collect_training_data",
     "divide_training_data",

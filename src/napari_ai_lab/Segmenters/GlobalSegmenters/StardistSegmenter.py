@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ...utilities.dl_util import normalize_image
+from ...utilities.dl_util import normalize_percentile
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import stardist at module level
@@ -273,8 +273,8 @@ StarDist Automatic Segmentation:
         return _is_stardist_available
 
     def _normalize(self, image: np.ndarray) -> np.ndarray:
-        """Normalize image using percentile normalization (p1=1, p99=99) from dl_util."""
-        return normalize_image(image, intensity_low=1, p_high=99)
+        """Normalize image using percentile normalization (p1, p99)."""
+        return normalize_percentile(image)
 
     def segment(self, image, **kwargs):
         """

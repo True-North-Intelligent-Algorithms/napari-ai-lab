@@ -7,65 +7,59 @@ from skimage import io
 from tqdm import tqdm
 
 
-def normalize_image(image, intensity_low=None, intensity_high=None):
+def normalize_intensity(image, intensity_low, intensity_high):
     """
-    Normalize image using explicit low and high values or percentile normalization.
-
-    This normalizes the image by scaling values between intensity_low and intensity_high to [0, 1].
-    If intensity_low and intensity_high are not provided, they are computed from the image itself.
+    Normalize image to [0, 1] using explicit intensity bounds.
 
     Args:
-        image (numpy.ndarray): Input image
-        intensity_low (float, optional): Low value for normalization. If None, computed as 1st percentile.
-        intensity_high (float, optional): High value for normalization. If None, computed as 99th percentile.
+        image (numpy.ndarray): Input image.
+        intensity_low (float): Intensity value that maps to 0.
+        intensity_high (float): Intensity value that maps to 1.
 
     Returns:
-        numpy.ndarray: Normalized image in range [0, 1]
+        numpy.ndarray: float32 array clipped to [0, 1].
     """
     image_float = image.astype(np.float32)
-
-    # Compute percentiles if not provided
-    if intensity_low is None or intensity_high is None:
-        computed_low, computed_high = np.percentile(image_float, [1, 99])
-        intensity_low = (
-            computed_low if intensity_low is None else intensity_low
-        )
-        intensity_high = (
-            computed_high if intensity_high is None else intensity_high
-        )
-
-    # Normalize using provided or computed values
     if intensity_high > intensity_low:
-        image_norm = (image_float - intensity_low) / (
+        image_float = (image_float - intensity_low) / (
             intensity_high - intensity_low
         )
-        image_norm = np.clip(image_norm, 0, 1)
-    else:
-        image_norm = image_float
+        image_float = np.clip(image_float, 0, 1)
+    return image_float
 
-    return image_norm
+
+def compute_percentiles(image, percentile_low=1, percentile_high=99):
+    """
+    Compute percentile intensity values from an image.
+
+    Args:
+        image (numpy.ndarray): Input image.
+        percentile_low (float): Lower percentile (default: 1).
+        percentile_high (float): Upper percentile (default: 99).
+
+    Returns:
+        tuple: (low, high) intensity values.
+    """
+    image_float = image.astype(np.float32)
+    return tuple(np.percentile(image_float, [percentile_low, percentile_high]))
 
 
 def normalize_percentile(image, percentile_low=1, percentile_high=99):
     """
-    Compute percentile values from image for use in global normalization.
+    Normalize image to [0, 1] using percentile-based intensity bounds.
 
-    This is useful for computing global statistics from a full image/label
-    that can then be applied to individual patches for consistent normalization.
+    Computes percentile values from the image, then normalizes.
 
     Args:
-        image (numpy.ndarray): Input image to compute percentiles from
-        percentile_low (float): Lower percentile (default: 1)
-        percentile_high (float): Upper percentile (default: 99)
+        image (numpy.ndarray): Input image.
+        percentile_low (float): Lower percentile (default: 1).
+        percentile_high (float): Upper percentile (default: 99).
 
     Returns:
-        tuple: (p_low, p_high) percentile values
+        numpy.ndarray: float32 array clipped to [0, 1].
     """
-    image_float = image.astype(np.float32)
-    p_low, p_high = np.percentile(
-        image_float, [percentile_low, percentile_high]
-    )
-    return p_low, p_high
+    low, high = compute_percentiles(image, percentile_low, percentile_high)
+    return normalize_intensity(image, low, high)
 
 
 def collect_training_data(
@@ -137,14 +131,10 @@ def collect_training_data(
             y = y[slices]
 
         if normalize_input:
-            x = normalize_image(
-                x, *np.percentile(x.astype(np.float32), [pmin, pmax])
-            )
+            x = normalize_percentile(x, pmin, pmax)
 
         if normalize_truth:
-            y = normalize_image(
-                y, *np.percentile(y.astype(np.float32), [pmin, pmax])
-            )
+            y = normalize_percentile(y, pmin, pmax)
 
         if add_trivial_channel:
             x = x[..., np.newaxis]

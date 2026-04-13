@@ -1186,6 +1186,8 @@ class ImageDataModel:
         elif mode == "random_crop":
             # Random crop mode doesn't need special setup
             print("Using random crop mode (no coordinate pre-computation)")
+        elif mode == "from_label_boxes":
+            print("Using label box mode")
         else:
             raise ValueError(
                 f"Unknown augmentation mode: {mode}. Use 'valid_coordinates', 'marked_roi', or 'random_crop'."
@@ -1362,6 +1364,8 @@ class ImageDataModel:
         ):
             image_crop = imread(str(image_path))
             truth_crop = imread(str(truth_path))
+
+            self.augmenter.compute_global_normalization_stats(image_crop)
 
             for _ in range(self.num_patches):
                 self.augmenter.augment_and_save(
