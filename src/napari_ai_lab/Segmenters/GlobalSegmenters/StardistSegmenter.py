@@ -104,20 +104,8 @@ StarDist Automatic Segmentation:
         },
     )
 
-    train_patch_size_y: int = field(
-        default=256,
-        metadata={
-            "type": "int",
-            "param_type": "training",
-            "min": 32,
-            "max": 1024,
-            "step": 32,
-            "default": 256,
-        },
-    )
-
-    train_patch_size_x: int = field(
-        default=256,
+    train_patch_size_xy: int = field(
+        default=128,
         metadata={
             "type": "int",
             "param_type": "training",
@@ -512,7 +500,7 @@ task.outputs["mask"] = ndarr_mask
             f"🏋️ Training StarDist2D: {len(X_train)} train, {len(X_val)} val\n"
             f"   axes={axes}, n_channel_in={n_channel_in}\n"
             f"   epochs={self.num_epochs}, steps_per_epoch={self.steps_per_epoch}\n"
-            f"   train_patch_size=({self.train_patch_size_y}, {self.train_patch_size_x})"
+            f"   train_patch_size=({self.train_patch_size_xy}, {self.train_patch_size_xy})"
         )
         print(msg)
         if updater is not None:
@@ -554,8 +542,8 @@ task.outputs["mask"] = ndarr_mask
             axes=axes,
             n_channel_in=n_channel_in,
             train_patch_size=(
-                self.train_patch_size_y,
-                self.train_patch_size_x,
+                self.train_patch_size_xy,
+                self.train_patch_size_xy,
             ),
             unet_n_depth=3,
         )

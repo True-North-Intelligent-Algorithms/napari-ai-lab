@@ -257,8 +257,25 @@ class NDAILab(QWidget):
 
         layout.addWidget(self.tabs)
 
-        # TODO Phase 3: Add central layer management
-        # TODO Phase 4: Add sequence viewer connection
+        # Sync patch_size_xy between Augment and Train tabs
+        self._cross_connect_patch_size()
+
+    def _cross_connect_patch_size(self):
+        """Sync patch_size_xy spinbox (Augment) with train_patch_size_xy (Train)."""
+        aug_spin = self.augment_widget.patch_size_xy_spinbox
+        trn_form = self.segment_widget.training_parameter_form
+
+        def _aug_to_train(val):
+            trn_form.set_parameter("train_patch_size_xy", val)
+
+        def _train_to_aug(params):
+            if "train_patch_size_xy" in params:
+                aug_spin.blockSignals(True)
+                aug_spin.setValue(params["train_patch_size_xy"])
+                aug_spin.blockSignals(False)
+
+        aug_spin.valueChanged.connect(_aug_to_train)
+        trn_form.parameters_changed.connect(_train_to_aug)
 
     def _on_open_directory(self):
         """Open directory and create/set model for all sub-apps."""

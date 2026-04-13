@@ -78,23 +78,15 @@ class NDEasyAugment(BaseNDApp):
         )
         self.layout().addWidget(self.augmentation_form)
 
-        # Add patch size controls
+        # Add patch size control
         patch_size_layout = QHBoxLayout()
-        patch_size_layout.addWidget(QLabel("Patch Size (Y):"))
-        self.patch_size_y_spinbox = QSpinBox()
-        self.patch_size_y_spinbox.setMinimum(16)
-        self.patch_size_y_spinbox.setMaximum(2048)
-        self.patch_size_y_spinbox.setValue(128)
-        self.patch_size_y_spinbox.setSingleStep(16)
-        patch_size_layout.addWidget(self.patch_size_y_spinbox)
-
-        patch_size_layout.addWidget(QLabel("Patch Size (X):"))
-        self.patch_size_x_spinbox = QSpinBox()
-        self.patch_size_x_spinbox.setMinimum(16)
-        self.patch_size_x_spinbox.setMaximum(2048)
-        self.patch_size_x_spinbox.setValue(128)
-        self.patch_size_x_spinbox.setSingleStep(16)
-        patch_size_layout.addWidget(self.patch_size_x_spinbox)
+        patch_size_layout.addWidget(QLabel("Patch Size (XY):"))
+        self.patch_size_xy_spinbox = QSpinBox()
+        self.patch_size_xy_spinbox.setMinimum(16)
+        self.patch_size_xy_spinbox.setMaximum(2048)
+        self.patch_size_xy_spinbox.setValue(128)
+        self.patch_size_xy_spinbox.setSingleStep(16)
+        patch_size_layout.addWidget(self.patch_size_xy_spinbox)
 
         self.layout().addLayout(patch_size_layout)
 
@@ -251,8 +243,7 @@ class NDEasyAugment(BaseNDApp):
 
         try:
             # Get current values from UI
-            patch_size_y = self.patch_size_y_spinbox.value()
-            patch_size_x = self.patch_size_x_spinbox.value()
+            patch_size_xy = self.patch_size_xy_spinbox.value()
             num_patches = self.num_patches_spinbox.value()
 
             # Sync augmenter parameters from form back to augmenter instance
@@ -265,7 +256,7 @@ class NDEasyAugment(BaseNDApp):
             image = self.image_layer.data
             annotations = self.annotation_layer.data
 
-            patch_size = (patch_size_y, patch_size_x)
+            patch_size = (patch_size_xy, patch_size_xy)
 
             # Configure the model
             self.image_data_model.set_augmenter(self.augmenter)
