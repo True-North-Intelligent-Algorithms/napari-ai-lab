@@ -387,14 +387,11 @@ class ImageDataModel:
         if self._annotations_io is None:
             # Auto-detect IO type from existing files if not explicitly set
             annotation_dir = self.parent_directory / "annotations"
-            detected_type = self._detect_artifact_io_type(
-                annotation_dir, self.annotation_io_type
-            )
 
-            # Update type if detected different from current
-            if detected_type != self.annotation_io_type:
-                print(f"📁 Auto-detected annotation IO type: {detected_type}")
-                self.annotation_io_type = detected_type
+            if self.annotation_io_type is None:
+                self.annotation_io_type = self._detect_artifact_io_type(
+                    annotation_dir, default_type="tiff"
+                )
 
             self._annotations_io = get_artifact_io(self.annotation_io_type)
 
@@ -413,6 +410,13 @@ class ImageDataModel:
             self._annotations_io.set_axes_to_collapse(
                 self._annotations_io_axes_to_collapse
             )
+        elif (
+            self.annotation_io_type == "tiff_slice"
+            and self.axis_types is not None
+        ):
+            axis_slice = "".join([ax for ax in self.axis_types if ax in "ZYX"])
+            self._annotations_io.set_axis_slice(axis_slice)
+            self._annotations_io.set_shape_total(self.image_data.shape)
 
         return self._annotations_io
 

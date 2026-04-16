@@ -321,9 +321,12 @@ MONAI UNet Automatic Segmentation:
         Raises:
             ValueError: If image dimensions are not supported or model not loaded.
         """
+        if self.model is None and self.model_file_path:
+            self.load_model(self.model_file_path)
+
         if self.model is None:
             raise ValueError(
-                "Model not loaded. Call load_model() before segmentation."
+                "Model not loaded. Set model_file_path or call load_model()."
             )
 
         if len(image.shape) < 2:
