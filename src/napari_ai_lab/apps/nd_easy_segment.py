@@ -572,14 +572,9 @@ class NDEasySegment(BaseNDApp):
             )
 
             # save predictions via model
-            # Use the current segmenter name as subdirectory to organize predictions by method
-            subdirectory = (
-                self.image_data_model._current_segmenter_name or "default"
-            )
             self.image_data_model.save_predictions(
                 mask,
                 self.current_image_index,
-                subdirectory=subdirectory,
                 current_step=current_step,
                 selected_axis=segmentation_axis,
                 axes_to_collapse=self.axes_to_collapse,
@@ -590,9 +585,7 @@ class NDEasySegment(BaseNDApp):
             )
 
             # Get or create the predictions layer for this segmenter
-            segmenter_name = (
-                self.image_data_model._current_segmenter_name or "default"
-            )
+            segmenter_name = self.image_data_model.get_current_segmenter_name()
             predictions_layer = self._get_or_create_predictions_layer(
                 segmenter_name, self.annotation_layer.data.shape
             )

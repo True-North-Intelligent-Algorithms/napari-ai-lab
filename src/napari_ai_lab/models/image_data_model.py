@@ -484,8 +484,7 @@ class ImageDataModel:
 
     def get_predictions_io(self):
         """Get prediction artifact io, auto-detecting type if not set."""
-        # Use segmenter name as subdirectory
-        subdirectory = self._current_segmenter_name or "default"
+        subdirectory = self.get_current_segmenter_name()
 
         # Create IO with subdirectory
         self._predictions_io = get_artifact_io(
@@ -535,6 +534,14 @@ class ImageDataModel:
             # Reset predictions_io to use new subdirectory
             self._predictions_io = None
 
+    def get_current_segmenter_name(self) -> str:
+        """Return the active segmenter name used to organize predictions."""
+        if not self._current_segmenter_name:
+            raise RuntimeError(
+                "Current segmenter name is not set. Call set_current_segmenter_name() before saving or loading predictions."
+            )
+        return self._current_segmenter_name
+
     def get_input_images_io(self):
         """Get input images io."""
         if self._input_images_io is None and self.input_images_io_type:
@@ -561,7 +568,7 @@ class ImageDataModel:
             image_shape: Shape of the image to match for empty array creation.
             image_index: Index of the image in the model's image list.
             subdirectory: Subdirectory under 'predictions' to look in.
-                         If None, uses _current_segmenter_name or "default".
+                         If None, uses the current segmenter name.
             axes_to_collapse: Axis names to collapse from image shape (e.g., "C" for channels).
                             Pass "C" to get ZYX predictions from ZYXC image.
                             Pass ["C", "T"] to collapse multiple axes.
@@ -572,9 +579,8 @@ class ImageDataModel:
         """
         import numpy as np
 
-        # Use provided subdirectory, or fall back to current segmenter name, or "default"
         if subdirectory is None:
-            subdirectory = self._current_segmenter_name or "default"
+            subdirectory = self.get_current_segmenter_name()
 
         preds_dir = self.get_predictions_directory(subdirectory)
 
@@ -1018,6 +1024,7 @@ class ImageDataModel:
             preds_array: numpy array with predictions to save.
             image_index: Index of the associated image.
             subdirectory: Subdirectory under predictions to save into.
+                         If None, uses the current segmenter name.
             current_step: Viewer dimension position (for stacked mode).
             selected_axis: Axis string like "YX", "ZYX", "YXC", etc.
             axes_to_collapse: Axis names that were collapsed (for documentation).
@@ -1028,6 +1035,9 @@ class ImageDataModel:
             Result of io.save(...)
         """
         import numpy as np
+
+        if subdirectory is None:
+            subdirectory = self.get_current_segmenter_name()
 
         predictions_dir = self.get_predictions_directory(subdirectory)
         predictions_dir.mkdir(parents=True, exist_ok=True)

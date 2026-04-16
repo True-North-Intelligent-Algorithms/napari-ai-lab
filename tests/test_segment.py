@@ -82,6 +82,7 @@ def test_segment_logic_without_widget():
         print(f"Segmentation axis: {segmentation_axis}")
 
         # Save predictions using model's save_predictions method
+        model.set_current_segmenter_name(segmenter.__class__.__name__)
         model.save_predictions(
             mask,
             image_index,
@@ -195,6 +196,7 @@ def test_segment_all_slices_logic():
             segmentation_axis = segmenter.get_segmentation_axis(selected_axis)
 
             # Save predictions
+            model.set_current_segmenter_name(segmenter.__class__.__name__)
             model.save_predictions(
                 mask,
                 image_index,
