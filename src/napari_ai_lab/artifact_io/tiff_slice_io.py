@@ -22,17 +22,23 @@ class TiffSliceIO(BaseArtifactIO):
     along a specified axis, and reconstructing them on load.
     """
 
-    def __init__(self, subdirectory: str = "class_0"):
+    def __init__(
+        self, subdirectory: str = "class_0", shape_total=None, axis_slice=None
+    ):
         """
         Initialize the TIFF Slice I/O.
 
         Args:
             subdirectory: Subdirectory name under 'annotations' (default: "class_0")
+            shape_total: Total shape of the full array (optional)
+            axis_slice: Axis string for slicing, e.g. "YX", "ZYX" (optional)
         """
         super().__init__(subdirectory)
-        self.shape_total = None  # Total size of the full array
+        self.shape_total = shape_total  # Total size of the full array
         self.shape_slice = None  # Size of each hyperslice
-        self.axis_slice = None  # Axis string for slicing (e.g., "YX", "ZYX")
+        self.axis_slice = (
+            axis_slice  # Axis string for slicing (e.g., "YX", "ZYX")
+        )
 
     def save(
         self,
@@ -60,18 +66,51 @@ class TiffSliceIO(BaseArtifactIO):
             True if successful, False otherwise
         """
         try:
-            # Always use selected_axis if provided
-            if selected_axis is not None and current_step is not None:
-                dataset_name = create_artifact_name(
-                    dataset_name, current_step, selected_axis
+            if current_step is not None:
+                axis = selected_axis  # or self.axis_slice
+                self._save_slice(
+                    save_directory, dataset_name, data, current_step, axis
                 )
+            else:
+                # Save all slices by looping over non-spatial dimensions
+                axis = self.axis_slice or "YX"
+                spatial_dims = len(axis)
+                non_spatial_shape = data.shape[:-spatial_dims]
 
-            path = Path(save_directory) / f"{dataset_name}.tif"
-            tifffile.imwrite(str(path), data)
+                if len(non_spatial_shape) == 0:
+                    # No non-spatial dims, just save the whole thing
+                    path = Path(save_directory) / f"{dataset_name}.tif"
+                    tifffile.imwrite(str(path), data)
+                else:
+                    import itertools
+
+                    for idx in itertools.product(
+                        *[range(d) for d in non_spatial_shape]
+                    ):
+                        step = idx + (0,) * spatial_dims
+                        slice_data = data[idx]
+                        if slice_data.sum() == 0:
+                            continue  # Skip saving empty slices
+                        self._save_slice(
+                            save_directory,
+                            dataset_name,
+                            slice_data,
+                            step,
+                            axis,
+                        )
+
             return True
         except (OSError, ValueError, PermissionError) as e:
             print(f"✗ Error saving: {e}")
             return False
+
+    def _save_slice(
+        self, save_directory, dataset_name, data, current_step, axis
+    ):
+        """Save a single slice with artifact naming."""
+        name = create_artifact_name(dataset_name, current_step, axis)
+        path = Path(save_directory) / f"{name}.tif"
+        tifffile.imwrite(str(path), data)
 
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         """
@@ -89,9 +128,12 @@ class TiffSliceIO(BaseArtifactIO):
             Array data (empty if no saved data exists)
         """
         # Check if we need to reconstruct from slices
-        if self.shape_total is None or self.axis_slice is None:
-            # Fall back to simple single-file load
-            return self._load_single_file(load_directory, dataset_name)
+        # if self.shape_total is None or self.axis_slice is None:
+        #    # Fall back to simple single-file load
+        #    return self._load_single_file(load_directory, dataset_name)
+
+        if self.axis_slice is None:
+            self.axis_slice = "YX"  # Default to 2D if not set
 
         # Determine spatial dimensions from axis_slice
         if self.axis_slice.endswith("ZYX"):
