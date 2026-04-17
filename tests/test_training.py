@@ -149,9 +149,9 @@ def test_monai_training():
     # Set model save directory to models directory
     models_dir = image_data_model.get_models_directory()
     segmenter.model_save_dir = str(models_dir)
-    segmenter.model_name = "monai_unet_test.pth"  # Use a test-specific model name to avoid overwriting any real models
+    segmenter.training_model_name = "monai_unet_test.pth"  # Use a test-specific model name to avoid overwriting any real models
     print(f"Set model save directory: {segmenter.model_save_dir}")
-    print(f"Set model name: {segmenter.model_name}")
+    print(f"Set training model name: {segmenter.training_model_name}")
 
     # Run training
     result = segmenter.train()
@@ -205,13 +205,13 @@ def test_monai_training():
     print("✅ All assertions passed!")
 
     # Cleanup: Remove generated model and CSV files
-    model_file = Path(segmenter.model_save_dir) / segmenter.model_name
+    model_file = Path(segmenter.model_save_dir) / segmenter.training_model_name
     if model_file.exists():
         model_file.unlink()
         print(f"🗑️  Cleaned up model file: {model_file}")
 
     # Find and remove CSV files with timestamp
-    model_stem = Path(segmenter.model_name).stem
+    model_stem = Path(segmenter.training_model_name).stem
     for csv_file in Path(segmenter.model_save_dir).glob(f"{model_stem}_*.csv"):
         csv_file.unlink()
         print(f"🗑️  Cleaned up CSV file: {csv_file}")

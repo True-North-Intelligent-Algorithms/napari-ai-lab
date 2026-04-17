@@ -1,5 +1,5 @@
 """
-Test that changing StarDist model_preset automatically updates the axis.
+Test that changing StarDist inference_model_name automatically updates the axis.
 """
 
 from napari_ai_lab.Segmenters.GlobalSegmenters.StardistSegmenter import (
@@ -12,15 +12,15 @@ def test_model_axis_recommendations():
     segmenter = StardistSegmenter()
 
     # Test 2D_versatile_fluo -> YX
-    segmenter.model_preset = "2D_versatile_fluo"
+    segmenter.inference_model_name = "2D_versatile_fluo"
     assert segmenter.get_recommended_axis() == "YX"
 
     # Test 2D_versatile_he -> YXC
-    segmenter.model_preset = "2D_versatile_he"
+    segmenter.inference_model_name = "2D_versatile_he"
     assert segmenter.get_recommended_axis() == "YXC"
 
     # Test 3D_demo -> ZYX
-    segmenter.model_preset = "3D_demo"
+    segmenter.inference_model_name = "3D_demo"
     assert segmenter.get_recommended_axis() == "ZYX"
 
 
@@ -38,12 +38,12 @@ def test_model_axis_map():
     assert axis_map["3D_demo"] == "ZYX"
 
 
-def test_model_preset_change_prints_recommendation(capsys):
-    """Test that changing model_preset prints the recommendation."""
+def test_inference_model_name_change_prints_recommendation(capsys):
+    """Test that changing inference_model_name prints the recommendation."""
     segmenter = StardistSegmenter()
 
     # Change to 3D model
-    segmenter.model_preset = "3D_demo"
+    segmenter.inference_model_name = "3D_demo"
 
     # Check that something was printed
     captured = capsys.readouterr()

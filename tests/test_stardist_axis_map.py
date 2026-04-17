@@ -46,31 +46,31 @@ def test_get_recommended_axis():
         ("3D_demo", "ZYX"),
     ]
 
-    for model_preset, expected_axis in test_cases:
-        segmenter.model_preset = model_preset
+    for inference_model_name, expected_axis in test_cases:
+        segmenter.inference_model_name = inference_model_name
         recommended = segmenter.get_recommended_axis()
         assert (
             recommended == expected_axis
         ), f"Expected {expected_axis}, got {recommended}"
-        print(f"✓ {model_preset} recommends {recommended}")
+        print(f"\u2713 {inference_model_name} recommends {recommended}")
 
 
-def test_model_preset_change_notification():
-    """Test that changing model_preset prints recommended axis."""
+def test_inference_model_name_change_notification():
+    """Test that changing inference_model_name prints recommended axis."""
     print("\n" + "=" * 60)
-    print("Testing Model Preset Change Notification")
+    print("Testing Inference Model Name Change Notification")
     print("=" * 60)
 
     segmenter = StardistSegmenter()
 
-    # Change model preset and watch for notification
+    # Change inference model name and watch for notification
     print("\nChanging from 2D_versatile_fluo to 3D_demo:")
-    segmenter.model_preset = "3D_demo"
+    segmenter.inference_model_name = "3D_demo"
 
     print("\nChanging from 3D_demo to 2D_versatile_he:")
-    segmenter.model_preset = "2D_versatile_he"
+    segmenter.inference_model_name = "2D_versatile_he"
 
-    print("✓ Model preset changes trigger notifications")
+    print("\u2713 Inference model name changes trigger notifications")
 
 
 def test_model_choices_generated_from_map():
@@ -95,7 +95,7 @@ def test_model_choices_generated_from_map():
 if __name__ == "__main__":
     test_model_axis_map()
     test_get_recommended_axis()
-    test_model_preset_change_notification()
+    test_inference_model_name_change_notification()
     test_model_choices_generated_from_map()
     print("\n" + "=" * 60)
     print("✅ All tests passed!")
