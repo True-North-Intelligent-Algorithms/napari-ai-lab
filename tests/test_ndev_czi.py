@@ -13,7 +13,7 @@ def test_load_czi_with_ndevio():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 
@@ -56,7 +56,7 @@ def test_ndevio_czi_dimensions_parsing():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 
@@ -97,7 +97,7 @@ def test_ndevio_czi_axes_detection():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 

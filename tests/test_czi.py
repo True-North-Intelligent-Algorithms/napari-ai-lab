@@ -13,7 +13,7 @@ def test_load_czi_file():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 
@@ -54,7 +54,7 @@ def test_czi_axes_parsing():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 
@@ -92,7 +92,7 @@ def test_save_czi_channels_to_tiff():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 

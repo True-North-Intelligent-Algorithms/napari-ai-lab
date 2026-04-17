@@ -22,7 +22,7 @@ def test_slice_czifile():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 
@@ -101,7 +101,7 @@ def test_slice_bioio_czi():
     test_image_path = (
         Path(__file__).parent
         / "test_images"
-        / "czi"
+        / "czi_cells"
         / "Image 6_Subset-pos02_t1-35.czi"
     )
 

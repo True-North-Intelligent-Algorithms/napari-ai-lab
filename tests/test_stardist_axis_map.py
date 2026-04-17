@@ -81,14 +81,13 @@ def test_model_choices_generated_from_map():
 
     segmenter = StardistSegmenter()
 
-    # Get the choices from metadata
-    choices = segmenter.__dataclass_fields__["model_preset"].metadata[
-        "choices"
-    ]
+    # Get the choices from get_model_axis_map (includes builtins)
+    choices = list(segmenter.get_model_axis_map().keys())
 
-    # Should match keys from MODEL_AXIS_MAP
+    # Should contain keys from BUILTIN_MODEL_MAP
     expected_choices = list(BUILTIN_MODEL_MAP.keys())
-    assert choices == expected_choices
+    for key in expected_choices:
+        assert key in choices, f"Expected {key} in choices"
     print(f"✓ Choices: {choices}")
     print("✓ Generated from MODEL_AXIS_MAP keys")
 

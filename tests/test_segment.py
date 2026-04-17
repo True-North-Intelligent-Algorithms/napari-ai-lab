@@ -21,10 +21,12 @@ from napari_ai_lab.utility import get_current_slice_indices
 def test_segment_logic_without_widget():
     """Test segmentation logic directly using model and segmenter without widget."""
     # Setup original and temporary directories
-    original_parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/vessels_project"
+    original_parent_dir = (
+        Path(__file__).parent / "test_images" / "vessels_project"
     )
-    temp_parent_dir = Path(str(original_parent_dir) + "_segment_test")
+    temp_parent_dir = (
+        original_parent_dir.parent / "vessels_project_segment_test"
+    )
 
     try:
         # Register all global segmenters
@@ -91,7 +93,9 @@ def test_segment_logic_without_widget():
         )
 
         # Assert that prediction file was created
-        predictions_dir = temp_parent_dir / "predictions"
+        predictions_dir = (
+            temp_parent_dir / "predictions" / "MonaiUNetSegmenter"
+        )
         prediction_file = predictions_dir / "Test lightsheet_3.tif"
 
         assert (
@@ -118,10 +122,12 @@ def test_segment_logic_without_widget():
 def test_segment_all_slices_logic():
     """Test segmentation of all slices logic without widget."""
     # Setup original and temporary directories
-    original_parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/vessels_project"
+    original_parent_dir = (
+        Path(__file__).parent / "test_images" / "vessels_project"
     )
-    temp_parent_dir = Path(str(original_parent_dir) + "_segment_all_test")
+    temp_parent_dir = (
+        original_parent_dir.parent / "vessels_project_segment_all_test"
+    )
 
     try:
         # Register all global segmenters
@@ -209,7 +215,9 @@ def test_segment_all_slices_logic():
             )
 
         # Verify prediction files were created
-        predictions_dir = temp_parent_dir / "predictions"
+        predictions_dir = (
+            temp_parent_dir / "predictions" / "MonaiUNetSegmenter"
+        )
         assert predictions_dir.exists(), "Predictions directory not found"
 
         # Check that at least the test slices were created

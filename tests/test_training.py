@@ -1,5 +1,6 @@
 """Simple test for training functionality."""
 
+import shutil
 from pathlib import Path
 
 from napari_ai_lab.Augmenters import SimpleAugmenter
@@ -114,10 +115,12 @@ def create_patches_if_needed(image_data_model, patches_dir, num_patches=40):
 
 def test_monai_training():
     """Test basic training workflow with existing patches."""
-    # Create image data model pointing to project with patches
-    project_path = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/vessels_project_test/"
-    )
+    # Create a temp copy so we don't pollute the original test data
+    original_dir = Path(__file__).parent / "test_images" / "vessels_project"
+    project_path = original_dir.parent / "vessels_project_training_test"
+    if project_path.exists():
+        shutil.rmtree(project_path)
+    shutil.copytree(original_dir, project_path)
     image_data_model = ImageDataModel(parent_directory=project_path)
 
     patches_dir = image_data_model.get_patches_directory(axis="yx")
@@ -212,6 +215,11 @@ def test_monai_training():
     for csv_file in Path(segmenter.model_save_dir).glob(f"{model_stem}_*.csv"):
         csv_file.unlink()
         print(f"🗑️  Cleaned up CSV file: {csv_file}")
+
+    # Cleanup temp project copy
+    if project_path.exists():
+        shutil.rmtree(project_path)
+        print(f"🗑️  Cleaned up temp directory: {project_path}")
 
 
 if __name__ == "__main__":
