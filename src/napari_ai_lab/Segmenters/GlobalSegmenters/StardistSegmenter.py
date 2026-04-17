@@ -51,8 +51,8 @@ StarDist Automatic Segmentation:
 • NMS Threshold (nms_thresh): non-maximum suppression IoU threshold
     """
 
-    # model_preset is NOT a dataclass field — it's set as a plain attribute
-    # in __post_init__ and managed by the model_preset_combo in nd_easy_segment.
+    # inference_model_name is NOT a dataclass field — it's set as a plain attribute
+    # in __post_init__ and managed by the model combo in nd_easy_segment.
     # This avoids the form trying to create an unsupported widget for it.
 
     prob_thresh: float = field(
@@ -79,7 +79,7 @@ StarDist Automatic Segmentation:
         },
     )
 
-    # model_path removed — model selection is done via model_preset_combo
+    # model_path removed — model selection is done via inference model combo
     # in nd_easy_segment, populated by get_model_axis_map() which includes
     # both BUILTIN_MODEL_MAP entries and user-trained models from model_save_dir.
 
@@ -137,19 +137,19 @@ StarDist Automatic Segmentation:
         # Set by nd_easy_segment before calling train() or segment()
         self.patch_path = ""
         self.model_save_dir = ""
-        self.model_name = ""
-        # Model preset: selected via combo in nd_easy_segment
-        self.model_preset = "2D_versatile_fluo"
+        self.training_model_name = ""
+        # Inference model: selected via combo in nd_easy_segment
+        self.inference_model_name = "2D_versatile_fluo"
 
     def get_recommended_axis(self) -> str:
         """
-        Get the recommended axis for the current model preset.
+        Get the recommended axis for the current inference model.
 
         Returns:
             str: Recommended axis string (e.g., "YX", "YXC", "ZYX")
         """
         full_map = self.get_model_axis_map()
-        return full_map.get(self.model_preset, "YX")
+        return full_map.get(self.inference_model_name, "YX")
 
     def get_model_axis_map(self) -> dict:
         """
@@ -200,7 +200,7 @@ StarDist Automatic Segmentation:
 
     def set_model(self, model_name):
         """Load the model for model_name and cache it in self.models dict."""
-        self.model_preset = model_name
+        self.inference_model_name = model_name
 
         # Already cached — nothing to do
         if model_name in self.models:
@@ -233,16 +233,16 @@ StarDist Automatic Segmentation:
         self.models[model_name] = model
 
     def __setattr__(self, name, value):
-        """Override setattr to detect model_preset changes."""
+        """Override setattr to detect inference_model_name changes."""
         # Get old value if it exists
         old_value = getattr(self, name, None) if hasattr(self, name) else None
 
         # Set the new value
         super().__setattr__(name, value)
 
-        # Check if model_preset changed
+        # Check if inference_model_name changed
         if (
-            name == "model_preset"
+            name == "inference_model_name"
             and old_value != value
             and old_value is not None
         ):
@@ -275,13 +275,15 @@ StarDist Automatic Segmentation:
             numpy.ndarray: Labeled segmentation mask.
         """
         # Load model on first use if not yet cached
-        if self.model_preset not in self.models:
-            self.set_model(self.model_preset)
+        if self.inference_model_name not in self.models:
+            self.set_model(self.inference_model_name)
 
-        model = self.models[self.model_preset]
-        model_axis = self.get_model_axis_map().get(self.model_preset, "YX")
+        model = self.models[self.inference_model_name]
+        model_axis = self.get_model_axis_map().get(
+            self.inference_model_name, "YX"
+        )
         is_3d_model = "Z" in model_axis
-        print(f"Using model: {self.model_preset} (axis: {model_axis})")
+        print(f"Using model: {self.inference_model_name} (axis: {model_axis})")
 
         # Convert multi-channel to grayscale if needed
         if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
@@ -353,7 +355,7 @@ StarDist Automatic Segmentation:
             print("❌ StarDist predict_instances failed!")
             print(f"   Input shape: {x.shape}")
             print(f"   Input dtype: {x.dtype}")
-            print(f"   Model preset: {self.model_preset}")
+            print(f"   Inference model: {self.inference_model_name}")
             print(f"   Error type: {type(e).__name__}")
             print(f"   Error message: {str(e)}")
             import traceback
@@ -381,7 +383,7 @@ import numpy as np
 from stardist.models import StarDist2D
 
 # Parameters from segmenter
-model_preset = "{self.model_preset}"
+model_preset = "{self.inference_model_name}"
 prob_thresh = {self.prob_thresh}
 nms_thresh = {self.nms_thresh}
 
@@ -428,7 +430,7 @@ task.outputs["mask"] = ndarr_mask
             dict: Dictionary of parameter names to current values.
         """
         return {
-            "model_preset": self.model_preset,
+            "inference_model_name": self.inference_model_name,
             "prob_thresh": self.prob_thresh,
             "nms_thresh": self.nms_thresh,
             "normalize_input": self.normalize_input,
@@ -440,7 +442,7 @@ task.outputs["mask"] = ndarr_mask
 
         Reads info.json from ``self.patch_path`` to determine axes, collects
         training data, splits into train/val, and trains a new StarDist2D
-        model.  The model is saved under ``self.model_save_dir / self.model_name``.
+        model.  The model is saved under ``self.model_save_dir / self.training_model_name``.
 
         This signature mirrors MonaiUNetSegmenter.train() so that
         ``_run_training`` can call every segmenter the same way.
@@ -465,7 +467,7 @@ task.outputs["mask"] = ndarr_mask
 
         # ---- resolve paths from self (set by _run_training) ----
         patch_path = self.patch_path
-        model_name = self.model_name
+        model_name = self.training_model_name
         model_base_path = self.model_save_dir
 
         if not patch_path:
@@ -566,7 +568,7 @@ task.outputs["mask"] = ndarr_mask
 
         # ---- store trained model in cache for immediate use ----
         self.models[model_name] = model
-        self.model_preset = model_name
+        self.inference_model_name = model_name
         model_full_path = os.path.join(model_base_path, model_name)
         done_msg = f"✅ Training complete. Model saved to: {model_full_path}"
         print(done_msg)

@@ -265,7 +265,7 @@ class NDOperationWidget(QWidget):
                     # already has one, using blockSignals to avoid
                     # overriding the already-restored axis selection.
                     existing_model = getattr(
-                        self.nd_operation, "model_preset", None
+                        self.nd_operation, "inference_model_name", None
                     )
                     if existing_model and existing_model in model_map:
                         self._model_combo.blockSignals(True)

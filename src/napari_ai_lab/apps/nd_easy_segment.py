@@ -585,7 +585,6 @@ class NDEasySegment(BaseNDApp):
             )
 
             # Get or create the predictions layer for this segmenter
-            segmenter_name = self.image_data_model.get_current_segmenter_name()
             predictions_layer = self._get_or_create_predictions_layer(
                 segmenter_name, self.annotation_layer.data.shape
             )
@@ -704,12 +703,12 @@ class NDEasySegment(BaseNDApp):
         self.segmenter.model_save_dir = str(
             self.image_data_model.get_models_directory()
         )
-        self.segmenter.model_name = (
+        self.segmenter.training_model_name = (
             self.model_name_edit.text().strip() or "model"
         )
         print(f"patch_path:    {self.segmenter.patch_path}")
         print(f"model_save_dir:{self.segmenter.model_save_dir}")
-        print(f"model_name:    {self.segmenter.model_name}")
+        print(f"training_model_name:    {self.segmenter.training_model_name}")
 
         # Sync hyper-parameters from the training form to segmenter
         for param_name, param_value in training_params.items():
@@ -723,7 +722,7 @@ class NDEasySegment(BaseNDApp):
             if use_progress_logger:
                 self.progress_logger.log_info("Starting training...")
                 self.progress_logger.log_info(
-                    f"Model: {self.segmenter.model_name}"
+                    f"Model: {self.segmenter.training_model_name}"
                 )
                 self.progress_logger.log_info(
                     f"Patches: {self.segmenter.patch_path}"
@@ -764,7 +763,7 @@ class NDEasySegment(BaseNDApp):
                 )
 
             # Refresh model combos in both forms to include the newly trained model
-            trained_name = self.segmenter.model_preset
+            trained_name = self.segmenter.inference_model_name
             self.segmenter_parameter_form.refresh_model_combo(
                 select_name=trained_name
             )

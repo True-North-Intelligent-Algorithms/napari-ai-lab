@@ -192,15 +192,15 @@ class ImageDataModel:
             self.image_data = imread(str(image_path))
             self.axis_types = get_axis_info_from_shape(self.image_data.shape)
 
-        # Squeeze to remove singleton dimensions
+        # Remove axis characters corresponding to trivial dimensions
         if self.axis_types and len(self.axis_types) == len(
             self.image_data.shape
         ):
-            # Remove axis characters corresponding to trivial dimensions
             self.axis_types = remove_trivial_axes(
                 self.axis_types, self.image_data.shape
             )
 
+        # Squeeze to remove singleton dimensions
         self.image_data = np.squeeze(self.image_data)
         print(f"Loaded image shape: {self.image_data.shape}")
         print(f"Axis types: {self.axis_types}")
