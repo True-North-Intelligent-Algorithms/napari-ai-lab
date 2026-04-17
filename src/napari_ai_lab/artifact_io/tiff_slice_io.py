@@ -132,6 +132,9 @@ class TiffSliceIO(BaseArtifactIO):
         #    # Fall back to simple single-file load
         #    return self._load_single_file(load_directory, dataset_name)
 
+        if self.shape_total is None:
+            return self._load_single_file(load_directory, dataset_name)
+
         if self.axis_slice is None:
             self.axis_slice = "YX"  # Default to 2D if not set
 
