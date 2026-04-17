@@ -92,6 +92,9 @@ class AugmenterBase(ABC):
         self.input_dir = "input0"
         self.ground_truth_dir = "ground_truth0"
         self.seed = seed
+        self._potential_axes = ["YX"]
+        self.supported_axes = ["YX"]
+        self.selected_axis = "YX"
         self.valid_coordinates = None
         self.patch_mode = (
             "valid_coordinates"  # set by model before generating patches

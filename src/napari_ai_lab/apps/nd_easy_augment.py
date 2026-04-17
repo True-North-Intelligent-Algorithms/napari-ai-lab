@@ -20,6 +20,7 @@ from qtpy.QtWidgets import (
 from ..Augmenters import AugmenterBase
 from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
+from ..utility import get_supported_axes_from_shape
 from ..widgets.nd_operation_widget import NDOperationWidget
 from .base_nd_app import BaseNDApp
 
@@ -186,6 +187,23 @@ class NDEasyAugment(BaseNDApp):
         # Store current augmenter
         self.augmenter = augmenter
 
+        # Filter axes based on current image shape
+        if self.image_layer is not None and hasattr(
+            self.augmenter, "_potential_axes"
+        ):
+            filtered = get_supported_axes_from_shape(
+                self.image_layer.data.shape,
+                self.augmenter._potential_axes,
+                getattr(self.image_data_model, "axis_types", "U"),
+            )
+            self.augmenter.supported_axes = filtered
+            if (
+                hasattr(self.augmenter, "selected_axis")
+                and self.augmenter.selected_axis not in filtered
+                and filtered
+            ):
+                self.augmenter.selected_axis = filtered[0]
+
         print("About to set augmenter in augmentation form...")
         # Set the new augmenter in the form - this rebuilds the UI with new parameters
         self.augmentation_form.set_nd_operation(self.augmenter)
@@ -254,6 +272,7 @@ class NDEasyAugment(BaseNDApp):
 
             # Get image and annotations data
             image = self.image_layer.data
+
             annotations = self.annotation_layer.data
 
             patch_size = (patch_size_xy, patch_size_xy)
