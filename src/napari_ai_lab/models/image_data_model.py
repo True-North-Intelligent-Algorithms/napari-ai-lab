@@ -155,12 +155,16 @@ class ImageDataModel:
         """Get total number of images in directory."""
         return len(self.get_image_paths())
 
-    def load_image(self, image_index: int) -> np.ndarray:
+    def load_image(
+        self, image_index: int, stacked: bool = False
+    ) -> np.ndarray:
         """
         Load image data at the specified index.
 
         Args:
             image_index: Index of the image to load
+            stacked: If True, load all images as a single stack using
+                     StackedSequenceArtifactIO (normalised).
 
         Returns:
             numpy array with image data, squeezed to remove singleton dimensions
@@ -169,6 +173,15 @@ class ImageDataModel:
             IndexError: If image_index is out of range
             OSError: If image cannot be loaded
         """
+
+        if stacked:
+            self.set_input_images_io_type("stacked_sequence")
+            stacked_sequence_io = self.get_input_images_io()
+            stacked_images = stacked_sequence_io.load_full_stack(
+                str(self.parent_directory), normalize=True
+            )
+            print(f"Cached stack shape: {stacked_images.shape}")
+            return stacked_images
 
         image_paths = self.get_image_paths()
         if not 0 <= image_index < len(image_paths):
