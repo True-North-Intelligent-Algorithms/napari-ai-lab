@@ -520,7 +520,7 @@ class NDEasySegment(BaseNDApp):
         )
 
     def _do_segment_slice(self, current_step):
-        """Extract a slice and run segmentation. Returns the mask.
+        """Extract a slice and run segmentation via the model.
 
         Args:
             current_step: Tuple of indices identifying the slice position.
@@ -528,22 +528,8 @@ class NDEasySegment(BaseNDApp):
         Returns:
             numpy.ndarray: The segmentation mask for this slice.
         """
-        selected_axis = self._seg_selected_axis
-
-        # If the dataset has more dimensions than current_step,
-        # it is RGB data where channel is part of the pixel type
-        ignore_channel = len(self.image_layer.data.shape) > len(current_step)
-
-        indices = get_current_slice_indices(
-            current_step, selected_axis, ignore_channel
-        )
-        current_yx_slice = self.image_layer.data[indices]
-
-        return self.image_data_model.segment(
-            self.segmenter,
-            current_yx_slice,
-            points=None,
-            shapes=None,
+        return self.image_data_model.segment_slice(
+            self.segmenter, current_step, self._seg_selected_axis
         )
 
     def _on_segment_slice_done(self, current_step, mask):

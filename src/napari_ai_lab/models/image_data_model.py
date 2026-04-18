@@ -52,10 +52,12 @@ from napari_ai_lab.utility import (
     create_empty_instance_image,
     get_axis_info,
     get_axis_info_from_shape,
+    get_current_slice_indices,
     remove_trivial_axes,
 )
 
 from ..artifact_io import get_artifact_io
+from ..utilities.slice_processor import SliceProcessor
 
 
 class PatchMode(str, Enum):
@@ -181,6 +183,7 @@ class ImageDataModel:
                 str(self.parent_directory), normalize=True
             )
             print(f"Cached stack shape: {stacked_images.shape}")
+            self.image_data = stacked_images
             return stacked_images
 
         image_paths = self.get_image_paths()
@@ -1449,6 +1452,63 @@ class ImageDataModel:
             shapes=shapes,
             parent_directory=self.parent_directory,
         )
+
+    def segment_slice(self, segmenter, current_step, selected_axis):
+        """Extract a slice from image_data and segment it.
+
+        Pure data operation — no GUI, no saving.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            current_step: Tuple of indices identifying the slice position.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX", "YXC".
+
+        Returns:
+            numpy.ndarray: The segmentation mask for this slice.
+        """
+        ignore_channel = len(self.image_data.shape) > len(current_step)
+        indices = get_current_slice_indices(
+            current_step, selected_axis, ignore_channel
+        )
+        slice_data = self.image_data[indices]
+        return self.segment(segmenter, slice_data)
+
+    def segment_all(
+        self,
+        segmenter,
+        selected_axis,
+        axes_to_collapse=None,
+        on_slice_done=None,
+        on_progress=None,
+    ):
+        """Segment all non-spatial slices of image_data.
+
+        Creates a SliceProcessor and iterates. The caller controls what
+        happens after each slice via on_slice_done.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX".
+            axes_to_collapse: Optional list of axis names that are collapsed.
+            on_slice_done: Optional callable(current_step, mask) called
+                after each slice is segmented.
+            on_progress: Optional callable(current_index, total_slices)
+                called before each slice for progress reporting.
+
+        Returns:
+            SliceProcessor: The processor used (for access to total_slices etc.).
+        """
+        self.set_current_segmenter_name(segmenter.__class__.__name__)
+
+        processor = SliceProcessor(
+            self.image_data.shape, selected_axis, axes_to_collapse
+        )
+
+        def operation(step):
+            return self.segment_slice(segmenter, step, selected_axis)
+
+        processor.process_all(operation, on_slice_done, on_progress)
+        return processor
 
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"
