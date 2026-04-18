@@ -20,7 +20,7 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
-from ..utilities.slice_processor import SliceProcessor
+from ..utilities.slice_processor import SliceProcessor, SliceProcessorThread
 from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
@@ -417,7 +417,7 @@ class NDEasySegment(BaseNDApp):
         self.segment_progress_logger.log_info("✅ Segmentation complete")
 
     def _on_segment_all(self):
-        """Segment all slices in the ND data automatically."""
+        """Segment all slices in the ND data automatically (threaded)."""
         if self.image_layer is None:
             QMessageBox.warning(self, "Warning", "No images loaded")
             return
@@ -455,7 +455,6 @@ class NDEasySegment(BaseNDApp):
         # Setup shared context for the operation and callback
         self._setup_segment_context()
 
-        # Use SliceProcessor for the iteration
         processor = SliceProcessor(
             image_shape, selected_axis, self.axes_to_collapse
         )
@@ -465,30 +464,47 @@ class NDEasySegment(BaseNDApp):
             f"Total slices to segment: {processor.total_slices}"
         )
 
-        def on_progress(current, total):
-            self.segment_progress_logger.update_progress(
-                current, total, f"Processing slice {current}/{total}"
-            )
-            print(f"Processing slice {current}/{total}")
+        # Disable button while running
+        self.segment_all_btn.setEnabled(False)
 
-        processor.process_all(
-            self._do_segment_slice,
-            self._on_segment_slice_done,
-            on_progress=on_progress,
+        # Launch threaded processing
+        self._segment_thread = SliceProcessorThread(
+            processor, self._do_segment_slice
         )
+        self._segment_thread.progress.connect(self._on_segment_all_progress)
+        self._segment_thread.slice_done.connect(self._on_segment_slice_done)
+        self._segment_thread.finished.connect(self._on_segment_all_finished)
+        self._segment_thread.error.connect(self._on_segment_all_error)
+        self._segment_thread.start()
 
-        print(
-            f"✅ Completed segmentation of all {processor.total_slices} slices"
+    def _on_segment_all_progress(self, current, total):
+        """Handle progress updates from the worker thread (runs on main thread)."""
+        self.segment_progress_logger.update_progress(
+            current, total, f"Processing slice {current}/{total}"
         )
+        print(f"Processing slice {current}/{total}")
+
+    def _on_segment_all_finished(self):
+        """Handle completion of threaded segment-all (runs on main thread)."""
+        self.segment_all_btn.setEnabled(True)
+        total = getattr(self, "_segment_thread", None)
+        total_str = (
+            str(total.worker.processor.total_slices) if total else "all"
+        )
+        print(f"✅ Completed segmentation of {total_str} slices")
         self.segment_progress_logger.log_info(
-            f"✅ Completed segmentation of all {processor.total_slices} slices"
+            f"✅ Completed segmentation of {total_str} slices"
         )
+        self._segment_thread = None
 
-        QMessageBox.information(
-            self,
-            "Success",
-            f"Successfully segmented all {processor.total_slices} slices",
+    def _on_segment_all_error(self, error_msg):
+        """Handle errors from the worker thread (runs on main thread)."""
+        self.segment_all_btn.setEnabled(True)
+        print(f"Error during segment all: {error_msg}")
+        QMessageBox.critical(
+            self, "Error", f"Segmentation failed: {error_msg}"
         )
+        self._segment_thread = None
 
     def _setup_segment_context(self):
         """Store shared context needed by _do_segment_slice and _on_segment_slice_done."""

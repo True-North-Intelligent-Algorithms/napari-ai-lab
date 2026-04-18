@@ -3,11 +3,13 @@ SliceProcessor: iterates over non-spatial slices of ND data and applies
 an operation to each slice.
 
 Supports both single-slice (process_slice) and full-volume (process_all) modes.
+SliceProcessorWorker wraps process_all in a QThread for non-blocking GUI updates.
 """
 
 import itertools
 
 import numpy as np
+from qtpy.QtCore import QObject, QThread, Signal
 
 
 class SliceProcessor:
@@ -93,3 +95,78 @@ class SliceProcessor:
             if on_progress:
                 on_progress(idx + 1, self.total_slices)
             self.process_slice(current_step, operation_fn, on_slice_done)
+
+
+class _SliceWorker(QObject):
+    """QObject that runs SliceProcessor.process_all in a worker thread.
+
+    Emits signals so the main/GUI thread can safely update widgets and layers.
+    """
+
+    progress = Signal(int, int)  # (current, total)
+    slice_done = Signal(tuple, object)  # (current_step, result)
+    finished = Signal()
+    error = Signal(str)
+
+    def __init__(self, processor, operation_fn):
+        super().__init__()
+        self.processor = processor
+        self.operation_fn = operation_fn
+
+    def run(self):
+        """Execute process_all; called on the worker thread."""
+        try:
+            self.processor.process_all(
+                self.operation_fn,
+                on_slice_done=lambda step, result: self.slice_done.emit(
+                    step, result
+                ),
+                on_progress=lambda cur, tot: self.progress.emit(cur, tot),
+            )
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            OSError,
+            IndexError,
+            AttributeError,
+        ) as e:
+            self.error.emit(str(e))
+        finally:
+            self.finished.emit()
+
+
+class SliceProcessorThread:
+    """Convenience wrapper that manages QThread + _SliceWorker lifecycle.
+
+    Usage::
+
+        spt = SliceProcessorThread(processor, operation_fn)
+        spt.progress.connect(my_progress_handler)
+        spt.slice_done.connect(my_slice_done_handler)
+        spt.finished.connect(my_finished_handler)
+        spt.start()
+
+    The caller must keep a reference to this object until ``finished`` fires.
+    """
+
+    def __init__(self, processor, operation_fn):
+        self.thread = QThread()
+        self.worker = _SliceWorker(processor, operation_fn)
+        self.worker.moveToThread(self.thread)
+
+        # Wire lifecycle
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        # Expose signals for external connection
+        self.progress = self.worker.progress
+        self.slice_done = self.worker.slice_done
+        self.finished = self.worker.finished
+        self.error = self.worker.error
+
+    def start(self):
+        """Start processing on the worker thread."""
+        self.thread.start()
