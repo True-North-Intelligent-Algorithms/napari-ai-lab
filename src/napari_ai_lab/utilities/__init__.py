@@ -29,6 +29,7 @@ from .progress_logger import (
     ProgressLogger,
 )
 from .qt_progress_logger import QtProgressLogger
+from .slice_processor import SliceProcessor
 
 __all__ = [
     # image_util
@@ -55,4 +56,6 @@ __all__ = [
     "normalize_percentile",
     "collect_training_data",
     "divide_training_data",
+    # slice_processor
+    "SliceProcessor",
 ]

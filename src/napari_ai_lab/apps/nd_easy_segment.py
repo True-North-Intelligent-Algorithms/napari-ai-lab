@@ -5,8 +5,6 @@ This module provides a unified interface for both interactive (point/shape-based
 and automatic (full plane/volume) segmentation workflows.
 """
 
-import itertools
-
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
@@ -22,6 +20,7 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
+from ..utilities.slice_processor import SliceProcessor
 from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
@@ -398,8 +397,22 @@ class NDEasySegment(BaseNDApp):
             )
         )
 
+        # Use SliceProcessor for single-slice processing
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        self._setup_segment_context()
+
+        processor = SliceProcessor(
+            self.image_layer.data.shape,
+            selected_axis,
+            self.axes_to_collapse,
+        )
+
         self.segment_progress_logger.update_progress(1, 2, "Processing...")
-        self._segment_nd_slice(current_step=self.viewer.dims.current_step)
+        processor.process_slice(
+            self.viewer.dims.current_step,
+            self._do_segment_slice,
+            self._on_segment_slice_done,
+        )
         self.segment_progress_logger.update_progress(2, 2, "✅ Complete")
         self.segment_progress_logger.log_info("✅ Segmentation complete")
 
@@ -428,13 +441,10 @@ class NDEasySegment(BaseNDApp):
             )
         )
 
-        # Get selected axis and dataset axis types
         selected_axis = self.segmenter_parameter_form.get_selected_axis()
-        dataset_axis_types = self.image_data_model.axis_types
         image_shape = self.image_layer.data.shape
 
         print(f"Selected axis: {selected_axis}")
-        print(f"Dataset axis types: {dataset_axis_types}")
         print(f"Image shape: {image_shape}")
 
         self.segment_progress_logger.log_info(
@@ -442,136 +452,96 @@ class NDEasySegment(BaseNDApp):
         )
         self.segment_progress_logger.log_info(f"Image shape: {image_shape}")
 
-        # Determine number of spatial dimensions
-        if selected_axis.endswith("ZYX"):
-            num_spatial = 3
-        elif selected_axis.endswith("YX"):
-            num_spatial = 2
-        else:
-            num_spatial = 2
+        # Setup shared context for the operation and callback
+        self._setup_segment_context()
 
-        # Calculate number of non-spatial dimensions
-        num_non_spatial = len(image_shape) - num_spatial
-
-        num_collapsed = (
-            len(self.axes_to_collapse) if self.axes_to_collapse else 0
+        # Use SliceProcessor for the iteration
+        processor = SliceProcessor(
+            image_shape, selected_axis, self.axes_to_collapse
         )
 
-        num_for_loop = (
-            num_non_spatial - num_collapsed
-            if self.axes_to_collapse
-            else num_non_spatial
-        )
-
-        # Here we make a naive assumption.
-        # 1.  Dimensions to loop through are first
-        # 2. Spatial dimensions are next
-        # 3. Collapsed dimensions are last (if any)
-
-        # this will work for say NZYXC loop through N, ignore C and segment ZYX
-        # TODO: make general to handle any ordering of dimensions and collapsing (e.g., NZCYX with C collapsed should still segment ZYX correctly)
-
-        # Get shape of non-spatial dimensions
-        non_spatial_shape = image_shape[:num_for_loop]
-
-        print(f"Non-spatial dimensions: {num_non_spatial}")
-        print(f"Number of collapsed axes: {num_collapsed}")
-        print(f"num for loop: {num_for_loop}")
-        print(f"Non-spatial shape: {non_spatial_shape}")
-
-        # Calculate total number of slices
-        total_slices = (
-            int(np.prod(non_spatial_shape)) if non_spatial_shape else 1
-        )
-
-        print(f"Total slices to segment: {total_slices}")
+        print(f"Total slices to segment: {processor.total_slices}")
         self.segment_progress_logger.log_info(
-            f"Total slices to segment: {total_slices}"
+            f"Total slices to segment: {processor.total_slices}"
         )
 
-        # Iterate through all combinations of non-spatial indices
-        for idx, non_spatial_indices in enumerate(
-            itertools.product(*[range(dim) for dim in non_spatial_shape])
-        ):
-            # Build current_step tuple
-            current_step = non_spatial_indices + (0,) * num_spatial
-
-            # Update progress
+        def on_progress(current, total):
             self.segment_progress_logger.update_progress(
-                idx + 1,
-                total_slices,
-                f"Processing slice {idx + 1}/{total_slices}",
+                current, total, f"Processing slice {current}/{total}"
             )
+            print(f"Processing slice {current}/{total}")
 
-            print(
-                f"Processing slice {idx + 1}/{total_slices}: step={current_step}"
-            )
+        processor.process_all(
+            self._do_segment_slice,
+            self._on_segment_slice_done,
+            on_progress=on_progress,
+        )
 
-            # Segment the slice
-            self._segment_nd_slice(current_step=current_step)
-
-        print(f"✅ Completed segmentation of all {total_slices} slices")
+        print(
+            f"✅ Completed segmentation of all {processor.total_slices} slices"
+        )
         self.segment_progress_logger.log_info(
-            f"✅ Completed segmentation of all {total_slices} slices"
+            f"✅ Completed segmentation of all {processor.total_slices} slices"
         )
 
         QMessageBox.information(
             self,
             "Success",
-            f"Successfully segmented all {total_slices} slices",
+            f"Successfully segmented all {processor.total_slices} slices",
         )
 
-    def _segment_nd_slice(self, current_step: tuple):
-        """Perform automatic segmentation on image data.
+    def _setup_segment_context(self):
+        """Store shared context needed by _do_segment_slice and _on_segment_slice_done."""
+        self._seg_selected_axis = (
+            self.segmenter_parameter_form.get_selected_axis()
+        )
+        self._seg_segmenter_name = self.segmenter.__class__.__name__
+        self.image_data_model.set_current_segmenter_name(
+            self._seg_segmenter_name
+        )
+        self._seg_segmentation_axis = self.segmenter.get_segmentation_axis(
+            self._seg_selected_axis
+        )
+
+    def _do_segment_slice(self, current_step):
+        """Extract a slice and run segmentation. Returns the mask.
 
         Args:
-            image_data: The MD slice to segment
-            input_axis: The axis mode (e.g., "YX", "ZYX", "YXC")
-            current_step: The current step/position in the ND data
+            current_step: Tuple of indices identifying the slice position.
+
+        Returns:
+            numpy.ndarray: The segmentation mask for this slice.
         """
+        selected_axis = self._seg_selected_axis
 
+        # If the dataset has more dimensions than current_step,
+        # it is RGB data where channel is part of the pixel type
+        ignore_channel = len(self.image_layer.data.shape) > len(current_step)
+
+        indices = get_current_slice_indices(
+            current_step, selected_axis, ignore_channel
+        )
+        current_yx_slice = self.image_layer.data[indices]
+
+        return self.image_data_model.segment(
+            self.segmenter,
+            current_yx_slice,
+            points=None,
+            shapes=None,
+        )
+
+    def _on_segment_slice_done(self, current_step, mask):
+        """Save predictions and update the viewer layer after segmenting a slice.
+
+        Args:
+            current_step: Tuple of indices identifying the slice position.
+            mask: The segmentation mask returned by _do_segment_slice.
+        """
         try:
+            segmentation_axis = self._seg_segmentation_axis
+            segmenter_name = self._seg_segmenter_name
 
-            if not hasattr(self, "segmenter") or self.segmenter is None:
-                QMessageBox.warning(self, "Warning", "No segmenter selected")
-                return
-
-            # Set segmenter name for organizing predictions
-            segmenter_name = self.segmenter.__class__.__name__
-            self.image_data_model.set_current_segmenter_name(segmenter_name)
-
-            # Print the axis mode the user chose
-            selected_axis = self.segmenter_parameter_form.get_selected_axis()
-            print(f"User selected axis mode: {selected_axis}")
-
-            if len(self.image_layer.data.shape) > len(current_step):
-                ignore_channel = True
-            else:
-                ignore_channel = False
-
-            # Extract current slice based on selected axis mode
-            indices = get_current_slice_indices(
-                current_step, selected_axis, ignore_channel
-            )
-
-            current_yx_slice = self.image_layer.data[indices]
-
-            # Call segmenter through model (provides parent_directory automatically)
-            mask = self.image_data_model.segment(
-                self.segmenter,
-                current_yx_slice,
-                points=None,
-                shapes=None,
-            )
-
-            # Get the segmentation axis from the segmenter
-            # This handles cases where the segmenter transforms the axis
-            # (e.g., YXC -> YX when channel dimension is collapsed)
-            segmentation_axis = self.segmenter.get_segmentation_axis(
-                selected_axis
-            )
-
-            # save predictions via model
+            # Save predictions via model
             self.image_data_model.save_predictions(
                 mask,
                 self.current_image_index,
@@ -895,7 +865,6 @@ class NDEasySegment(BaseNDApp):
                 del self.predictions_layers[segmenter_name]
 
         # Create new empty predictions layer for this segmenter
-        import numpy as np
 
         from ..utility import create_empty_instance_image
 
