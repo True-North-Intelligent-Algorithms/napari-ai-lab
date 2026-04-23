@@ -39,7 +39,7 @@ def _try_import_segmenter(name, module_path):
 
         module = import_module(module_path, package=__name__)
         return getattr(module, name)
-    except ImportError as e:
+    except (ImportError, TypeError) as e:
         print(f"Warning: Could not import {name}: {e}")
         return None
 
