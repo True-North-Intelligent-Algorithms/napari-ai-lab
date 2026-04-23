@@ -15,7 +15,6 @@ import numpy as np
 
 from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.Segmenters.GlobalSegmenters import MonaiUNetSegmenter
-from napari_ai_lab.utility import get_current_slice_indices
 
 
 def test_segment_logic_without_widget():
@@ -60,22 +59,10 @@ def test_segment_logic_without_widget():
         selected_axis = "YX"
         # For a 3D image (ZYX), current_step would be like (3, 0, 0)
         # We want slice at Z=3
-        # The current_step should match the image dimensionality
         current_step = (3, 0, 0)
 
-        # Extract current slice using same logic as nd_easy_segment
-        indices = get_current_slice_indices(current_step, selected_axis)
-        current_slice = image_data[indices]
-        print(f"Extracted slice shape: {current_slice.shape}")
-        print(f"Slice indices: {indices}")
-
-        # Perform segmentation using model's segment method
-        mask = model.segment(
-            segmenter,
-            current_slice,
-            points=None,
-            shapes=None,
-        )
+        # Perform segmentation using model's segment_slice method
+        mask = model.segment_slice(segmenter, current_step, selected_axis)
         print(f"Segmentation mask shape: {mask.shape}")
         print(f"Mask unique values: {np.unique(mask)}")
 
@@ -160,46 +147,21 @@ def test_segment_all_slices_logic():
         # Define selected axis
         selected_axis = "YX"
 
-        # Calculate non-spatial dimensions (same logic as _on_segment_all)
-        num_spatial = 2  # YX has 2 spatial dimensions
-        num_non_spatial = len(image_shape) - num_spatial
-        non_spatial_shape = image_shape[:num_non_spatial]
+        # Use SliceProcessor to iterate, but only process first 3 slices
+        from napari_ai_lab.utilities.slice_processor import SliceProcessor
 
-        # Calculate total number of slices to process
-        total_slices = (
-            int(np.prod(non_spatial_shape)) if non_spatial_shape else 1
-        )
-        print(f"Total slices to segment: {total_slices}")
-        print(f"Non-spatial shape: {non_spatial_shape}")
+        processor = SliceProcessor(image_shape, selected_axis)
+        print(f"Total slices to segment: {processor.total_slices}")
 
-        # Segment only first 3 slices for testing (to keep test fast)
-        import itertools
+        num_test_slices = min(3, processor.total_slices)
+        segmentation_axis = segmenter.get_segmentation_axis(selected_axis)
 
-        num_test_slices = min(3, total_slices)
-
-        for idx, non_spatial_indices in enumerate(
-            itertools.product(*[range(dim) for dim in non_spatial_shape])
-        ):
+        for idx, current_step in processor.iter_steps():
             if idx >= num_test_slices:
                 break
 
-            # Build current_step tuple
-            current_step = non_spatial_indices + (0,) * num_spatial
-
-            # Extract slice
-            indices = get_current_slice_indices(current_step, selected_axis)
-            current_slice = image_data[indices]
-
-            # Segment
-            mask = model.segment(
-                segmenter,
-                current_slice,
-                points=None,
-                shapes=None,
-            )
-
-            # Get segmentation axis
-            segmentation_axis = segmenter.get_segmentation_axis(selected_axis)
+            # Segment via model
+            mask = model.segment_slice(segmenter, current_step, selected_axis)
 
             # Save predictions
             model.set_current_segmenter_name(segmenter.__class__.__name__)
