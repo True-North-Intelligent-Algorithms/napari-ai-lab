@@ -16,6 +16,7 @@ from .GlobalSegmenterBase import GlobalSegmenterBase
 # Try to import stardist at module level
 try:
     import stardist
+    from stardist import Rays_Octo
     from stardist.models import StarDist2D, StarDist3D
 
     _is_stardist_available = True
@@ -116,6 +117,18 @@ StarDist Automatic Segmentation:
         },
     )
 
+    train_patch_size_z: int = field(
+        default=32,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 256,
+            "step": 4,
+            "default": 32,
+        },
+    )
+
     steps_per_epoch: int = field(
         default=100,
         metadata={
@@ -125,6 +138,72 @@ StarDist Automatic Segmentation:
             "max": 1000,
             "step": 10,
             "default": 100,
+        },
+    )
+
+    unet_n_depth: int = field(
+        default=3,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 8,
+            "step": 1,
+            "default": 3,
+        },
+    )
+
+    train_batch_size: int = field(
+        default=4,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 32,
+            "step": 1,
+            "default": 4,
+        },
+    )
+
+    axial_anisotropy: float = field(
+        default=3.0,
+        metadata={
+            "type": "float",
+            "param_type": "training",
+            "min": 1.0,
+            "max": 20.0,
+            "step": 0.5,
+            "default": 3.0,
+        },
+    )
+
+    xy_grid_size: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 16,
+            "step": 1,
+            "default": 1,
+        },
+    )
+
+    sparse: bool = field(
+        default=False,
+        metadata={
+            "type": "bool",
+            "param_type": "training",
+            "default": False,
+        },
+    )
+
+    use_octo: bool = field(
+        default=False,
+        metadata={
+            "type": "bool",
+            "param_type": "training",
+            "default": False,
         },
     )
 
@@ -347,6 +426,7 @@ StarDist Automatic Segmentation:
                 axes=axes,
                 prob_thresh=self.prob_thresh,
                 nms_thresh=self.nms_thresh,
+                # n_tiles = (1, 4, 4)
             )
             print(
                 f"StarDist: Found {len(np.unique(labels)) - 1} objects (prob_thresh={self.prob_thresh}, nms_thresh={self.nms_thresh})"
@@ -458,7 +538,7 @@ task.outputs["mask"] = ndarr_mask
         import json
 
         import keras
-        from stardist.models import Config2D, StarDist2D
+        from stardist.models import Config2D, Config3D, StarDist2D, StarDist3D
 
         from ...utilities.dl_util import (
             collect_training_data,
@@ -482,13 +562,16 @@ task.outputs["mask"] = ndarr_mask
         with open(json_path) as f:
             info = json.load(f)
         axes = info["axes"]
+        is_3d = "Z" in axes
 
         if axes == "YXC":
             n_channel_in = 3
             add_trivial_channel = False
         else:
             n_channel_in = 1
-            add_trivial_channel = True
+            add_trivial_channel = (
+                not is_3d
+            )  # 3D patches already have no channel dim
 
         # ---- collect & split data ----
         X, Y = collect_training_data(
@@ -496,13 +579,15 @@ task.outputs["mask"] = ndarr_mask
             normalize_input=False,
             add_trivial_channel=add_trivial_channel,
         )
+
         X_train, Y_train, X_val, Y_val = divide_training_data(X, Y, val_size=2)
 
         msg = (
-            f"🏋️ Training StarDist2D: {len(X_train)} train, {len(X_val)} val\n"
+            f"🏋️ Training {'StarDist3D' if is_3d else 'StarDist2D'}: {len(X_train)} train, {len(X_val)} val\n"
             f"   axes={axes}, n_channel_in={n_channel_in}\n"
             f"   epochs={self.num_epochs}, steps_per_epoch={self.steps_per_epoch}\n"
             f"   train_patch_size=({self.train_patch_size_xy}, {self.train_patch_size_xy})"
+            + (f", z={self.train_patch_size_z}" if is_3d else "")
         )
         print(msg)
         if updater is not None:
@@ -537,31 +622,82 @@ task.outputs["mask"] = ndarr_mask
                     )
 
         custom_callback = _ProgressCallback(updater, self.num_epochs)
+        patch_size_xy = self.train_patch_size_xy
 
         # ---- create model & train ----
-        config = Config2D(
-            n_rays=32,
-            axes=axes,
-            n_channel_in=n_channel_in,
-            train_patch_size=(
-                self.train_patch_size_xy,
-                self.train_patch_size_xy,
-            ),
-            unet_n_depth=3,
-        )
-        model = StarDist2D(
-            config=config, name=model_name, basedir=model_base_path
-        )
+        if is_3d:
+
+            if self.use_octo:
+                rays = Rays_Octo(n_level=1)
+                config = Config3D(
+                    rays=rays,
+                    # rays=rays,
+                    axes=axes,
+                    n_channel_in=n_channel_in,
+                    train_patch_size=(
+                        self.train_patch_size_z,
+                        patch_size_xy,
+                        patch_size_xy,
+                    ),
+                    unet_n_depth=self.unet_n_depth,
+                    train_batch_size=self.train_batch_size,
+                    anisotropy=(self.axial_anisotropy, 1, 1),
+                    grid=(1, self.xy_grid_size, self.xy_grid_size),
+                )
+            else:
+                config = Config3D(
+                    n_rays=16,
+                    # rays=rays,
+                    axes=axes,
+                    n_channel_in=n_channel_in,
+                    train_patch_size=(
+                        self.train_patch_size_z,
+                        patch_size_xy,
+                        patch_size_xy,
+                    ),
+                    unet_n_depth=self.unet_n_depth,
+                    train_batch_size=self.train_batch_size,
+                    anisotropy=(self.axial_anisotropy, 1, 1),
+                    grid=(1, self.xy_grid_size, self.xy_grid_size),
+                )
+            model = StarDist3D(
+                config=config, name=model_name, basedir=model_base_path
+            )
+        else:
+            config = Config2D(
+                n_rays=32,
+                axes=axes,
+                n_channel_in=n_channel_in,
+                train_patch_size=(
+                    patch_size_xy,
+                    patch_size_xy,
+                ),
+                unet_n_depth=3,
+            )
+            model = StarDist2D(
+                config=config, name=model_name, basedir=model_base_path
+            )
         model.prepare_for_training()
 
         if custom_callback is not None:
             custom_callback.num_epochs = self.num_epochs
             model.callbacks.append(custom_callback)
 
+        if self.sparse:
+            Y_train = np.array(Y_train)
+            Y_train -= 1
+            Y_val = np.array(Y_val)
+            Y_val -= 1
+
+        X_train = np.array(X_train).astype(np.float32)
+        Y_train = np.array(Y_train).astype(np.int32)
+        X_val = np.array(X_val).astype(np.float32)
+        Y_val = np.array(Y_val).astype(np.int32)
+
         model.train(
             X_train,
             Y_train,
-            validation_data=(X_val, Y_val),
+            validation_data=(X_train, Y_train),
             epochs=self.num_epochs,
             steps_per_epoch=self.steps_per_epoch,
         )
