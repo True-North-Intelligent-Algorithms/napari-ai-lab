@@ -157,10 +157,4 @@ Simple Random Crop Augmentation:
         cropped_im = im[slices]
         cropped_mask = mask[slices]
 
-        # Normalize image if enabled
-        if self.normalize:
-            cropped_im = self.normalize_image(
-                cropped_im, use_global_stats=self.use_global_stats
-            )
-
         return cropped_im, cropped_mask
