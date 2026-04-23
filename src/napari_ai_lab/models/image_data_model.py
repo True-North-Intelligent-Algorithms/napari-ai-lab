@@ -1510,5 +1510,97 @@ class ImageDataModel:
         processor.process_all(operation, on_slice_done, on_progress)
         return processor
 
+    def augment_slice(
+        self,
+        annotations,
+        current_step,
+        selected_axis,
+        patch_mode="valid_coordinates",
+        progress_logger=None,
+    ):
+        """Extract a slice from image_data and annotations, then augment it.
+
+        Combines setup_augmentation + generate_patches_from_layer_data on a
+        single spatial slice.  Pure data operation — no GUI.
+
+        Args:
+            annotations: Full ND annotations array (same leading dims as
+                image_data).
+            current_step: Tuple of indices identifying the slice position.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX".
+            patch_mode: Augmentation mode forwarded to setup_augmentation.
+            progress_logger: Optional progress logger.
+
+        Returns:
+            Path to the patches directory for this slice.
+        """
+        indices = get_current_slice_indices(current_step, selected_axis)
+        image_slice = self.image_data[indices]
+        annotation_slice = annotations[indices]
+
+        if not np.any(annotation_slice):
+            return None
+
+        self.setup_augmentation(
+            image=image_slice,
+            annotations=annotation_slice,
+            mode=patch_mode,
+            compute_global_stats=True,
+        )
+
+        return self.generate_patches_from_layer_data(
+            image=image_slice,
+            annotations=annotation_slice,
+            axis=selected_axis.lower(),
+            axes_string=selected_axis,
+            progress_logger=progress_logger,
+        )
+
+    def augment_all(
+        self,
+        annotations,
+        selected_axis,
+        patch_mode="valid_coordinates",
+        axes_to_collapse=None,
+        on_slice_done=None,
+        on_progress=None,
+        progress_logger=None,
+    ):
+        """Augment all non-spatial slices of image_data.
+
+        Creates a SliceProcessor and iterates, calling augment_slice for
+        each step.  The caller controls what happens after each slice via
+        on_slice_done.
+
+        Args:
+            annotations: Full ND annotations array.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX".
+            patch_mode: Augmentation mode forwarded to setup_augmentation.
+            axes_to_collapse: Optional list of axis names that are collapsed.
+            on_slice_done: Optional callable(current_step, result) called
+                after each slice is augmented.
+            on_progress: Optional callable(current_index, total_slices)
+                called before each slice for progress reporting.
+            progress_logger: Optional progress logger forwarded to each slice.
+
+        Returns:
+            SliceProcessor: The processor used (for access to total_slices etc.).
+        """
+        processor = SliceProcessor(
+            self.image_data.shape, selected_axis, axes_to_collapse
+        )
+
+        def operation(step):
+            return self.augment_slice(
+                annotations,
+                step,
+                selected_axis,
+                patch_mode=patch_mode,
+                progress_logger=progress_logger,
+            )
+
+        processor.process_all(operation, on_slice_done, on_progress)
+        return processor
+
     def __str__(self) -> str:
         return f"ImageDataModel({self.parent_directory}, {self.get_image_count()} images)"
