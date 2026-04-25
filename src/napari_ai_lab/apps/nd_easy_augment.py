@@ -275,6 +275,22 @@ class NDEasyAugment(BaseNDApp):
 
             if patch_mode == "from_label_boxes":
                 self.progress_logger.clear()
+                self.augmenter = (
+                    self.augmentation_form.sync_nd_operation_instance(
+                        self.augmenter
+                    )
+                )
+                patch_size_xy = self.patch_size_xy_spinbox.value()
+                num_patches = self.num_patches_spinbox.value()
+                selected_axis = self.augmentation_form.get_selected_axis()
+                if "Z" in selected_axis:
+                    patch_size_z = self.patch_size_z_spinbox.value()
+                    patch_size = (patch_size_z, patch_size_xy, patch_size_xy)
+                else:
+                    patch_size = (patch_size_xy, patch_size_xy)
+                self.image_data_model.set_augmenter(self.augmenter)
+                self.image_data_model.set_patch_size(patch_size)
+                self.image_data_model.set_num_patches(num_patches)
                 self.image_data_model.generate_patches_from_labels(
                     progress_logger=self.progress_logger,
                 )
