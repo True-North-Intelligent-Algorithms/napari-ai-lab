@@ -360,15 +360,15 @@ class NDEasyLabel(BaseNDApp):
         if not all_boxes:
             return
 
-        stacked = self.image_data_model._is_stacked_sequence()
-
         shapes = []
         shape_types = []
 
         for row in all_boxes:
             y0, y1 = row["ystart"], row["yend"]
             x0, x1 = row["xstart"], row["xend"]
+            middle = list(row.get("middle_positions", []))
 
+            """
             if stacked:
                 frame_idx = row.get("frame_index")
                 if frame_idx is None:
@@ -378,16 +378,20 @@ class NDEasyLabel(BaseNDApp):
                         "not in current stack — skipping"
                     )
                     continue
-                n = float(frame_idx)
+                # Stacked: leading axis is the frame index, then any middle axes
+                leading = [float(frame_idx), *middle]
             else:
-                n = row.get("zpos", 0)  # Default to 0 if zpos is not available
+                # Non-stacked: only the middle axes (e.g., Z, T) prefix YX
+            """
+            leading = [float(p) for p in middle]
 
+            # Build a rectangle with the right number of leading dims
             rect = np.array(
                 [
-                    [n, y0, x0],
-                    [n, y0, x1],
-                    [n, y1, x1],
-                    [n, y1, x0],
+                    [*leading, y0, x0],
+                    [*leading, y0, x1],
+                    [*leading, y1, x1],
+                    [*leading, y1, x0],
                 ],
                 dtype=float,
             )
@@ -457,7 +461,7 @@ class NDEasyLabel(BaseNDApp):
             self.shapes_layer.events.data.connect(self._on_shapes_changed)
 
             self.boxes_layer = self.viewer.add_shapes(
-                ndim=3,
+                ndim=annotation_ndim,
                 name="Label box",
                 face_color="transparent",
                 edge_color="blue",

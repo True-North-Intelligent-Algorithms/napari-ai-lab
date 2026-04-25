@@ -411,28 +411,30 @@ class ImageDataModel:
 
             self._annotations_io = get_artifact_io(self.annotation_io_type)
 
-        # Transfer metadata from input_images_io if both are stacked_sequence
-        if (
-            self.annotation_io_type == "stacked_sequence"
-            and self.input_images_io_type == "stacked_sequence"
-            and self._input_images_io is not None
-        ):
-            image_names = self._input_images_io.get_image_names()
-            original_shapes = self._input_images_io.get_original_shapes()
-            axes_infos = self._input_images_io.get_axes_infos()
-            self._annotations_io.set_image_names(image_names)
-            self._annotations_io.set_original_shapes(original_shapes)
-            self._annotations_io.set_axes_infos(axes_infos)
-            self._annotations_io.set_axes_to_collapse(
-                self._annotations_io_axes_to_collapse
-            )
-        elif (
-            self.annotation_io_type == "tiff_slice"
-            and self.axis_types is not None
-        ):
-            axis_slice = "".join([ax for ax in self.axis_types if ax in "ZYX"])
-            self._annotations_io.set_axis_slice(axis_slice)
-            self._annotations_io.set_shape_total(self.image_data.shape)
+            # Transfer metadata from input_images_io if both are stacked_sequence
+            if (
+                self.annotation_io_type == "stacked_sequence"
+                and self.input_images_io_type == "stacked_sequence"
+                and self._input_images_io is not None
+            ):
+                image_names = self._input_images_io.get_image_names()
+                original_shapes = self._input_images_io.get_original_shapes()
+                axes_infos = self._input_images_io.get_axes_infos()
+                self._annotations_io.set_image_names(image_names)
+                self._annotations_io.set_original_shapes_and_axes_infos(
+                    original_shapes,
+                    axes_infos,
+                    self._annotations_io_axes_to_collapse,
+                )
+            elif (
+                self.annotation_io_type == "tiff_slice"
+                and self.axis_types is not None
+            ):
+                axis_slice = "".join(
+                    [ax for ax in self.axis_types if ax in "ZYX"]
+                )
+                self._annotations_io.set_axis_slice(axis_slice)
+                self._annotations_io.set_shape_total(self.image_data.shape)
 
         return self._annotations_io
 
@@ -502,26 +504,27 @@ class ImageDataModel:
         """Get prediction artifact io, auto-detecting type if not set."""
         subdirectory = self.get_current_segmenter_name()
 
-        # Create IO with subdirectory
-        self._predictions_io = get_artifact_io(
-            self.prediction_io_type, subdirectory=subdirectory
-        )
-
-        # Transfer metadata from input_images_io if both are stacked_sequence
-        if (
-            self.prediction_io_type == "stacked_sequence"
-            and self.input_images_io_type == "stacked_sequence"
-            and self._input_images_io is not None
-        ):
-            image_names = self._input_images_io.get_image_names()
-            original_shapes = self._input_images_io.get_original_shapes()
-            axes_infos = self._input_images_io.get_axes_infos()
-            self._predictions_io.set_image_names(image_names)
-            self._predictions_io.set_original_shapes(original_shapes)
-            self._predictions_io.set_axes_infos(axes_infos)
-            self._predictions_io.set_axes_to_collapse(
-                self._predictions_io_axes_to_collapse
+        if self._predictions_io is None:
+            # Create IO with subdirectory
+            self._predictions_io = get_artifact_io(
+                self.prediction_io_type, subdirectory=subdirectory
             )
+
+            # Transfer metadata from input_images_io if both are stacked_sequence
+            if (
+                self.prediction_io_type == "stacked_sequence"
+                and self.input_images_io_type == "stacked_sequence"
+                and self._input_images_io is not None
+            ):
+                image_names = self._input_images_io.get_image_names()
+                original_shapes = self._input_images_io.get_original_shapes()
+                axes_infos = self._input_images_io.get_axes_infos()
+                self._predictions_io.set_image_names(image_names)
+                self._predictions_io.set_original_shapes_and_axes_infos(
+                    original_shapes,
+                    axes_infos,
+                    self._predictions_io_axes_to_collapse,
+                )
 
         return self._predictions_io
 
@@ -705,7 +708,6 @@ class ImageDataModel:
         import numpy as np
 
         csv_path = self.get_boxes_csv_path()
-        fieldnames = ["file_name", "xstart", "ystart", "xend", "yend", "zpos"]
         stacked = self._is_stacked_sequence()
         stacked_names = self._get_stacked_image_names() if stacked else []
 
@@ -751,28 +753,40 @@ class ImageDataModel:
         # ------------------------------------------------------------------ #
         # Build new rows from every box in boxes_layer_data                  #
         # ------------------------------------------------------------------ #
+        # Box columns map to axis_types ignoring 'C'. Last two are (y, x);
+        # any preceding columns are "middle" axes recorded as m3pos, m4pos…
+        # (named by their negative index from the end of the box columns).
+        n_middle = (
+            max((np.asarray(b).shape[-1] for b in boxes_layer_data), default=2)
+            - 2
+        )
+        middle_keys = [f"m{i + 3}pos" for i in range(n_middle)]
+        fieldnames = [
+            "file_name",
+            "xstart",
+            "ystart",
+            "xend",
+            "yend",
+            *middle_keys,
+        ]
+
         new_rows: list[dict] = []
         for box in boxes_layer_data:
             box = np.asarray(box)
 
+            # Resolve file name
             if stacked and box.shape[-1] >= 3:
-                # Column 0 is the frame/sequence index
                 frame_idx = int(round(float(box[0, 0])))
-                if 0 <= frame_idx < len(stacked_names):
-                    file_name = f"{stacked_names[frame_idx]}.tif"
-                else:
+                if not 0 <= frame_idx < len(stacked_names):
                     print(
                         f"⚠️  save_boxes: frame index {frame_idx} out of range "
                         f"(stack has {len(stacked_names)} frames) — skipping box"
                     )
                     continue
+                file_name = f"{stacked_names[frame_idx]}.tif"
             else:
-                # Normal mode — all boxes belong to the current image
                 image_paths = self.get_image_paths()
                 file_name = image_paths[image_index].name
-
-                is_3d = "Z" in self.axis_types
-                zpos = int(box[0][0]) if is_3d else 0
 
             # Coordinates: last two columns are always (y, x)
             ystart = int(np.min(box[:, -2]))
@@ -780,16 +794,18 @@ class ImageDataModel:
             xstart = int(np.min(box[:, -1]))
             xend = int(np.max(box[:, -1]))
 
-            new_rows.append(
-                {
-                    "file_name": file_name,
-                    "xstart": xstart,
-                    "ystart": ystart,
-                    "xend": xend,
-                    "yend": yend,
-                    "zpos": zpos,
-                }
-            )
+            row = {
+                "file_name": file_name,
+                "xstart": xstart,
+                "ystart": ystart,
+                "xend": xend,
+                "yend": yend,
+            }
+            # Middle axes: column -3 -> m3pos, -4 -> m4pos, etc.
+            for i, key in enumerate(middle_keys):
+                col = -(i + 3)
+                row[key] = int(box[0, col]) if box.shape[-1] >= -col else 0
+            new_rows.append(row)
 
         # Overwrite the entire CSV — no merging, no doubles
         with open(csv_path, "w", newline="") as fh:
@@ -806,7 +822,12 @@ class ImageDataModel:
 
         Each returned dict always contains::
 
-            file_name, xstart, ystart, xend, yend
+            file_name, xstart, ystart, xend, yend, middle_positions
+
+        ``middle_positions`` is a list of ints corresponding to any
+        ``m3pos, m4pos, …`` columns present in the CSV (ordered from
+        outermost to innermost, i.e. the same order as the box's leading
+        axis columns).  The list is empty for purely 2D data.
 
         In **stacked-sequence mode** an additional key ``frame_index`` is
         included — the position of the image within the current stack — so
@@ -818,6 +839,7 @@ class ImageDataModel:
             List of dicts (empty if the file does not exist).
         """
         import csv
+        import re
 
         csv_path = self.get_boxes_csv_path()
         if not csv_path.exists():
@@ -837,21 +859,35 @@ class ImageDataModel:
         rows: list[dict] = []
         with open(csv_path, newline="") as fh:
             reader = csv.DictReader(fh)
+
+            # Discover m{N}pos columns from the header, ordered by N ascending
+            # (m3pos, m4pos, …). m3pos is the innermost middle axis (column
+            # -3 of the original box), so reverse for outer-first order.
+            middle_cols: list[str] = []
+            if reader.fieldnames:
+                m_pat = re.compile(r"^m(\d+)pos$")
+                matched = [
+                    (int(m.group(1)), name)
+                    for name in reader.fieldnames
+                    if (m := m_pat.match(name))
+                ]
+                matched.sort(key=lambda x: x[0])
+                middle_cols = [name for _, name in matched]
+
             for row in reader:
+                # Outer-first ordering for the leading axes of the rect
+                middle_positions = [
+                    int(float(row[c])) for c in reversed(middle_cols)
+                ]
                 entry: dict = {
                     "file_name": row["file_name"],
                     "xstart": int(row["xstart"]),
                     "ystart": int(row["ystart"]),
                     "xend": int(row["xend"]),
                     "yend": int(row["yend"]),
-                    "zpos": int(row.get("zpos", 0)),
+                    "middle_positions": middle_positions,
                 }
-                if stacked:
-                    # Resolve frame index from file name stem
-                    stem = Path(row["file_name"]).stem
-                    entry["frame_index"] = stem_to_idx.get(
-                        stem, stem_to_idx.get(row["file_name"])
-                    )
+
                 rows.append(entry)
         return rows
 
@@ -935,10 +971,8 @@ class ImageDataModel:
 
             if stacked:
                 n = int(box[0, 0]) if box.shape[-1] == 3 else image_index
-                z = 0
             else:
-                n = 0
-                z = int(box[0, 0]) if "Z" in self.axis_types else 0
+                n = image_index
 
             stem = image_paths[n].stem
 
@@ -946,25 +980,33 @@ class ImageDataModel:
                 print(f"⚠️  Degenerate box for '{stem}' — skipping")
                 continue
 
-            # Crop image
-            if self.axis_types == "NYX" and image_array.ndim == 3:
-                image_crop = image_array[n, ystart:yend, xstart:xend]
-                annotation_crop = annotations_array[
-                    n, ystart:yend, xstart:xend
+            # Build crop slices generically: leading N (optional), arbitrary
+            # middle axes (indexed by their box column), then Y, X, and an
+            # optional trailing C (taken in full).
+            non_c_axes = [a for a in self.axis_types if a != "C"]
+            slices = []
+            for ax in self.axis_types:
+                if ax == "C":
+                    slices.append(slice(None))
+                elif ax == "Y":
+                    slices.append(slice(ystart, yend))
+                elif ax == "X":
+                    slices.append(slice(xstart, xend))
+                else:
+                    slices.append(int(box[0, non_c_axes.index(ax)]))
+
+            image_crop = image_array[tuple(slices)]
+
+            # Annotations may have C collapsed; drop the C slice if so.
+            if annotations_array.ndim == image_array.ndim:
+                ann_slices = slices
+            else:
+                ann_slices = [
+                    s
+                    for ax, s in zip(self.axis_types, slices, strict=False)
+                    if ax != "C"
                 ]
-            elif self.axis_types == "NYXC" and image_array.ndim == 4:
-                image_crop = image_array[n, ystart:yend, xstart:xend, :]
-                annotation_crop = annotations_array[
-                    n, ystart:yend, xstart:xend, :
-                ]
-            elif self.axis_types == "YX":
-                image_crop = image_array[ystart:yend, xstart:xend]
-                annotation_crop = annotations_array[ystart:yend, xstart:xend]
-            elif self.axis_types == "ZYX":
-                image_crop = image_array[z, ystart:yend, xstart:xend]
-                annotation_crop = annotations_array[
-                    z, ystart:yend, xstart:xend
-                ]
+            annotation_crop = annotations_array[tuple(ann_slices)]
 
             image_name, mask_name = generate_patch_names(
                 str(input_dir), str(truth_dir), stem

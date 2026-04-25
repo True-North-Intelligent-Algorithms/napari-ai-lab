@@ -40,26 +40,37 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
         selected_axis: str = None,
     ) -> bool:
         try:
+            save_dir = Path(save_directory)
+            save_dir.mkdir(parents=True, exist_ok=True)
+
             if current_step:
                 idx = current_step[0]
-                dataset_name = self._image_names[idx]
-            else:
-                idx = self._image_names.index(dataset_name)
+                file_name = self._image_names[idx]
+                path = save_dir / f"{file_name}.tif"
+                io.imsave(str(path), data.astype(np.uint16))
+                return True
 
-            """
-            original_shape = self._original_shapes[idx]
-            cropped_data = data[idx, ...]
-            cropped_data = np.squeeze(cropped_data)
-            if cropped_data.shape != original_shape:
-                cropped_data = cropped_data[
-                    tuple(slice(0, s) for s in original_shape)
-                ]
+            # Sparse save: iterate the stacked first dimension and write only
+            # slices that contain data, cropping out the original (un-padded)
+            # shape for each slice.
+            n_slices = data.shape[0]
+            for n in range(n_slices):
+                slice_data = data[n]
 
-            path = Path(save_directory) / f"{dataset_name}.tif"
-            io.imsave(str(path), cropped_data.astype(np.uint16))
-            """
-            path = Path(save_directory) / f"{dataset_name}.tif"
-            io.imsave(str(path), data.astype(np.uint16))
+                # Crop padding off using the per-slice original shape
+                if n < len(self._original_shapes):
+                    original_shape = self._original_shapes[n]
+                    crop = tuple(slice(0, s) for s in original_shape)
+                    slice_data = slice_data[crop]
+
+                # Skip empty (all-zero) slices to keep the save sparse
+                if not np.any(slice_data):
+                    continue
+
+                file_name = self._image_names[n]
+                path = save_dir / f"{file_name}.tif"
+                io.imsave(str(path), slice_data.astype(np.uint16))
+
             return True
         except Exception as e:  # noqa: BLE001
             print(f"Error saving {dataset_name}: {e}")
@@ -158,21 +169,9 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
                 img = io.imread(str(path))
                 self._axes_infos[idx] = get_axis_info(img)
             else:
-                # if an axis is collapsed (not in output) then create empty frame using collapsed shape
-                if self._axes_to_collapse is not None:
-                    collapsed_shape = compute_collapsed_shape(
-                        self._original_shapes[idx],
-                        self._axes_infos[idx],
-                        self.axes_to_collapse,
-                    )
-                    self._axes_infos[idx] = self._axes_infos[idx].replace(
-                        self.axes_to_collapse, ""
-                    )
-                # Otherwise create empty frame using original shape
-                else:
-                    collapsed_shape = self._original_shapes[idx]
-
-                img = np.zeros(collapsed_shape, dtype=np.uint16)
+                # Shapes/axes are pre-collapsed by the caller via
+                # set_original_shapes_and_axes_infos, so use them directly.
+                img = np.zeros(self._original_shapes[idx], dtype=np.uint16)
 
             images.append(img)
 
@@ -209,23 +208,43 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
         """Set image names."""
         self._image_names = image_names
 
-    def set_original_shapes(self, original_shapes: list):
-        """Set original shapes."""
-        self._original_shapes = original_shapes
+    def set_original_shapes_and_axes_infos(
+        self,
+        original_shapes: list,
+        axes_infos: list,
+        axes_to_collapse: str | list[str] | None = None,
+    ):
+        """
+        Set original shapes and axes infos, collapsing the specified axes.
+
+        When ``axes_to_collapse`` is provided, each shape/axes-info pair is
+        reduced by removing the named axes (e.g., collapse ``"C"`` so a
+        ``ZYXC`` annotation is stored as ``ZYX``). When ``axes_to_collapse``
+        is ``None``, shapes and axes infos are stored as-is.
+        """
+        collapsed_shapes = []
+        collapsed_axes_infos = []
+        for shape, axes_info in zip(original_shapes, axes_infos, strict=False):
+            if axes_to_collapse is not None and axes_info:
+                collapsed_shapes.append(
+                    compute_collapsed_shape(shape, axes_info, axes_to_collapse)
+                )
+                collapse_list = (
+                    [axes_to_collapse]
+                    if isinstance(axes_to_collapse, str)
+                    else list(axes_to_collapse)
+                )
+                new_axes = "".join(
+                    a for a in axes_info if a not in collapse_list
+                )
+                collapsed_axes_infos.append(new_axes)
+            else:
+                collapsed_shapes.append(shape)
+                collapsed_axes_infos.append(axes_info)
+
+        self._original_shapes = collapsed_shapes
+        self._axes_infos = collapsed_axes_infos
 
     def get_axes_infos(self):
         """Get list of axis infos."""
         return self._axes_infos
-
-    def set_axes_infos(self, axes_infos: list):
-        """Set list of axis infos."""
-        self._axes_infos = axes_infos
-
-    def set_axes_to_collapse(self, axes_to_collapse: str | list[str] | None):
-        """Set axes to collapse when loading/saving."""
-        self._axes_to_collapse = axes_to_collapse
-
-    @property
-    def axes_to_collapse(self):
-        """Get axes to collapse."""
-        return getattr(self, "_axes_to_collapse", None)
