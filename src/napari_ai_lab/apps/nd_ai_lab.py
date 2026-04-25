@@ -163,7 +163,7 @@ class NDAILab(QWidget):
 
         # Create boxes layer for label widget (bounding-box annotations)
         self.boxes_layer = self.viewer.add_shapes(
-            ndim=3,
+            ndim=annotation_ndim,
             name="Label box",
             face_color="transparent",
             edge_color="blue",
