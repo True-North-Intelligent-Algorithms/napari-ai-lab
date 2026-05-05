@@ -281,10 +281,11 @@ class NDEasyLabel(BaseNDApp):
             return
 
         box = boxes_layer.data[-1]
-        ystart = int(np.min(box[:, -2]))
-        yend = int(np.max(box[:, -2]))
-        xstart = int(np.min(box[:, -1]))
-        xend = int(np.max(box[:, -1]))
+        # Use floor for start and ceil for end to ensure end > start
+        ystart = int(np.floor(np.min(box[:, -2])))
+        yend = int(np.ceil(np.max(box[:, -2])))
+        xstart = int(np.floor(np.min(box[:, -1])))
+        xend = int(np.ceil(np.max(box[:, -1])))
 
         print(
             f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "

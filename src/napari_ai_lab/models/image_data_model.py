@@ -789,10 +789,11 @@ class ImageDataModel:
                 file_name = image_paths[image_index].name
 
             # Coordinates: last two columns are always (y, x)
-            ystart = int(np.min(box[:, -2]))
-            yend = int(np.max(box[:, -2]))
-            xstart = int(np.min(box[:, -1]))
-            xend = int(np.max(box[:, -1]))
+            # Use floor for start and ceil for end to ensure end > start
+            ystart = int(np.floor(np.min(box[:, -2])))
+            yend = int(np.ceil(np.max(box[:, -2])))
+            xstart = int(np.floor(np.min(box[:, -1])))
+            xend = int(np.ceil(np.max(box[:, -1])))
 
             row = {
                 "file_name": file_name,
@@ -964,10 +965,11 @@ class ImageDataModel:
             box = np.asarray(box)
 
             # Coordinates: last two columns are always (y, x)
-            ystart = int(np.min(box[:, -2]))
-            yend = int(np.max(box[:, -2]))
-            xstart = int(np.min(box[:, -1]))
-            xend = int(np.max(box[:, -1]))
+            # Use floor for start and ceil for end to ensure end > start
+            ystart = int(np.floor(np.min(box[:, -2])))
+            yend = int(np.ceil(np.max(box[:, -2])))
+            xstart = int(np.floor(np.min(box[:, -1])))
+            xend = int(np.ceil(np.max(box[:, -1])))
 
             if stacked:
                 n = int(box[0, 0]) if box.shape[-1] == 3 else image_index
