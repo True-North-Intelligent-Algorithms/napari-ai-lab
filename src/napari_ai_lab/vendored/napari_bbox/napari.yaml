@@ -1,0 +1,17 @@
+name: napari-bbox
+display_name: Bounding Box
+contributions:
+  commands:
+    - id: napari-bbox.get_reader
+      python_name: napari_bbox._reader:napari_get_reader
+      title: Open data with napari nD Bounding Box
+    - id: napari-bbox.create_bounding_box_layer_widget
+      python_name: napari_bbox._widget:BoundingBoxCreator
+      title: Create Bounding Box Layer
+  readers:
+    - command: napari-bbox.get_reader
+      accepts_directories: false
+      filename_patterns: ['*.csv']
+  widgets:
+    - command: napari-bbox.create_bounding_box_layer_widget
+      display_name: Bounding Box Creator
