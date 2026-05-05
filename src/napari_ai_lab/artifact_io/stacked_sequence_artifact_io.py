@@ -5,6 +5,7 @@ This artifact I/O loads a directory of images as a stacked array (for viewing),
 but saves individual artifact files (maintaining directory structure).
 """
 
+import itertools
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +13,12 @@ from skimage import io
 
 from napari_ai_lab.utilities.image_util import compute_collapsed_shape
 
-from ..utility import collect_all_image_names, get_axis_info, pad_to_largest
+from ..utility import (
+    collect_all_image_names,
+    create_artifact_name,
+    get_axis_info,
+    pad_to_largest,
+)
 from .base_artifact_io import BaseArtifactIO
 
 
@@ -46,7 +52,18 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             if current_step:
                 idx = current_step[0]
                 file_name = self._image_names[idx]
-                path = save_dir / f"{file_name}.tif"
+                base_name = file_name.split(".")[
+                    0
+                ]  # Remove extension if present
+                sub_step = current_step[1:]
+                artifact_name = create_artifact_name(
+                    base_name, sub_step, selected_axis
+                )
+                path = save_dir / f"{artifact_name}.tif"
+                orig_shape = self._original_shapes[idx][-len(selected_axis) :]
+                # Crop from 0 to orig_shape size in each dimension
+                crop = tuple(slice(0, s) for s in orig_shape)
+                data = data[crop]
                 io.imsave(str(path), data.astype(np.uint16))
                 return True
 
@@ -168,10 +185,38 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
                 # Load existing file
                 img = io.imread(str(path))
                 self._axes_infos[idx] = get_axis_info(img)
+
             else:
                 # Shapes/axes are pre-collapsed by the caller via
                 # set_original_shapes_and_axes_infos, so use them directly.
                 img = np.zeros(self._original_shapes[idx], dtype=np.uint16)
+
+                _shape = self._original_shapes[idx]
+                selected_axis = "YX"
+                base_name = name.split(".")[0]  # Remove extension if present
+
+                # Loop through all NN dimensions (all dims except last 2 which are YX)
+                # For shape like (N1, N2, Y, X), we need to iterate through all N1, N2 combinations
+                nn_dims = _shape[:-2]  # All dimensions except Y and X
+
+                if len(nn_dims) > 0:
+                    # Create iterator for all possible NN index combinations
+                    nn_ranges = [range(n) for n in nn_dims]
+
+                    for nn_indices in itertools.product(*nn_ranges):
+                        # sub_step needs Y and X indices appended (0, 0) so create_artifact_name
+                        # can strip them off properly when selected_axis is 'YX'
+                        sub_step = nn_indices + (0, 0)
+                        artifact_name = create_artifact_name(
+                            base_name, sub_step, selected_axis
+                        )
+                        artifact_path = dir_path / f"{artifact_name}.tif"
+
+                        if artifact_path.exists():
+                            # Load the slice and place it in the correct position
+                            slice_data = io.imread(str(artifact_path))
+                            # Create indexing tuple for img[n1, n2, ..., :, :]
+                            img[nn_indices] = slice_data
 
             images.append(img)
 
