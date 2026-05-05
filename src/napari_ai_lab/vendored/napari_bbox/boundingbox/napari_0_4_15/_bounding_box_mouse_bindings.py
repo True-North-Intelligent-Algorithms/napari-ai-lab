@@ -137,7 +137,7 @@ def add_bounding_box(layer, event) -> None:
     # as we don't want to add a bounding box in those dimensions. 
     for s in range(layer.ndim-3):
         sizes[s,s] = 0
-        
+
     s_idx = [[]]
     for d in range(layer.ndim):
         s_idx.extend(list(e.copy()+[d] for e in s_idx))
@@ -174,6 +174,7 @@ def _add_bounding_box(layer, event, data):
         max[layer_dims_displayed(layer)] = np.nan
         min[layer_dims_displayed(layer)] = np.nan
         
+        '''
         if layer.size_mode == "average":
             data[:] = np.where(data == max, coordinates+visible_size.mean()/2*layer.size_multiplier, data)
             data[:] = np.where(data == min, coordinates-visible_size.mean()/2*layer.size_multiplier, data)
@@ -181,6 +182,7 @@ def _add_bounding_box(layer, event, data):
             data[:] = np.where(data == max, np.asarray(coordinates) + layer.size_constant/2, data)
             data[:] = np.where(data == min, np.asarray(coordinates) - layer.size_constant/2, data)
             const_set = True
+        '''
         yield
 
     # on release
