@@ -131,6 +131,13 @@ def add_bounding_box(layer, event) -> None:
 
     data = np.tile(corner, (2**layer.ndim, 1))
     sizes = np.eye(layer.ndim)*size
+
+    # naive assumption that the last 3 dimensions are ZYX
+    # so we set the size to 0 in all other dimensions 
+    # as we don't want to add a bounding box in those dimensions. 
+    for s in range(layer.ndim-3):
+        sizes[s,s] = 0
+        
     s_idx = [[]]
     for d in range(layer.ndim):
         s_idx.extend(list(e.copy()+[d] for e in s_idx))
