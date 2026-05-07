@@ -165,7 +165,6 @@ class BaseNDApp(QWidget):
                 self.image_data_model.save_annotations(
                     self.annotation_layer.data,
                     self.current_image_index,
-                    current_step=self.viewer.dims.current_step,
                 )
                 print(
                     f"Saved annotations for image index {self.current_image_index}"
@@ -521,13 +520,13 @@ class BaseNDApp(QWidget):
 
         # Sync the current segmenter instance with new parameter values
         if hasattr(self, "segmenter") and self.segmenter is not None:
-            # If model_preset changed for StardistSegmenter, validate before syncing
-            if "model_preset" in parameters and hasattr(
+            # If inference_model_name changed for StardistSegmenter, validate before syncing
+            if "inference_model_name" in parameters and hasattr(
                 self.segmenter, "get_recommended_axis"
             ):
                 # Store old value before sync
-                old_model_preset = getattr(
-                    self.segmenter, "model_preset", None
+                old_inference_model_name = getattr(
+                    self.segmenter, "inference_model_name", None
                 )
 
                 # Temporarily sync to get the recommended axis
@@ -538,7 +537,7 @@ class BaseNDApp(QWidget):
                 )
                 recommended_axis = temp_segmenter.get_recommended_axis()
                 print(
-                    f"Model changed to {parameters['model_preset']}, recommended axis: {recommended_axis}"
+                    f"Model changed to {parameters['inference_model_name']}, recommended axis: {recommended_axis}"
                 )
 
                 # Check if the recommended axis is available for the current image
@@ -546,27 +545,27 @@ class BaseNDApp(QWidget):
                     # Axis not compatible with current image - show warning and revert
                     from qtpy.QtWidgets import QMessageBox
 
-                    model_name = parameters["model_preset"]
+                    model_name = parameters["inference_model_name"]
                     if "C" in recommended_axis:
                         msg = (
                             f"⚠️ Model '{model_name}' requires a channel dimension (axis: {recommended_axis})\n\n"
                             f"Your current image does not have a channel dimension.\n"
                             f"Please load an RGB/multi-channel image to use this model.\n\n"
-                            f"Keeping previous model: {old_model_preset}"
+                            f"Keeping previous model: {old_inference_model_name}"
                         )
                     elif "Z" in recommended_axis:
                         msg = (
-                            f"⚠️ Model '{model_name}' requires a Z dimension (axis: {recommended_axis})\n\n"
+                            f"\u26a0\ufe0f Model '{model_name}' requires a Z dimension (axis: {recommended_axis})\n\n"
                             f"Your current image is 2D.\n"
                             f"Please load a 3D image to use this model.\n\n"
-                            f"Keeping previous model: {old_model_preset}"
+                            f"Keeping previous model: {old_inference_model_name}"
                         )
                     else:
                         msg = (
-                            f"⚠️ Model '{model_name}' requires axis: {recommended_axis}\n\n"
+                            f"\u26a0\ufe0f Model '{model_name}' requires axis: {recommended_axis}\n\n"
                             f"This is not compatible with your current image.\n"
                             f"Available axes: {', '.join(self.segmenter.supported_axes)}\n\n"
-                            f"Keeping previous model: {old_model_preset}"
+                            f"Keeping previous model: {old_inference_model_name}"
                         )
 
                     QMessageBox.warning(None, "Incompatible Model", msg)
@@ -574,10 +573,10 @@ class BaseNDApp(QWidget):
                         f"❌ Cannot use model '{model_name}': requires {recommended_axis}, but only {self.segmenter.supported_axes} available"
                     )
 
-                    # Revert the model_preset combo to the old value
-                    if old_model_preset:
+                    # Revert the inference_model_name combo to the old value
+                    if old_inference_model_name:
                         self.segmenter_parameter_form.set_parameter(
-                            "model_preset", old_model_preset
+                            "inference_model_name", old_inference_model_name
                         )
 
                     return  # Don't proceed with sync
@@ -590,7 +589,7 @@ class BaseNDApp(QWidget):
                     )
                     return
 
-            # For non-model_preset changes or segmenters without get_recommended_axis
+            # For non-inference_model_name changes or segmenters without get_recommended_axis
             self.segmenter = (
                 self.segmenter_parameter_form.sync_nd_operation_instance(
                     self.segmenter

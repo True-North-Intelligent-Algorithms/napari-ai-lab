@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 
 from ...datasets.pytorch_semantic_dataset import PyTorchSemanticDataset
 from ...mixins import TrainingBase
-from ...utilities.dl_util import normalize_image
+from ...utilities.dl_util import normalize_percentile
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import MONAI dependencies
@@ -253,6 +253,9 @@ MONAI UNet Automatic Segmentation:
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
 
+        # Set by nd_easy_segment before calling train()
+        self.training_model_name = ""
+
     def __setattr__(self, name, value):
         """Override setattr to detect parameter changes."""
         # Set the new value
@@ -321,9 +324,17 @@ MONAI UNet Automatic Segmentation:
         Raises:
             ValueError: If image dimensions are not supported or model not loaded.
         """
+
+        if self.model_file_path is None:
+            raise ValueError(
+                "Model file path is not set. Please set model_file_path to load a trained model."
+            )
+
+        self.load_model(self.model_file_path)
+
         if self.model is None:
             raise ValueError(
-                "Model not loaded. Call load_model() before segmentation."
+                "Model not loaded. Set model_file_path or call load_model()."
             )
 
         if len(image.shape) < 2:
@@ -333,7 +344,7 @@ MONAI UNet Automatic Segmentation:
 
         # Prepare image for inference
         if normalize:
-            image_norm = normalize_image(image)
+            image_norm = normalize_percentile(image)
         else:
             image_norm = image.astype(np.float32)
 
@@ -445,7 +456,7 @@ from monai.inferers import sliding_window_inference
 import torch.nn.functional as F
 
 # Load model
-model = torch.load('{self.model_name}', weights_only=False)
+model = torch.load('{self.training_model_name}', weights_only=False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 model.eval()
@@ -567,7 +578,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
             if epoch % self.save_interval == 0 and epoch > 0:
                 # Insert 'checkpoint' before the file extension
-                model_path_obj = Path(self.model_name)
+                model_path_obj = Path(self.training_model_name)
                 checkpoint_name = (
                     model_path_obj.stem + "_checkpoint" + model_path_obj.suffix
                 )
@@ -808,14 +819,18 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         )
 
         # Save the trained model
-        torch.save(self.model, Path(self.model_save_dir) / self.model_name)
+        torch.save(
+            self.model, Path(self.model_save_dir) / self.training_model_name
+        )
 
         # Record where model was saved (no loading needed - model already in memory)
-        self.model_file_path = str(Path(self.model_save_dir) / self.model_name)
+        self.model_file_path = str(
+            Path(self.model_save_dir) / self.training_model_name
+        )
 
         # Save training and validation losses to CSV
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_name = Path(self.model_name).stem + f"_{timestamp}.csv"
+        csv_name = Path(self.training_model_name).stem + f"_{timestamp}.csv"
         csv_path = Path(self.model_save_dir) / csv_name
         with open(csv_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)

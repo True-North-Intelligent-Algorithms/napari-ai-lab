@@ -66,6 +66,8 @@ Simple Random Crop Augmentation:
     def __post_init__(self):
         """Initialize parent class after dataclass initialization."""
         super().__init__(seed=self.seed)
+        self._potential_axes = ["YX", "ZYX"]
+        self.supported_axes = ["YX", "ZYX"]
         self.normalize = self.normalize
         self.use_global_stats = self.use_global_stats
 
@@ -154,11 +156,5 @@ Simple Random Crop Augmentation:
         # Crop both image and mask using the same indices
         cropped_im = im[slices]
         cropped_mask = mask[slices]
-
-        # Normalize image if enabled
-        if self.normalize:
-            cropped_im = self.normalize_image(
-                cropped_im, use_global_stats=self.use_global_stats
-            )
 
         return cropped_im, cropped_mask

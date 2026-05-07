@@ -82,17 +82,10 @@ class NDStackedSequenceViewer(QWidget):
                     "Loading all images into stack using StackedSequenceArtifactIO..."
                 )
 
-                # Use StackedSequenceArtifactIO to load directory as stack with normalization
-                # Note that the stacked_images are not loaded into the model itself
-                # because they are just a view of the data, the model still has file paths
-                # which can be used to access individual images.
-                model.set_input_images_io_type("stacked_sequence")
-                stacked_sequence_io = model.get_input_images_io()
-                stacked_images = stacked_sequence_io.load_full_stack(
-                    str(model.parent_directory), normalize=True
-                )
+                stacked_images = model.load_image(0, stacked=True)
 
-                # Store image names from stacked_sequence_io
+                # Store image names from the stacked sequence io
+                stacked_sequence_io = model.get_input_images_io()
                 self.image_names = (
                     stacked_sequence_io._image_names
                     if stacked_sequence_io._image_names

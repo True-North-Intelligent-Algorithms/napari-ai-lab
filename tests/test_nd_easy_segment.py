@@ -9,10 +9,10 @@ from napari_ai_lab.Segmenters.GlobalSegmenters import MonaiUNetSegmenter
 def test_nd_easy_segment_creates_prediction():
     """Test that NDEasySegment creates prediction file in predictions directory."""
     # Setup original and temporary directories
-    original_parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/vessels_project"
+    original_parent_dir = (
+        Path(__file__).parent / "test_images" / "vessels_project"
     )
-    temp_parent_dir = Path(str(original_parent_dir) + "_temp")
+    temp_parent_dir = original_parent_dir.parent / "vessels_project_temp"
 
     try:
         # Register all global segmenters

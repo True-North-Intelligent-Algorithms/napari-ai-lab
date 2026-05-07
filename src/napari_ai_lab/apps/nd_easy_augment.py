@@ -19,7 +19,8 @@ from qtpy.QtWidgets import (
 
 from ..Augmenters import AugmenterBase
 from ..models import ImageDataModel
-from ..utilities import QtProgressLogger
+from ..utilities import QtProgressLogger, SliceProcessor, SliceProcessorThread
+from ..utility import get_supported_axes_from_shape
 from ..widgets.nd_operation_widget import NDOperationWidget
 from .base_nd_app import BaseNDApp
 
@@ -78,25 +79,28 @@ class NDEasyAugment(BaseNDApp):
         )
         self.layout().addWidget(self.augmentation_form)
 
-        # Add patch size controls
+        # Add patch size control
         patch_size_layout = QHBoxLayout()
-        patch_size_layout.addWidget(QLabel("Patch Size (Y):"))
-        self.patch_size_y_spinbox = QSpinBox()
-        self.patch_size_y_spinbox.setMinimum(16)
-        self.patch_size_y_spinbox.setMaximum(2048)
-        self.patch_size_y_spinbox.setValue(128)
-        self.patch_size_y_spinbox.setSingleStep(16)
-        patch_size_layout.addWidget(self.patch_size_y_spinbox)
-
-        patch_size_layout.addWidget(QLabel("Patch Size (X):"))
-        self.patch_size_x_spinbox = QSpinBox()
-        self.patch_size_x_spinbox.setMinimum(16)
-        self.patch_size_x_spinbox.setMaximum(2048)
-        self.patch_size_x_spinbox.setValue(128)
-        self.patch_size_x_spinbox.setSingleStep(16)
-        patch_size_layout.addWidget(self.patch_size_x_spinbox)
+        patch_size_layout.addWidget(QLabel("Patch Size (XY):"))
+        self.patch_size_xy_spinbox = QSpinBox()
+        self.patch_size_xy_spinbox.setMinimum(16)
+        self.patch_size_xy_spinbox.setMaximum(2048)
+        self.patch_size_xy_spinbox.setValue(128)
+        self.patch_size_xy_spinbox.setSingleStep(16)
+        patch_size_layout.addWidget(self.patch_size_xy_spinbox)
 
         self.layout().addLayout(patch_size_layout)
+
+        # Add Z patch size control
+        patch_size_z_layout = QHBoxLayout()
+        patch_size_z_layout.addWidget(QLabel("Patch Size (Z):"))
+        self.patch_size_z_spinbox = QSpinBox()
+        self.patch_size_z_spinbox.setMinimum(1)
+        self.patch_size_z_spinbox.setMaximum(512)
+        self.patch_size_z_spinbox.setValue(32)
+        self.patch_size_z_spinbox.setSingleStep(4)
+        patch_size_z_layout.addWidget(self.patch_size_z_spinbox)
+        self.layout().addLayout(patch_size_z_layout)
 
         # Add number of patches control
         num_patches_layout = QHBoxLayout()
@@ -194,6 +198,23 @@ class NDEasyAugment(BaseNDApp):
         # Store current augmenter
         self.augmenter = augmenter
 
+        # Filter axes based on current image shape
+        if self.image_layer is not None and hasattr(
+            self.augmenter, "_potential_axes"
+        ):
+            filtered = get_supported_axes_from_shape(
+                self.image_layer.data.shape,
+                self.augmenter._potential_axes,
+                getattr(self.image_data_model, "axis_types", "U"),
+            )
+            self.augmenter.supported_axes = filtered
+            if (
+                hasattr(self.augmenter, "selected_axis")
+                and self.augmenter.selected_axis not in filtered
+                and filtered
+            ):
+                self.augmenter.selected_axis = filtered[0]
+
         print("About to set augmenter in augmentation form...")
         # Set the new augmenter in the form - this rebuilds the UI with new parameters
         self.augmentation_form.set_nd_operation(self.augmenter)
@@ -250,96 +271,107 @@ class NDEasyAugment(BaseNDApp):
             return
 
         try:
+            patch_mode = self.patch_mode_combo.currentText()
+
+            if patch_mode == "from_label_boxes":
+                self.progress_logger.clear()
+                self.augmenter = (
+                    self.augmentation_form.sync_nd_operation_instance(
+                        self.augmenter
+                    )
+                )
+                patch_size_xy = self.patch_size_xy_spinbox.value()
+                num_patches = self.num_patches_spinbox.value()
+                selected_axis = self.augmentation_form.get_selected_axis()
+                if "Z" in selected_axis:
+                    patch_size_z = self.patch_size_z_spinbox.value()
+                    patch_size = (patch_size_z, patch_size_xy, patch_size_xy)
+                else:
+                    patch_size = (patch_size_xy, patch_size_xy)
+                self.image_data_model.set_augmenter(self.augmenter)
+                self.image_data_model.set_patch_size(patch_size)
+                self.image_data_model.set_num_patches(num_patches)
+                self.image_data_model.generate_patches_from_labels(
+                    progress_logger=self.progress_logger,
+                )
+                return
+
             # Get current values from UI
-            patch_size_y = self.patch_size_y_spinbox.value()
-            patch_size_x = self.patch_size_x_spinbox.value()
+            patch_size_xy = self.patch_size_xy_spinbox.value()
             num_patches = self.num_patches_spinbox.value()
 
             # Sync augmenter parameters from form back to augmenter instance
-            # (in case user changed any parameters in the UI)
             self.augmenter = self.augmentation_form.sync_nd_operation_instance(
                 self.augmenter
             )
 
-            # Get image and annotations data
-            image = self.image_layer.data
             annotations = self.annotation_layer.data
 
-            # Adjust patch size based on image dimensions
-            # If image is 3D, use (1, Y, X) for 2D slices from 3D data
-            # If image is 2D, use (Y, X)
+            selected_axis = self.augmentation_form.get_selected_axis()
 
-            axis_types = self.image_data_model.axis_types
-            if "ZYX" in (axis_types):
-                patch_size = (1, patch_size_y, patch_size_x)
-                print(
-                    f"\n📐 Detected 3D image, using patch size: {patch_size}"
-                )
+            if "Z" in selected_axis:
+                patch_size_z = self.patch_size_z_spinbox.value()
+                patch_size = (patch_size_z, patch_size_xy, patch_size_xy)
             else:
-                patch_size = (patch_size_y, patch_size_x)
-                print(
-                    f"\n📐 Detected 2D image, using patch size: {patch_size}"
-                )
+                patch_size = (patch_size_xy, patch_size_xy)
 
             # Configure the model
             self.image_data_model.set_augmenter(self.augmenter)
             self.image_data_model.set_patch_size(patch_size)
             self.image_data_model.set_num_patches(num_patches)
+            image_shape = self.image_layer.data.shape
 
             print("\n🔧 Setting up augmentation...")
-            print(f"  Image shape: {image.shape}")
+            print(f"  Image shape: {image_shape}")
+            print(f"  Selected axis: {selected_axis}")
             print(f"  Patch size: {patch_size}")
             print(f"  Number of patches: {num_patches}")
 
-            patch_mode = self.patch_mode_combo.currentText()
-
-            if patch_mode == "from_label_boxes":
-                # Clear previous progress
-                self.progress_logger.clear()
-                patches_dir = (
-                    self.image_data_model.generate_patches_from_labels(
-                        progress_logger=self.progress_logger,
-                    )
-                )
-                print(f"📁 Patches saved to: {patches_dir}")
-                return
-
-            # Setup augmentation (compute stats, valid coordinates, etc.)
-            self.image_data_model.setup_augmentation(
-                image=image,
-                annotations=annotations,
-                mode=patch_mode,
-                compute_global_stats=True,
-            )
-
-            # Clear previous progress
             self.progress_logger.clear()
 
-            # Generate patches with progress tracking
-            patches_dir = (
-                self.image_data_model.generate_patches_from_layer_data(
-                    image=image,
-                    annotations=annotations,
-                    axis="yx",
-                    axes_string="YX",
-                    progress_logger=self.progress_logger,
-                )
+            processor = SliceProcessor(
+                image_shape, selected_axis, self.axes_to_collapse
             )
 
-            # Write info.json with patch metadata
-            # (Note: generate_patches already writes info.json via augmenter.write_info)
-            # This is redundant but kept for compatibility
-            if not hasattr(self.augmenter, "write_info"):
-                print("📝 Writing patch metadata (info.json)...")
-                self.augmenter.write_info(
-                    patch_path=str(patches_dir),
-                    axes="YX",
-                    num_inputs=1,
-                    num_truths=1,
-                    sub_sample=1,
+            print(f"Total slices to augment: {processor.total_slices}")
+            self.progress_logger.log_info(
+                f"Total slices to augment: {processor.total_slices}"
+            )
+
+            # Disable button while running
+            self.perform_augmentation_button.setEnabled(False)
+
+            def do_augment_slice(current_step):
+                return self.image_data_model.augment_slice(
+                    annotations,
+                    current_step,
+                    selected_axis,
+                    patch_mode=patch_mode,
+                    progress_logger=self.progress_logger,
                 )
 
-            print(f"📁 Patches saved to: {patches_dir}")
+            use_threading = False
+
+            if use_threading:
+                self._augment_thread = SliceProcessorThread(
+                    processor, do_augment_slice
+                )
+                self._augment_thread.progress.connect(
+                    self._on_augment_all_progress
+                )
+                self._augment_thread.finished.connect(
+                    self._on_augment_all_finished
+                )
+                self._augment_thread.error.connect(self._on_augment_all_error)
+                self._augment_thread.start()
+            else:
+                processor.process_all(
+                    do_augment_slice,
+                    on_progress=lambda cur, tot: print(
+                        f"Augmenting slice {cur}/{tot}"
+                    ),
+                )
+                self._on_augment_all_finished()
 
         except (ValueError, RuntimeError, OSError, AttributeError) as e:
             error_msg = f"Error during augmentation: {e}"
@@ -348,6 +380,33 @@ class NDEasyAugment(BaseNDApp):
             import traceback
 
             traceback.print_exc()
+
+    def _on_augment_all_progress(self, current, total):
+        """Handle progress updates from the augmentation worker thread."""
+        self.progress_logger.update_progress(
+            current, total, f"Processing slice {current}/{total}"
+        )
+        print(f"Augmenting slice {current}/{total}")
+
+    def _on_augment_all_finished(self):
+        """Handle completion of threaded augment-all."""
+        self.perform_augmentation_button.setEnabled(True)
+        total = getattr(self, "_augment_thread", None)
+        total_str = (
+            str(total.worker.processor.total_slices) if total else "all"
+        )
+        print(f"✅ Completed augmentation of {total_str} slices")
+        self.progress_logger.log_info(
+            f"✅ Completed augmentation of {total_str} slices"
+        )
+        self._augment_thread = None
+
+    def _on_augment_all_error(self, error_msg):
+        """Handle errors from the augmentation worker thread."""
+        self.perform_augmentation_button.setEnabled(True)
+        print(f"Error during augment all: {error_msg}")
+        self.progress_logger.log_error(f"Augmentation failed: {error_msg}")
+        self._augment_thread = None
 
     def _on_delete_augmentations(self):
         """Delete augmentation patches by removing the patches directory."""

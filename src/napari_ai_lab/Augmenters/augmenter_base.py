@@ -2,7 +2,11 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from ..utilities.dl_util import normalize_image, normalize_percentile
+from ..utilities.dl_util import (
+    compute_percentiles,
+    normalize_intensity,
+    normalize_percentile,
+)
 
 
 class AugmenterBase(ABC):
@@ -88,6 +92,9 @@ class AugmenterBase(ABC):
         self.input_dir = "input0"
         self.ground_truth_dir = "ground_truth0"
         self.seed = seed
+        self._potential_axes = ["YX"]
+        self.supported_axes = ["YX"]
+        self.selected_axis = "YX"
         self.valid_coordinates = None
         self.patch_mode = (
             "valid_coordinates"  # set by model before generating patches
@@ -105,8 +112,8 @@ class AugmenterBase(ABC):
     def compute_global_normalization_stats(
         self,
         image: np.ndarray,
-        percentile_low: float = 1,
-        percentile_high: float = 99,
+        percentile_low: float = 0,
+        percentile_high: float = 100,
     ):
         """
         Compute global normalization statistics from full image.
@@ -123,7 +130,7 @@ class AugmenterBase(ABC):
         percentile_high : float
             Upper percentile (default: 99)
         """
-        self.global_norm_low, self.global_norm_high = normalize_percentile(
+        self.global_norm_low, self.global_norm_high = compute_percentiles(
             image, percentile_low, percentile_high
         )
         print(
@@ -150,11 +157,11 @@ class AugmenterBase(ABC):
             Normalized image in range [0, 1]
         """
         if use_global_stats and self.global_norm_low is not None:
-            return normalize_image(
+            return normalize_intensity(
                 image, self.global_norm_low, self.global_norm_high
             )
         else:
-            return normalize_image(image)
+            return normalize_percentile(image)
 
     @abstractmethod
     def augment(
@@ -220,6 +227,11 @@ class AugmenterBase(ABC):
 
         from ..utilities.io_util import generate_next_name
 
+        if self.normalize:
+            im = self.normalize_image(
+                im, use_global_stats=self.use_global_stats
+            )
+
         # Augment the image and mask
         augmented_im, augmented_mask = self.augment(im, mask, patch_size, axis)
 
@@ -283,37 +295,9 @@ class AugmenterBase(ABC):
 
         print("num coords:", len(coords))
 
-        out = np.zeros_like(binary, dtype=bool)
-
-        for z, y, x in coords:
-            z0 = max(0, z - patch_size[0] + 1)
-            z1 = min(out.shape[0] - patch_size[0] + 1, z + 1)
-
-            y0 = max(0, y - patch_size[1] + 1)
-            y1 = min(out.shape[1] - patch_size[1] + 1, y + 1)
-
-            x0 = max(0, x - patch_size[2] + 1)
-            x1 = min(out.shape[2] - patch_size[2] + 1, x + 1)
-
-            out[z0:z1, y0:y1, x0:x1] = True
-
-        valid_coords = np.argwhere(out)
-        valid_starts = []
-
-        for coord in valid_coords:
-            # Check if patch fits within bounds
-            if all(  # noqa: SIM102
-                c + p <= s
-                for c, p, s in zip(coord, patch_size, im_shape, strict=False)
-            ):
-                # Check axis constraint
-                if axis is None or all(  # noqa: SIM102
-                    c == 0 if i != axis else True for i, c in enumerate(coord)
-                ):
-                    valid_starts.append(tuple(coord))
-
-        self.valid_coordinates = valid_starts
-        return valid_starts
+        self.valid_coordinates = [tuple(c) for c in coords]
+        print(f"Found {len(self.valid_coordinates)} valid positions")
+        return self.valid_coordinates
 
     def _get_random_crop_indices(
         self,
@@ -332,9 +316,14 @@ class AugmenterBase(ABC):
             self.patch_mode == "valid_coordinates"
             and self.valid_coordinates is not None
         ):
-            return self.valid_coordinates[
+            center = self.valid_coordinates[
                 self.rng.randint(len(self.valid_coordinates))
             ]
+            # Compute start so the labeled pixel lands near the centre of the patch
+            return tuple(
+                max(0, min(c - p // 2, s - p))
+                for c, p, s in zip(center, patch_size, im_shape, strict=False)
+            )
 
         # Standard random cropping
         start_indices = []

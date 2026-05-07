@@ -8,8 +8,13 @@ into a single tabbed interface with shared model and viewer.
 from pathlib import Path
 
 import napari
+import numpy as np
 from qtpy.QtWidgets import (
+    QComboBox,
+    QDialog,
     QFileDialog,
+    QHBoxLayout,
+    QLabel,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -163,7 +168,7 @@ class NDAILab(QWidget):
 
         # Create boxes layer for label widget (bounding-box annotations)
         self.boxes_layer = self.viewer.add_shapes(
-            ndim=3,
+            ndim=annotation_ndim,
             name="Label box",
             face_color="transparent",
             edge_color="blue",
@@ -205,9 +210,14 @@ class NDAILab(QWidget):
                 self.label_widget._on_boxes_changed
             )
 
-        # Load existing boxes into the boxes_layer from CSV
+        # Load existing boxes into the boxes_layer from CSV (BEFORE connecting nd_ai_lab event)
         if hasattr(self.label_widget, "_load_existing_boxes"):
             self.label_widget._load_existing_boxes()
+
+        # Connect boxes layer events for nd_ai_lab (for prediction copying)
+        # This is done AFTER loading to avoid triggering dialog on startup
+        if self.boxes_layer and hasattr(self, "_on_boxes_changed"):
+            self.boxes_layer.events.data.connect(self._on_boxes_changed)
 
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer
@@ -257,8 +267,25 @@ class NDAILab(QWidget):
 
         layout.addWidget(self.tabs)
 
-        # TODO Phase 3: Add central layer management
-        # TODO Phase 4: Add sequence viewer connection
+        # Sync patch_size_xy between Augment and Train tabs
+        self._cross_connect_patch_size()
+
+    def _cross_connect_patch_size(self):
+        """Sync patch_size_xy spinbox (Augment) with train_patch_size_xy (Train)."""
+        aug_spin = self.augment_widget.patch_size_xy_spinbox
+        trn_form = self.segment_widget.training_parameter_form
+
+        def _aug_to_train(val):
+            trn_form.set_parameter("train_patch_size_xy", val)
+
+        def _train_to_aug(params):
+            if "train_patch_size_xy" in params:
+                aug_spin.blockSignals(True)
+                aug_spin.setValue(params["train_patch_size_xy"])
+                aug_spin.blockSignals(False)
+
+        aug_spin.valueChanged.connect(_aug_to_train)
+        trn_form.parameters_changed.connect(_train_to_aug)
 
     def _on_open_directory(self):
         """Open directory and create/set model for all sub-apps."""
@@ -409,3 +436,128 @@ class NDAILab(QWidget):
             self.boxes_layer = None
 
         print("   ✅ Layer cleanup complete")
+
+    def _on_boxes_changed(self, event):
+        """Handle boxes layer data changes - show dialog to copy predictions to new ROI."""
+
+        # Only respond to 'added' events (same check as in nd_easy_label)
+        if event.action != "added":
+            return
+
+        boxes_layer = event.source
+        if len(boxes_layer.data) == 0:
+            return
+
+        # Check if we have any predictions layers to copy from
+        if (
+            not hasattr(self, "predictions_layers")
+            or not self.predictions_layers
+        ):
+            print("No predictions layers available to copy from")
+            return
+
+        # Get the most recently added box
+        box = boxes_layer.data[-1]
+
+        # Extract spatial coordinates (last 2 columns are Y and X)
+        # Use floor for start and ceil for end to ensure end > start
+        ystart = int(np.floor(np.min(box[:, -2])))
+        yend = int(np.ceil(np.max(box[:, -2])))
+        xstart = int(np.floor(np.min(box[:, -1])))
+        xend = int(np.ceil(np.max(box[:, -1])))
+
+        # Extract ND indices (all columns before the last 2)
+        # These are the indices in ND space (e.g., T, Z, S for TSZYX)
+        nd_indices = tuple(int(box[0, i]) for i in range(box.shape[1] - 2))
+
+        # Check each prediction layer for data at this location
+        available_predictions = {}
+        for segmenter_name, pred_layer in self.predictions_layers.items():
+            pred_data = pred_layer.data
+
+            # Build the indexing tuple: nd_indices + (slice(ystart, yend), slice(xstart, xend))
+            roi_slice = nd_indices + (slice(ystart, yend), slice(xstart, xend))
+
+            # Check if predictions exist at this location
+            try:
+                pred_roi = pred_data[roi_slice]
+
+                # Check if there's any non-zero data
+                if np.any(pred_roi):
+                    available_predictions[segmenter_name] = pred_layer
+                    print(f"✓ {segmenter_name}: Predictions found in ROI")
+                else:
+                    print(
+                        f"✗ {segmenter_name}: No non-zero predictions in ROI"
+                    )
+            except (IndexError, ValueError) as e:
+                print(
+                    f"✗ {segmenter_name}: No predictions at this location ({e})"
+                )
+
+        # If no predictions available, inform user and return
+        if not available_predictions:
+            print("⚠️ No predictions exist at this location")
+            return
+
+        # Create dialog with only available predictions
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Copy Predictions to ROI")
+        dialog.setMinimumWidth(400)
+
+        layout = QVBoxLayout(dialog)
+
+        # Message label
+        message_label = QLabel(
+            "Choose predictions layer and press 'copy' to copy predictions to new roi"
+        )
+        layout.addWidget(message_label)
+
+        # Combo box with available predictions only
+        combo_layout = QHBoxLayout()
+        combo_label = QLabel("Predictions Layer:")
+        combo_layout.addWidget(combo_label)
+
+        predictions_combo = QComboBox()
+        for segmenter_name in available_predictions:
+            predictions_combo.addItem(segmenter_name)
+        combo_layout.addWidget(predictions_combo)
+
+        layout.addLayout(combo_layout)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        copy_button = QPushButton("Copy")
+        cancel_button = QPushButton("Cancel")
+
+        # Copy functionality
+        def copy_predictions():
+            selected_name = predictions_combo.currentText()
+            selected_pred_layer = available_predictions[selected_name]
+            pred_data = selected_pred_layer.data
+
+            # Get the prediction ROI
+            roi_slice = nd_indices + (slice(ystart, yend), slice(xstart, xend))
+            pred_roi = pred_data[roi_slice]
+
+            # Copy to labels layer at the same location
+            if hasattr(self, "labels_layer") and self.labels_layer:
+                self.labels_layer.data[roi_slice] = pred_roi
+                self.labels_layer.refresh()  # Force napari to update the display
+                print(f"✓ Copied {selected_name} predictions to labels layer")
+            else:
+                print("⚠️ No labels layer available")
+
+            dialog.accept()
+
+        copy_button.clicked.connect(copy_predictions)
+        cancel_button.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(copy_button)
+        button_layout.addWidget(cancel_button)
+
+        layout.addLayout(button_layout)
+
+        # Show dialog
+        dialog.exec_()

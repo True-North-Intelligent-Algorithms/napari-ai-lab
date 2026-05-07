@@ -5,8 +5,6 @@ This module provides a unified interface for both interactive (point/shape-based
 and automatic (full plane/volume) segmentation workflows.
 """
 
-import itertools
-
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
@@ -22,6 +20,7 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
+from ..utilities.slice_processor import SliceProcessor, SliceProcessorThread
 from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
@@ -398,13 +397,27 @@ class NDEasySegment(BaseNDApp):
             )
         )
 
+        # Use SliceProcessor for single-slice processing
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        self._setup_segment_context()
+
+        processor = SliceProcessor(
+            self.image_layer.data.shape,
+            selected_axis,
+            self.axes_to_collapse,
+        )
+
         self.segment_progress_logger.update_progress(1, 2, "Processing...")
-        self._segment_nd_slice(current_step=self.viewer.dims.current_step)
+        processor.process_slice(
+            self.viewer.dims.current_step,
+            self._do_segment_slice,
+            self._on_segment_slice_done,
+        )
         self.segment_progress_logger.update_progress(2, 2, "✅ Complete")
         self.segment_progress_logger.log_info("✅ Segmentation complete")
 
     def _on_segment_all(self):
-        """Segment all slices in the ND data automatically."""
+        """Segment all slices in the ND data automatically (threaded)."""
         if self.image_layer is None:
             QMessageBox.warning(self, "Warning", "No images loaded")
             return
@@ -428,13 +441,10 @@ class NDEasySegment(BaseNDApp):
             )
         )
 
-        # Get selected axis and dataset axis types
         selected_axis = self.segmenter_parameter_form.get_selected_axis()
-        dataset_axis_types = self.image_data_model.axis_types
         image_shape = self.image_layer.data.shape
 
         print(f"Selected axis: {selected_axis}")
-        print(f"Dataset axis types: {dataset_axis_types}")
         print(f"Image shape: {image_shape}")
 
         self.segment_progress_logger.log_info(
@@ -442,144 +452,101 @@ class NDEasySegment(BaseNDApp):
         )
         self.segment_progress_logger.log_info(f"Image shape: {image_shape}")
 
-        # Determine number of spatial dimensions
-        if selected_axis.endswith("ZYX"):
-            num_spatial = 3
-        elif selected_axis.endswith("YX"):
-            num_spatial = 2
-        else:
-            num_spatial = 2
+        # Setup shared context for the operation and callback
+        self._setup_segment_context()
 
-        # Calculate number of non-spatial dimensions
-        num_non_spatial = len(image_shape) - num_spatial
-
-        num_collapsed = (
-            len(self.axes_to_collapse) if self.axes_to_collapse else 0
+        processor = SliceProcessor(
+            image_shape, selected_axis, self.axes_to_collapse
         )
 
-        num_for_loop = (
-            num_non_spatial - num_collapsed
-            if self.axes_to_collapse
-            else num_non_spatial
-        )
-
-        # Here we make a naive assumption.
-        # 1.  Dimensions to loop through are first
-        # 2. Spatial dimensions are next
-        # 3. Collapsed dimensions are last (if any)
-
-        # this will work for say NZYXC loop through N, ignore C and segment ZYX
-        # TODO: make general to handle any ordering of dimensions and collapsing (e.g., NZCYX with C collapsed should still segment ZYX correctly)
-
-        # Get shape of non-spatial dimensions
-        non_spatial_shape = image_shape[:num_for_loop]
-
-        print(f"Non-spatial dimensions: {num_non_spatial}")
-        print(f"Number of collapsed axes: {num_collapsed}")
-        print(f"num for loop: {num_for_loop}")
-        print(f"Non-spatial shape: {non_spatial_shape}")
-
-        # Calculate total number of slices
-        total_slices = (
-            int(np.prod(non_spatial_shape)) if non_spatial_shape else 1
-        )
-
-        print(f"Total slices to segment: {total_slices}")
+        print(f"Total slices to segment: {processor.total_slices}")
         self.segment_progress_logger.log_info(
-            f"Total slices to segment: {total_slices}"
+            f"Total slices to segment: {processor.total_slices}"
         )
 
-        # Iterate through all combinations of non-spatial indices
-        for idx, non_spatial_indices in enumerate(
-            itertools.product(*[range(dim) for dim in non_spatial_shape])
-        ):
-            # Build current_step tuple
-            current_step = non_spatial_indices + (0,) * num_spatial
+        # Disable button while running
+        self.segment_all_btn.setEnabled(False)
 
-            # Update progress
-            self.segment_progress_logger.update_progress(
-                idx + 1,
-                total_slices,
-                f"Processing slice {idx + 1}/{total_slices}",
-            )
+        # Launch threaded processing
+        self._segment_thread = SliceProcessorThread(
+            processor, self._do_segment_slice
+        )
+        self._segment_thread.progress.connect(self._on_segment_all_progress)
+        self._segment_thread.slice_done.connect(self._on_segment_slice_done)
+        self._segment_thread.finished.connect(self._on_segment_all_finished)
+        self._segment_thread.error.connect(self._on_segment_all_error)
+        self._segment_thread.start()
 
-            print(
-                f"Processing slice {idx + 1}/{total_slices}: step={current_step}"
-            )
+    def _on_segment_all_progress(self, current, total):
+        """Handle progress updates from the worker thread (runs on main thread)."""
+        self.segment_progress_logger.update_progress(
+            current, total, f"Processing slice {current}/{total}"
+        )
+        print(f"Processing slice {current}/{total}")
 
-            # Segment the slice
-            self._segment_nd_slice(current_step=current_step)
-
-        print(f"✅ Completed segmentation of all {total_slices} slices")
+    def _on_segment_all_finished(self):
+        """Handle completion of threaded segment-all (runs on main thread)."""
+        self.segment_all_btn.setEnabled(True)
+        total = getattr(self, "_segment_thread", None)
+        total_str = (
+            str(total.worker.processor.total_slices) if total else "all"
+        )
+        print(f"✅ Completed segmentation of {total_str} slices")
         self.segment_progress_logger.log_info(
-            f"✅ Completed segmentation of all {total_slices} slices"
+            f"✅ Completed segmentation of {total_str} slices"
+        )
+        self._segment_thread = None
+
+    def _on_segment_all_error(self, error_msg):
+        """Handle errors from the worker thread (runs on main thread)."""
+        self.segment_all_btn.setEnabled(True)
+        print(f"Error during segment all: {error_msg}")
+        QMessageBox.critical(
+            self, "Error", f"Segmentation failed: {error_msg}"
+        )
+        self._segment_thread = None
+
+    def _setup_segment_context(self):
+        """Store shared context needed by _do_segment_slice and _on_segment_slice_done."""
+        self._seg_selected_axis = (
+            self.segmenter_parameter_form.get_selected_axis()
+        )
+        self._seg_segmenter_name = self.segmenter.__class__.__name__
+        self.image_data_model.set_current_segmenter_name(
+            self._seg_segmenter_name
+        )
+        self._seg_segmentation_axis = self.segmenter.get_segmentation_axis(
+            self._seg_selected_axis
         )
 
-        QMessageBox.information(
-            self,
-            "Success",
-            f"Successfully segmented all {total_slices} slices",
-        )
-
-    def _segment_nd_slice(self, current_step: tuple):
-        """Perform automatic segmentation on image data.
+    def _do_segment_slice(self, current_step):
+        """Extract a slice and run segmentation via the model.
 
         Args:
-            image_data: The MD slice to segment
-            input_axis: The axis mode (e.g., "YX", "ZYX", "YXC")
-            current_step: The current step/position in the ND data
+            current_step: Tuple of indices identifying the slice position.
+
+        Returns:
+            numpy.ndarray: The segmentation mask for this slice.
         """
+        return self.image_data_model.segment_slice(
+            self.segmenter, current_step, self._seg_selected_axis
+        )
 
+    def _on_segment_slice_done(self, current_step, mask):
+        """Save predictions and update the viewer layer after segmenting a slice.
+
+        Args:
+            current_step: Tuple of indices identifying the slice position.
+            mask: The segmentation mask returned by _do_segment_slice.
+        """
         try:
+            segmentation_axis = self._seg_segmentation_axis
+            segmenter_name = self._seg_segmenter_name
 
-            if not hasattr(self, "segmenter") or self.segmenter is None:
-                QMessageBox.warning(self, "Warning", "No segmenter selected")
-                return
-
-            # Set segmenter name for organizing predictions
-            segmenter_name = self.segmenter.__class__.__name__
-            self.image_data_model.set_current_segmenter_name(segmenter_name)
-
-            # Print the axis mode the user chose
-            selected_axis = self.segmenter_parameter_form.get_selected_axis()
-            print(f"User selected axis mode: {selected_axis}")
-
-            if len(self.image_layer.data.shape) > len(current_step):
-                ignore_channel = True
-            else:
-                ignore_channel = False
-
-            # Extract current slice based on selected axis mode
-            indices = get_current_slice_indices(
-                current_step, selected_axis, ignore_channel
-            )
-
-            current_yx_slice = self.image_layer.data[indices]
-
-            # Call segmenter through model (provides parent_directory automatically)
-            mask = self.image_data_model.segment(
-                self.segmenter,
-                current_yx_slice,
-                points=None,
-                shapes=None,
-            )
-
-            # Get the segmentation axis from the segmenter
-            # This handles cases where the segmenter transforms the axis
-            # (e.g., YXC -> YX when channel dimension is collapsed)
-            segmentation_axis = self.segmenter.get_segmentation_axis(
-                selected_axis
-            )
-
-            # save predictions via model
-            # Use the current segmenter name as subdirectory to organize predictions by method
-            subdirectory = (
-                self.image_data_model._current_segmenter_name or "default"
-            )
+            # Save predictions via model
             self.image_data_model.save_predictions(
                 mask,
                 self.current_image_index,
-                subdirectory=subdirectory,
                 current_step=current_step,
                 selected_axis=segmentation_axis,
                 axes_to_collapse=self.axes_to_collapse,
@@ -590,9 +557,6 @@ class NDEasySegment(BaseNDApp):
             )
 
             # Get or create the predictions layer for this segmenter
-            segmenter_name = (
-                self.image_data_model._current_segmenter_name or "default"
-            )
             predictions_layer = self._get_or_create_predictions_layer(
                 segmenter_name, self.annotation_layer.data.shape
             )
@@ -711,12 +675,12 @@ class NDEasySegment(BaseNDApp):
         self.segmenter.model_save_dir = str(
             self.image_data_model.get_models_directory()
         )
-        self.segmenter.model_name = (
+        self.segmenter.training_model_name = (
             self.model_name_edit.text().strip() or "model"
         )
         print(f"patch_path:    {self.segmenter.patch_path}")
         print(f"model_save_dir:{self.segmenter.model_save_dir}")
-        print(f"model_name:    {self.segmenter.model_name}")
+        print(f"training_model_name:    {self.segmenter.training_model_name}")
 
         # Sync hyper-parameters from the training form to segmenter
         for param_name, param_value in training_params.items():
@@ -730,7 +694,7 @@ class NDEasySegment(BaseNDApp):
             if use_progress_logger:
                 self.progress_logger.log_info("Starting training...")
                 self.progress_logger.log_info(
-                    f"Model: {self.segmenter.model_name}"
+                    f"Model: {self.segmenter.training_model_name}"
                 )
                 self.progress_logger.log_info(
                     f"Patches: {self.segmenter.patch_path}"
@@ -771,7 +735,7 @@ class NDEasySegment(BaseNDApp):
                 )
 
             # Refresh model combos in both forms to include the newly trained model
-            trained_name = self.segmenter.model_preset
+            trained_name = self.segmenter.inference_model_name
             self.segmenter_parameter_form.refresh_model_combo(
                 select_name=trained_name
             )
@@ -903,7 +867,6 @@ class NDEasySegment(BaseNDApp):
                 del self.predictions_layers[segmenter_name]
 
         # Create new empty predictions layer for this segmenter
-        import numpy as np
 
         from ..utility import create_empty_instance_image
 

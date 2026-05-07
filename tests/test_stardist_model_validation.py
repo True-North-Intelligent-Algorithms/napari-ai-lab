@@ -12,15 +12,15 @@ def test_recommended_axis_for_each_model():
     segmenter = StardistSegmenter()
 
     # Test 2D_versatile_fluo -> YX
-    segmenter.model_preset = "2D_versatile_fluo"
+    segmenter.inference_model_name = "2D_versatile_fluo"
     assert segmenter.get_recommended_axis() == "YX"
 
     # Test 2D_versatile_he -> YXC
-    segmenter.model_preset = "2D_versatile_he"
+    segmenter.inference_model_name = "2D_versatile_he"
     assert segmenter.get_recommended_axis() == "YXC"
 
     # Test 3D_demo -> ZYX
-    segmenter.model_preset = "3D_demo"
+    segmenter.inference_model_name = "3D_demo"
     assert segmenter.get_recommended_axis() == "ZYX"
 
 
@@ -43,7 +43,7 @@ def test_supported_axes_filtering():
     segmenter.supported_axes = ["YX"]
 
     # Model requiring C should not be in supported axes
-    segmenter.model_preset = "2D_versatile_he"
+    segmenter.inference_model_name = "2D_versatile_he"
     recommended = segmenter.get_recommended_axis()
     assert recommended == "YXC"
     assert (
@@ -51,21 +51,21 @@ def test_supported_axes_filtering():
     )  # Should not be compatible
 
     # Model not requiring C should be in supported axes
-    segmenter.model_preset = "2D_versatile_fluo"
+    segmenter.inference_model_name = "2D_versatile_fluo"
     recommended = segmenter.get_recommended_axis()
     assert recommended == "YX"
     assert recommended in segmenter.supported_axes  # Should be compatible
 
 
-def test_model_preset_change_message(capsys):
-    """Test that changing model_preset triggers the debug message."""
+def test_inference_model_name_change_message(capsys):
+    """Test that changing inference_model_name triggers the debug message."""
     segmenter = StardistSegmenter()
 
     # Initial value
-    segmenter.model_preset = "2D_versatile_fluo"
+    segmenter.inference_model_name = "2D_versatile_fluo"
 
     # Change to 3D
-    segmenter.model_preset = "3D_demo"
+    segmenter.inference_model_name = "3D_demo"
 
     # Check output
     captured = capsys.readouterr()

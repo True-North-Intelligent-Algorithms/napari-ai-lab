@@ -10,11 +10,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ...utilities.dl_util import normalize_percentile
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 # Try to import stardist at module level
 try:
     import stardist
+    from stardist import Rays_Octo
     from stardist.models import StarDist2D, StarDist3D
 
     _is_stardist_available = True
@@ -50,8 +52,8 @@ StarDist Automatic Segmentation:
 • NMS Threshold (nms_thresh): non-maximum suppression IoU threshold
     """
 
-    # model_preset is NOT a dataclass field — it's set as a plain attribute
-    # in __post_init__ and managed by the model_preset_combo in nd_easy_segment.
+    # inference_model_name is NOT a dataclass field — it's set as a plain attribute
+    # in __post_init__ and managed by the model combo in nd_easy_segment.
     # This avoids the form trying to create an unsupported widget for it.
 
     prob_thresh: float = field(
@@ -78,7 +80,7 @@ StarDist Automatic Segmentation:
         },
     )
 
-    # model_path removed — model selection is done via model_preset_combo
+    # model_path removed — model selection is done via inference model combo
     # in nd_easy_segment, populated by get_model_axis_map() which includes
     # both BUILTIN_MODEL_MAP entries and user-trained models from model_save_dir.
 
@@ -103,8 +105,8 @@ StarDist Automatic Segmentation:
         },
     )
 
-    train_patch_size_y: int = field(
-        default=256,
+    train_patch_size_xy: int = field(
+        default=128,
         metadata={
             "type": "int",
             "param_type": "training",
@@ -115,15 +117,15 @@ StarDist Automatic Segmentation:
         },
     )
 
-    train_patch_size_x: int = field(
-        default=256,
+    train_patch_size_z: int = field(
+        default=32,
         metadata={
             "type": "int",
             "param_type": "training",
-            "min": 32,
-            "max": 1024,
-            "step": 32,
-            "default": 256,
+            "min": 1,
+            "max": 256,
+            "step": 4,
+            "default": 32,
         },
     )
 
@@ -139,6 +141,72 @@ StarDist Automatic Segmentation:
         },
     )
 
+    unet_n_depth: int = field(
+        default=3,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 8,
+            "step": 1,
+            "default": 3,
+        },
+    )
+
+    train_batch_size: int = field(
+        default=4,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 32,
+            "step": 1,
+            "default": 4,
+        },
+    )
+
+    axial_anisotropy: float = field(
+        default=3.0,
+        metadata={
+            "type": "float",
+            "param_type": "training",
+            "min": 1.0,
+            "max": 20.0,
+            "step": 0.5,
+            "default": 3.0,
+        },
+    )
+
+    xy_grid_size: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 16,
+            "step": 1,
+            "default": 1,
+        },
+    )
+
+    sparse: bool = field(
+        default=False,
+        metadata={
+            "type": "bool",
+            "param_type": "training",
+            "default": False,
+        },
+    )
+
+    use_octo: bool = field(
+        default=False,
+        metadata={
+            "type": "bool",
+            "param_type": "training",
+            "default": False,
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
@@ -148,19 +216,19 @@ StarDist Automatic Segmentation:
         # Set by nd_easy_segment before calling train() or segment()
         self.patch_path = ""
         self.model_save_dir = ""
-        self.model_name = ""
-        # Model preset: selected via combo in nd_easy_segment
-        self.model_preset = "2D_versatile_fluo"
+        self.training_model_name = ""
+        # Inference model: selected via combo in nd_easy_segment
+        self.inference_model_name = "2D_versatile_fluo"
 
     def get_recommended_axis(self) -> str:
         """
-        Get the recommended axis for the current model preset.
+        Get the recommended axis for the current inference model.
 
         Returns:
             str: Recommended axis string (e.g., "YX", "YXC", "ZYX")
         """
         full_map = self.get_model_axis_map()
-        return full_map.get(self.model_preset, "YX")
+        return full_map.get(self.inference_model_name, "YX")
 
     def get_model_axis_map(self) -> dict:
         """
@@ -211,7 +279,7 @@ StarDist Automatic Segmentation:
 
     def set_model(self, model_name):
         """Load the model for model_name and cache it in self.models dict."""
-        self.model_preset = model_name
+        self.inference_model_name = model_name
 
         # Already cached — nothing to do
         if model_name in self.models:
@@ -244,16 +312,16 @@ StarDist Automatic Segmentation:
         self.models[model_name] = model
 
     def __setattr__(self, name, value):
-        """Override setattr to detect model_preset changes."""
+        """Override setattr to detect inference_model_name changes."""
         # Get old value if it exists
         old_value = getattr(self, name, None) if hasattr(self, name) else None
 
         # Set the new value
         super().__setattr__(name, value)
 
-        # Check if model_preset changed
+        # Check if inference_model_name changed
         if (
-            name == "model_preset"
+            name == "inference_model_name"
             and old_value != value
             and old_value is not None
         ):
@@ -272,18 +340,8 @@ StarDist Automatic Segmentation:
         return _is_stardist_available
 
     def _normalize(self, image: np.ndarray) -> np.ndarray:
-        """Simple min-max normalization to [0, 1] with float32 output."""
-        if image.dtype.kind in {"f"}:
-            # Assume already in a reasonable range for floats
-            return image.astype(np.float32, copy=False)
-        img = image.astype(np.float32, copy=False)
-        vmin = float(np.min(img))
-        vmax = float(np.max(img))
-        if vmax > vmin:
-            img = (img - vmin) / (vmax - vmin)
-        else:
-            img = np.zeros_like(img, dtype=np.float32)
-        return img
+        """Normalize image using percentile normalization (p1, p99)."""
+        return normalize_percentile(image)
 
     def segment(self, image, **kwargs):
         """
@@ -296,13 +354,15 @@ StarDist Automatic Segmentation:
             numpy.ndarray: Labeled segmentation mask.
         """
         # Load model on first use if not yet cached
-        if self.model_preset not in self.models:
-            self.set_model(self.model_preset)
+        if self.inference_model_name not in self.models:
+            self.set_model(self.inference_model_name)
 
-        model = self.models[self.model_preset]
-        model_axis = self.get_model_axis_map().get(self.model_preset, "YX")
+        model = self.models[self.inference_model_name]
+        model_axis = self.get_model_axis_map().get(
+            self.inference_model_name, "YX"
+        )
         is_3d_model = "Z" in model_axis
-        print(f"Using model: {self.model_preset} (axis: {model_axis})")
+        print(f"Using model: {self.inference_model_name} (axis: {model_axis})")
 
         # Convert multi-channel to grayscale if needed
         if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
@@ -366,6 +426,7 @@ StarDist Automatic Segmentation:
                 axes=axes,
                 prob_thresh=self.prob_thresh,
                 nms_thresh=self.nms_thresh,
+                # n_tiles = (1, 4, 4)
             )
             print(
                 f"StarDist: Found {len(np.unique(labels)) - 1} objects (prob_thresh={self.prob_thresh}, nms_thresh={self.nms_thresh})"
@@ -374,7 +435,7 @@ StarDist Automatic Segmentation:
             print("❌ StarDist predict_instances failed!")
             print(f"   Input shape: {x.shape}")
             print(f"   Input dtype: {x.dtype}")
-            print(f"   Model preset: {self.model_preset}")
+            print(f"   Inference model: {self.inference_model_name}")
             print(f"   Error type: {type(e).__name__}")
             print(f"   Error message: {str(e)}")
             import traceback
@@ -402,7 +463,7 @@ import numpy as np
 from stardist.models import StarDist2D
 
 # Parameters from segmenter
-model_preset = "{self.model_preset}"
+model_preset = "{self.inference_model_name}"
 prob_thresh = {self.prob_thresh}
 nms_thresh = {self.nms_thresh}
 
@@ -449,7 +510,7 @@ task.outputs["mask"] = ndarr_mask
             dict: Dictionary of parameter names to current values.
         """
         return {
-            "model_preset": self.model_preset,
+            "inference_model_name": self.inference_model_name,
             "prob_thresh": self.prob_thresh,
             "nms_thresh": self.nms_thresh,
             "normalize_input": self.normalize_input,
@@ -461,7 +522,7 @@ task.outputs["mask"] = ndarr_mask
 
         Reads info.json from ``self.patch_path`` to determine axes, collects
         training data, splits into train/val, and trains a new StarDist2D
-        model.  The model is saved under ``self.model_save_dir / self.model_name``.
+        model.  The model is saved under ``self.model_save_dir / self.training_model_name``.
 
         This signature mirrors MonaiUNetSegmenter.train() so that
         ``_run_training`` can call every segmenter the same way.
@@ -477,7 +538,7 @@ task.outputs["mask"] = ndarr_mask
         import json
 
         import keras
-        from stardist.models import Config2D, StarDist2D
+        from stardist.models import Config2D, Config3D, StarDist2D, StarDist3D
 
         from ...utilities.dl_util import (
             collect_training_data,
@@ -486,7 +547,7 @@ task.outputs["mask"] = ndarr_mask
 
         # ---- resolve paths from self (set by _run_training) ----
         patch_path = self.patch_path
-        model_name = self.model_name
+        model_name = self.training_model_name
         model_base_path = self.model_save_dir
 
         if not patch_path:
@@ -501,13 +562,16 @@ task.outputs["mask"] = ndarr_mask
         with open(json_path) as f:
             info = json.load(f)
         axes = info["axes"]
+        is_3d = "Z" in axes
 
         if axes == "YXC":
             n_channel_in = 3
             add_trivial_channel = False
         else:
             n_channel_in = 1
-            add_trivial_channel = True
+            add_trivial_channel = (
+                not is_3d
+            )  # 3D patches already have no channel dim
 
         # ---- collect & split data ----
         X, Y = collect_training_data(
@@ -515,13 +579,15 @@ task.outputs["mask"] = ndarr_mask
             normalize_input=False,
             add_trivial_channel=add_trivial_channel,
         )
+
         X_train, Y_train, X_val, Y_val = divide_training_data(X, Y, val_size=2)
 
         msg = (
-            f"🏋️ Training StarDist2D: {len(X_train)} train, {len(X_val)} val\n"
+            f"🏋️ Training {'StarDist3D' if is_3d else 'StarDist2D'}: {len(X_train)} train, {len(X_val)} val\n"
             f"   axes={axes}, n_channel_in={n_channel_in}\n"
             f"   epochs={self.num_epochs}, steps_per_epoch={self.steps_per_epoch}\n"
-            f"   train_patch_size=({self.train_patch_size_y}, {self.train_patch_size_x})"
+            f"   train_patch_size=({self.train_patch_size_xy}, {self.train_patch_size_xy})"
+            + (f", z={self.train_patch_size_z}" if is_3d else "")
         )
         print(msg)
         if updater is not None:
@@ -556,38 +622,89 @@ task.outputs["mask"] = ndarr_mask
                     )
 
         custom_callback = _ProgressCallback(updater, self.num_epochs)
+        patch_size_xy = self.train_patch_size_xy
 
         # ---- create model & train ----
-        config = Config2D(
-            n_rays=32,
-            axes=axes,
-            n_channel_in=n_channel_in,
-            train_patch_size=(
-                self.train_patch_size_y,
-                self.train_patch_size_x,
-            ),
-            unet_n_depth=3,
-        )
-        model = StarDist2D(
-            config=config, name=model_name, basedir=model_base_path
-        )
+        if is_3d:
+
+            if self.use_octo:
+                rays = Rays_Octo(n_level=1)
+                config = Config3D(
+                    rays=rays,
+                    # rays=rays,
+                    axes=axes,
+                    n_channel_in=n_channel_in,
+                    train_patch_size=(
+                        self.train_patch_size_z,
+                        patch_size_xy,
+                        patch_size_xy,
+                    ),
+                    unet_n_depth=self.unet_n_depth,
+                    train_batch_size=self.train_batch_size,
+                    anisotropy=(self.axial_anisotropy, 1, 1),
+                    grid=(1, self.xy_grid_size, self.xy_grid_size),
+                )
+            else:
+                config = Config3D(
+                    n_rays=16,
+                    # rays=rays,
+                    axes=axes,
+                    n_channel_in=n_channel_in,
+                    train_patch_size=(
+                        self.train_patch_size_z,
+                        patch_size_xy,
+                        patch_size_xy,
+                    ),
+                    unet_n_depth=self.unet_n_depth,
+                    train_batch_size=self.train_batch_size,
+                    anisotropy=(self.axial_anisotropy, 1, 1),
+                    grid=(1, self.xy_grid_size, self.xy_grid_size),
+                )
+            model = StarDist3D(
+                config=config, name=model_name, basedir=model_base_path
+            )
+        else:
+            config = Config2D(
+                n_rays=32,
+                axes=axes,
+                n_channel_in=n_channel_in,
+                train_patch_size=(
+                    patch_size_xy,
+                    patch_size_xy,
+                ),
+                unet_n_depth=3,
+            )
+            model = StarDist2D(
+                config=config, name=model_name, basedir=model_base_path
+            )
         model.prepare_for_training()
 
         if custom_callback is not None:
             custom_callback.num_epochs = self.num_epochs
             model.callbacks.append(custom_callback)
 
+        if self.sparse:
+            Y_train = np.array(Y_train)
+            Y_train -= 1
+            Y_val = np.array(Y_val)
+            Y_val -= 1
+
+        X_train = np.array(X_train).astype(np.float32)
+        Y_train = np.array(Y_train).astype(np.int32)
+        X_val = np.array(X_val).astype(np.float32)
+        Y_val = np.array(Y_val).astype(np.int32)
+
         model.train(
             X_train,
             Y_train,
-            validation_data=(X_val, Y_val),
+            validation_data=(X_train, Y_train),
             epochs=self.num_epochs,
             steps_per_epoch=self.steps_per_epoch,
         )
 
         # ---- store trained model in cache for immediate use ----
         self.models[model_name] = model
-        self.model_preset = model_name
+        self.inference_model_name = model_name
         model_full_path = os.path.join(model_base_path, model_name)
         done_msg = f"✅ Training complete. Model saved to: {model_full_path}"
         print(done_msg)

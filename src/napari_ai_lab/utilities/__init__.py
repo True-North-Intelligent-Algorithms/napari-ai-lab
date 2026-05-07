@@ -4,8 +4,9 @@ Utilities module for napari-ai-lab.
 
 from .dl_util import (
     collect_training_data,
+    compute_percentiles,
     divide_training_data,
-    normalize_image,
+    normalize_intensity,
     normalize_percentile,
 )
 from .image_util import (
@@ -28,6 +29,7 @@ from .progress_logger import (
     ProgressLogger,
 )
 from .qt_progress_logger import QtProgressLogger
+from .slice_processor import SliceProcessor, SliceProcessorThread
 
 __all__ = [
     # image_util
@@ -49,8 +51,12 @@ __all__ = [
     "ConsoleProgressLogger",
     "QtProgressLogger",
     # dl_util
-    "normalize_image",
+    "normalize_intensity",
+    "compute_percentiles",
     "normalize_percentile",
     "collect_training_data",
     "divide_training_data",
+    # slice_processor
+    "SliceProcessor",
+    "SliceProcessorThread",
 ]

@@ -33,9 +33,8 @@ def test_stardist_interactive():
     print(f"📸 Image: {image.shape}, range: [{image.min()}-{image.max()}]")
 
     # Simple StarDist configuration
-    segmenter = StardistSegmenter(
-        model_preset="2D_versatile_fluo", prob_thresh=0.5, nms_thresh=0.4
-    )
+    segmenter = StardistSegmenter(prob_thresh=0.5, nms_thresh=0.4)
+    segmenter.inference_model_name = "2D_versatile_fluo"
     run_in_local_environment = segmenter.are_dependencies_available()
 
     print(
