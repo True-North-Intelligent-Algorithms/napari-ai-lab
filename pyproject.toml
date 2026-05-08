@@ -52,8 +52,6 @@ testing = [
 [project.entry-points."napari.manifest"]
 napari-ai-lab = "napari_ai_lab:napari.yaml"
 
-
-
 [build-system]
 requires = ["setuptools>=42.0.0", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
@@ -115,6 +113,8 @@ exclude = [
     "venv",
     "*vendored*",
     "*_vendor*",
+    "**/vendored/**",
+    "src/napari_ai_lab/vendored",
 ]
 fix = true
 
