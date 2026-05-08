@@ -176,6 +176,18 @@ class NDAILab(QWidget):
             text={"string": "{split_set}", "size": 15, "color": "green"},
         )
 
+        from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
+
+        self.bounding_boxes_layer = BoundingBoxLayer(
+            name="Bounding Boxes",
+            edge_color="magenta",
+            face_color="transparent",
+            edge_width=5,
+            ndim=annotation_ndim,
+        )
+
+        self.viewer.add_layer(self.bounding_boxes_layer)
+
         # Distribute layers to sub-apps (direct assignment, not calling their _set_image_layer)
         self._distribute_layers_to_sub_apps()
 
