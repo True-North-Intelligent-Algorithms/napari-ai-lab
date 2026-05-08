@@ -589,8 +589,9 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
             if updater is not None:
                 progress = int(epoch / num_epochs * 100)
                 updater(
+                    epoch,
+                    num_epochs,
                     f"Epoch {epoch} - training loss: {average_loss:.4f}{val_loss_str}",
-                    progress,
                 )
 
             epoch += 1
