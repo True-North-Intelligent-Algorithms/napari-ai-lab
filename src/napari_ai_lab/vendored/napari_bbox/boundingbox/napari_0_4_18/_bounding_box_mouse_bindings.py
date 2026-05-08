@@ -242,7 +242,6 @@ def _move_active_element_under_cursor(
         Position of mouse cursor in data coordinates.
     """
     # TODO check
-    kljklh
     print('move active element under cursor')
     # If nothing selected return
     if len(layer.selected_data) == 0:
