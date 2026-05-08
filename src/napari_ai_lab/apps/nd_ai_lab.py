@@ -127,7 +127,7 @@ class NDAILab(QWidget):
 
         # Create shared layers ONCE
 
-        self.labels_layer = self.viewer.add_labels(
+        self.annotations_layer = self.viewer.add_labels(
             labels_data, name="Labels (Persistent)"
         )
 
@@ -143,7 +143,7 @@ class NDAILab(QWidget):
         # Create points layer for interactive segmentation
         self._point_choices = ["positive", "negative"]
         LABEL_COLOR_CYCLE = ["red", "blue"]
-        annotation_ndim = len(self.labels_layer.data.shape)
+        annotation_ndim = len(self.annotations_layer.data.shape)
 
         self.points_layer = self.viewer.add_points(
             name="Point Layer",
@@ -202,7 +202,7 @@ class NDAILab(QWidget):
         """
         # Label widget needs: image, labels, points, boxes
         self.label_widget.image_layer = self.image_layer
-        self.label_widget.annotation_layer = self.labels_layer
+        self.label_widget.annotation_layer = self.annotations_layer
         self.label_widget.points_layer = self.points_layer
         self.label_widget.boxes_layer = self.boxes_layer
 
@@ -233,14 +233,14 @@ class NDAILab(QWidget):
 
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer
-        self.augment_widget.annotation_layer = self.labels_layer
+        self.augment_widget.annotation_layer = self.annotations_layer
         self.augment_widget.boxes_layer = (
             self.boxes_layer
         )  # Provide boxes layer for augmentation if needed
 
         # Segment widget needs: image, labels, predictions, points, shapes
         self.segment_widget.image_layer = self.image_layer
-        self.segment_widget.annotation_layer = self.labels_layer
+        self.segment_widget.annotation_layer = self.annotations_layer
         self.segment_widget.predictions_layers = self.predictions_layers
         self.segment_widget.points_layer = self.points_layer
         self.segment_widget.shapes_layer = self.shapes_layer
@@ -356,12 +356,12 @@ class NDAILab(QWidget):
         if (
             active_widget_name == "Label"
             and hasattr(self, "labels_layer")
-            and self.labels_layer
+            and self.annotations_layer
             and self.image_data_model.parent_directory
         ):
             try:
                 self.image_data_model.save_annotations(
-                    self.labels_layer.data,
+                    self.annotations_layer.data,
                     self.current_image_index,
                     current_step=self.viewer.dims.current_step,
                     axes_to_collapse=self.axes_to_collapse,
@@ -409,8 +409,8 @@ class NDAILab(QWidget):
         layers_to_remove = []
 
         # Collect layers to remove
-        if hasattr(self, "labels_layer") and self.labels_layer:
-            layers_to_remove.append(("Labels", self.labels_layer))
+        if hasattr(self, "labels_layer") and self.annotations_layer:
+            layers_to_remove.append(("Labels", self.annotations_layer))
 
         # Handle predictions_layers dictionary (multiple prediction layers)
         if hasattr(self, "predictions_layers") and self.predictions_layers:
@@ -437,7 +437,7 @@ class NDAILab(QWidget):
 
         # Clear references
         if hasattr(self, "labels_layer"):
-            self.labels_layer = None
+            self.annotations_layer = None
         if hasattr(self, "predictions_layers"):
             self.predictions_layers = {}
         if hasattr(self, "points_layer"):
@@ -554,9 +554,9 @@ class NDAILab(QWidget):
             pred_roi = pred_data[roi_slice]
 
             # Copy to labels layer at the same location
-            if hasattr(self, "labels_layer") and self.labels_layer:
-                self.labels_layer.data[roi_slice] = pred_roi
-                self.labels_layer.refresh()  # Force napari to update the display
+            if hasattr(self, "labels_layer") and self.annotations_layer:
+                self.annotations_layer.data[roi_slice] = pred_roi
+                self.annotations_layer.refresh()  # Force napari to update the display
                 print(f"✓ Copied {selected_name} predictions to labels layer")
             else:
                 print("⚠️ No labels layer available")
