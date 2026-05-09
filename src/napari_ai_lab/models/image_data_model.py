@@ -97,6 +97,8 @@ class ImageDataModel:
         self._input_images_io = None
         self._current_segmenter_name: str | None = None
         self.axis_types: str | None = None
+        self.annotation_save_granularity: str = "file"
+        self.prediction_save_granularity: str = "file"
 
         # Load image list on initialization
         self._populate_image_list(str(self.parent_directory))
@@ -180,7 +182,7 @@ class ImageDataModel:
             self.set_input_images_io_type("stacked_sequence")
             stacked_sequence_io = self.get_input_images_io()
             stacked_images = stacked_sequence_io.load_full_stack(
-                str(self.parent_directory), normalize=True
+                str(self.parent_directory), normalize=False
             )
             print(f"Cached stack shape: {stacked_images.shape}")
             self.image_data = stacked_images
@@ -427,6 +429,28 @@ class ImageDataModel:
                     self._annotations_io_axes_to_collapse,
                 )
             elif (
+                self.annotation_io_type == "stacked_sequence"
+                and self.input_images_io_type != "stacked_sequence"
+            ):
+                # Create metadata from model's current image data
+                image_paths = self.get_image_paths()
+                image_names = [path.stem for path in image_paths]
+
+                # Use current image data as template (assuming all images have same shape/axes)
+                if self.image_data is not None and self.axis_types is not None:
+                    # Create lists with same shape/axes for each image
+                    original_shapes = [self.image_data.shape] * len(
+                        image_paths
+                    )
+                    axes_infos = [self.axis_types] * len(image_paths)
+
+                    self._annotations_io.set_image_names(image_names)
+                    self._annotations_io.set_original_shapes_and_axes_infos(
+                        original_shapes,
+                        axes_infos,
+                        self._annotations_io_axes_to_collapse,
+                    )
+            elif (
                 self.annotation_io_type == "tiff_slice"
                 and self.axis_types is not None
             ):
@@ -435,6 +459,12 @@ class ImageDataModel:
                 )
                 self._annotations_io.set_axis_slice(axis_slice)
                 self._annotations_io.set_shape_total(self.image_data.shape)
+
+            # Configure save granularity for stacked_sequence
+            if self.annotation_io_type == "stacked_sequence":
+                self._annotations_io.set_save_axis(
+                    self.annotation_save_granularity
+                )
 
         return self._annotations_io
 
@@ -446,6 +476,12 @@ class ImageDataModel:
         self._annotations_io_axes_to_collapse = (
             axes_to_collapse  # Store axis to collapse for later use
         )
+        self._annotations_io = None
+
+    def set_annotation_save_granularity(self, granularity: str):
+        """Set save granularity for annotations ('file', 'YX', 'ZYX', etc.)."""
+        self.annotation_save_granularity = granularity
+        # Reset IO so it picks up new setting
         self._annotations_io = None
 
     def load_existing_annotations(
@@ -525,6 +561,34 @@ class ImageDataModel:
                     axes_infos,
                     self._predictions_io_axes_to_collapse,
                 )
+            elif (
+                self.prediction_io_type == "stacked_sequence"
+                and self.input_images_io_type != "stacked_sequence"
+            ):
+                # Create metadata from model's current image data
+                image_paths = self.get_image_paths()
+                image_names = [path.stem for path in image_paths]
+
+                # Use current image data as template (assuming all images have same shape/axes)
+                if self.image_data is not None and self.axis_types is not None:
+                    # Create lists with same shape/axes for each image
+                    original_shapes = [self.image_data.shape] * len(
+                        image_paths
+                    )
+                    axes_infos = [self.axis_types] * len(image_paths)
+
+                    self._predictions_io.set_image_names(image_names)
+                    self._predictions_io.set_original_shapes_and_axes_infos(
+                        original_shapes,
+                        axes_infos,
+                        self._predictions_io_axes_to_collapse,
+                    )
+
+            # Configure save granularity for stacked_sequence
+            if self.prediction_io_type == "stacked_sequence":
+                self._predictions_io.set_save_axis(
+                    self.prediction_save_granularity
+                )
 
         return self._predictions_io
 
@@ -545,6 +609,12 @@ class ImageDataModel:
         self._predictions_io_axes_to_collapse = (
             axes_to_collapse  # Store axis to collapse for later use
         )
+
+    def set_prediction_save_granularity(self, granularity: str):
+        """Set save granularity for predictions ('file', 'YX', 'ZYX', etc.)."""
+        self.prediction_save_granularity = granularity
+        # Reset IO so it picks up new setting
+        self._predictions_io = None
 
     def set_current_segmenter_name(self, name: str):
         """Set current segmenter name for organizing predictions."""
@@ -1105,7 +1175,10 @@ class ImageDataModel:
         image_paths = self.get_image_paths()
 
         if self.prediction_io_type == "stacked_sequence":
-            dataset_name = image_paths[current_step[0]].stem
+            if len(image_paths) == 1:
+                dataset_name = image_paths[0].stem
+            else:
+                dataset_name = image_paths[current_step[0]].stem
         else:
             dataset_name = image_paths[image_index].stem
 
@@ -1433,6 +1506,7 @@ class ImageDataModel:
             print(msg)
 
         done = 0
+
         for image_path, truth_path in zip(
             input_files, truth_files, strict=False
         ):

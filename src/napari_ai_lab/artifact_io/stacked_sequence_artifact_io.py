@@ -36,62 +36,26 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
         self._image_names = []
         self._original_shapes = []
         self._normalize = False
+        self._save_axis = (
+            "file"  # Default: save entire file, or set to 'YX', 'ZYX', etc.
+        )
 
-    def save(
-        self,
-        save_directory: str,
-        dataset_name: str,
-        data: np.ndarray,
-        current_step: tuple = None,
-        selected_axis: str = None,
-    ) -> bool:
-        try:
-            save_dir = Path(save_directory)
-            save_dir.mkdir(parents=True, exist_ok=True)
+    def load_full_stack(
+        self, load_directory: str, normalize: bool = False
+    ) -> np.ndarray:
+        if (
+            self._current_directory != load_directory
+            or self._normalize != normalize
+        ):
+            self._normalize = normalize
+            image_names = collect_all_image_names(load_directory)
+            self.load_image_collection_as_stack(load_directory, image_names)
 
-            if current_step:
-                idx = current_step[0]
-                file_name = self._image_names[idx]
-                base_name = file_name.split(".")[
-                    0
-                ]  # Remove extension if present
-                sub_step = current_step[1:]
-                artifact_name = create_artifact_name(
-                    base_name, sub_step, selected_axis
-                )
-                path = save_dir / f"{artifact_name}.tif"
-                orig_shape = self._original_shapes[idx][-len(selected_axis) :]
-                # Crop from 0 to orig_shape size in each dimension
-                crop = tuple(slice(0, s) for s in orig_shape)
-                data = data[crop]
-                io.imsave(str(path), data.astype(np.uint16))
-                return True
-
-            # Sparse save: iterate the stacked first dimension and write only
-            # slices that contain data, cropping out the original (un-padded)
-            # shape for each slice.
-            n_slices = data.shape[0]
-            for n in range(n_slices):
-                slice_data = data[n]
-
-                # Crop padding off using the per-slice original shape
-                if n < len(self._original_shapes):
-                    original_shape = self._original_shapes[n]
-                    crop = tuple(slice(0, s) for s in original_shape)
-                    slice_data = slice_data[crop]
-
-                # Skip empty (all-zero) slices to keep the save sparse
-                if not np.any(slice_data):
-                    continue
-
-                file_name = self._image_names[n]
-                path = save_dir / f"{file_name}.tif"
-                io.imsave(str(path), slice_data.astype(np.uint16))
-
-            return True
-        except Exception as e:  # noqa: BLE001
-            print(f"Error saving {dataset_name}: {e}")
-            return False
+        return (
+            self._current_stack
+            if self._current_stack is not None
+            else np.array([])
+        )
 
     def load(self, load_directory: str, dataset_name: str) -> np.ndarray:
         if len(self._image_names) == 0:
@@ -220,26 +184,139 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
 
             images.append(img)
 
-        self._current_stack = pad_to_largest(images, self._axes_infos)
+        if len(image_names) > 1:
+            self._current_stack = pad_to_largest(images, self._axes_infos)
+        else:
+            self._current_stack = images[0]
+
         self._current_directory = directory
         print(f"Cached sparse stack shape: {self._current_stack.shape}")
 
-    def load_full_stack(
-        self, load_directory: str, normalize: bool = False
-    ) -> np.ndarray:
-        if (
-            self._current_directory != load_directory
-            or self._normalize != normalize
-        ):
-            self._normalize = normalize
-            image_names = collect_all_image_names(load_directory)
-            self.load_image_collection_as_stack(load_directory, image_names)
+    def save(
+        self,
+        save_directory: str,
+        dataset_name: str,
+        data: np.ndarray,
+        current_step: tuple = None,
+        selected_axis: str = None,
+    ) -> bool:
+        try:
+            save_dir = Path(save_directory)
+            save_dir.mkdir(parents=True, exist_ok=True)
 
-        return (
-            self._current_stack
-            if self._current_stack is not None
-            else np.array([])
-        )
+            if current_step:
+                idx = current_step[0]
+                file_name = self._image_names[idx]
+                base_name = file_name.split(".")[
+                    0
+                ]  # Remove extension if present
+                sub_step = current_step[1:]
+                artifact_name = create_artifact_name(
+                    base_name, sub_step, selected_axis
+                )
+                path = save_dir / f"{artifact_name}.tif"
+                orig_shape = self._original_shapes[idx][-len(selected_axis) :]
+                # Crop from 0 to orig_shape size in each dimension
+                crop = tuple(slice(0, s) for s in orig_shape)
+                data = data[crop]
+                io.imsave(str(path), data.astype(np.uint16))
+                return True
+
+            # Sparse save: iterate file names (N dimension) and write only
+            # slices that contain data, cropping out the original (un-padded)
+            # shape for each slice.
+
+            # Check if N=1 and N dimension is not present in data
+            n_files = len(self._image_names)
+            if n_files == 1 and data.shape == self._original_shapes[0]:
+                # N dimension not present, wrap data to add N dimension
+                data = data[np.newaxis, ...]
+
+            # Loop through all file names (N dimension, always first)
+            for n in range(n_files):
+                file_name = self._image_names[n]
+                file_data = data[n]
+
+                # Crop padding off using the original shape
+                if n < len(self._original_shapes):
+                    original_shape = self._original_shapes[n]
+                    crop = tuple(slice(0, s) for s in original_shape)
+                    file_data = file_data[crop]
+
+                # Skip if entire file is empty
+                if not np.any(file_data):
+                    continue
+
+                # Check save mode
+                if self._save_axis == "file":
+                    # Save entire file as one piece
+                    path = save_dir / f"{file_name}.tif"
+                    io.imsave(str(path), file_data.astype(np.uint16))
+                else:
+                    # Save as slices based on save_axis
+                    # Get data_axis for this file (remove 'N' if present)
+                    if n < len(self._axes_infos):
+                        data_axis = self._axes_infos[n].replace("N", "")
+                    else:
+                        # Fallback: assume standard axis order
+                        if file_data.ndim == 2:
+                            data_axis = "YX"
+                        elif file_data.ndim == 3:
+                            data_axis = "ZYX"
+                        else:
+                            data_axis = "YX"  # Default
+
+                    # Determine which dimensions to iterate (not in save_axis)
+                    iterate_dims = []
+                    save_dims = []
+                    for i, axis_char in enumerate(data_axis):
+                        if axis_char in self._save_axis:
+                            save_dims.append(i)
+                        else:
+                            iterate_dims.append(i)
+
+                    if len(iterate_dims) > 0:
+                        # Need to iterate through non-save dimensions
+                        nn_ranges = [
+                            range(file_data.shape[i]) for i in iterate_dims
+                        ]
+
+                        for nn_indices in itertools.product(*nn_ranges):
+                            # Build indexing tuple
+                            full_indices = [slice(None)] * file_data.ndim
+                            for dim_idx, val in zip(
+                                iterate_dims, nn_indices, strict=False
+                            ):
+                                full_indices[dim_idx] = val
+
+                            slice_data = file_data[tuple(full_indices)]
+
+                            # Skip empty slices
+                            if not np.any(slice_data):
+                                continue
+
+                            # Create artifact name with indices
+                            # Pad sub_step to match data_axis length with zeros for save dims
+                            sub_step = [0] * len(data_axis)
+                            for dim_idx, val in zip(
+                                iterate_dims, nn_indices, strict=False
+                            ):
+                                sub_step[dim_idx] = val
+
+                            artifact_name = create_artifact_name(
+                                file_name, tuple(sub_step), self._save_axis
+                            )
+                            path = save_dir / f"{artifact_name}.tif"
+                            io.imsave(str(path), slice_data.astype(np.uint16))
+                    else:
+                        # No iteration needed, save directly
+                        path = save_dir / f"{file_name}.tif"
+                        io.imsave(str(path), file_data.astype(np.uint16))
+
+            return True
+        except Exception as e:  # noqa: BLE001
+            print(f"Error saving {dataset_name}: {e}")
+            return False
 
     def get_image_names(self):
         """Get list of image names."""
@@ -293,3 +370,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
     def get_axes_infos(self):
         """Get list of axis infos."""
         return self._axes_infos
+
+    def set_save_axis(self, save_axis: str):
+        """Set save axis (e.g., 'file', 'YX', 'ZYX', 'ZYXC')."""
+        self._save_axis = save_axis
