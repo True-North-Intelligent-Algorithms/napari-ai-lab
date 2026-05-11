@@ -205,12 +205,18 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
             save_dir.mkdir(parents=True, exist_ok=True)
 
             if current_step:
-                idx = current_step[0]
+
+                # if only one file name, N is not in current step and file index is 0
+                if len(self._image_names) == 1:
+                    idx = 0
+                    sub_step = current_step
+                else:
+                    idx = current_step[0]
+                    sub_step = current_step[1:]
                 file_name = self._image_names[idx]
                 base_name = file_name.split(".")[
                     0
                 ]  # Remove extension if present
-                sub_step = current_step[1:]
                 artifact_name = create_artifact_name(
                     base_name, sub_step, selected_axis
                 )
