@@ -739,6 +739,14 @@ class NDEasySegment(BaseNDApp):
             self.segmenter_parameter_form.refresh_model_combo(
                 select_name=trained_name
             )
+            # Also update the model_file_path field in the inference form
+            if (
+                hasattr(self.segmenter, "model_file_path")
+                and self.segmenter.model_file_path
+            ):
+                self.segmenter_parameter_form.set_parameter(
+                    "model_file_path", self.segmenter.model_file_path
+                )
             if hasattr(self, "training_parameter_form"):
                 self.training_parameter_form.refresh_model_combo(
                     select_name=trained_name
