@@ -10,7 +10,6 @@ import os
 from dataclasses import dataclass, field
 
 import numpy as np
-from skimage.transform import resize
 
 from ...utilities.dl_util import normalize_percentile
 from .GlobalSegmenterBase import GlobalSegmenterBase
@@ -267,7 +266,6 @@ StarDist Automatic Segmentation:
         Returns:
             dict: {model_name: axis_string} for every valid model found.
         """
-        import json
 
         if not self.model_save_dir or not os.path.isdir(self.model_save_dir):
             return {}
@@ -321,24 +319,7 @@ StarDist Automatic Segmentation:
             custom_params_path = os.path.join(
                 self.model_save_dir, model_name, "custom_params.json"
             )
-            if os.path.exists(custom_params_path):
-                try:
-                    with open(custom_params_path) as f:
-                        custom_params = json.load(f)
-                    if "downsize_factor" in custom_params:
-                        self.downsize_factor = custom_params["downsize_factor"]
-                        print(
-                            f"   Loaded downsize_factor={self.downsize_factor} from custom_params.json"
-                        )
-                except (
-                    OSError,
-                    json.JSONDecodeError,
-                    KeyError,
-                    TypeError,
-                ) as e:
-                    print(
-                        f"   Warning: Could not load downsize_factor from custom_params.json: {e}"
-                    )
+            self._load_downsize_factor_from_json(custom_params_path)
 
         elif is_3d:
             model = StarDist3D.from_pretrained(model_name)
@@ -412,24 +393,7 @@ StarDist Automatic Segmentation:
                 self.inference_model_name,
                 "custom_params.json",
             )
-            if os.path.exists(custom_params_path):
-                try:
-                    with open(custom_params_path) as f:
-                        custom_params = json.load(f)
-                    if "downsize_factor" in custom_params:
-                        self.downsize_factor = custom_params["downsize_factor"]
-                        print(
-                            f"   Using downsize_factor={self.downsize_factor} from custom_params.json"
-                        )
-                except (
-                    OSError,
-                    json.JSONDecodeError,
-                    KeyError,
-                    TypeError,
-                ) as e:
-                    print(
-                        f"   Warning: Could not load custom_params.json: {e}"
-                    )
+            self._load_downsize_factor_from_json(custom_params_path)
 
         # Convert multi-channel to grayscale if needed
         if is_3d_model and image.ndim == 4 and image.shape[-1] in [3, 4]:
@@ -457,19 +421,7 @@ StarDist Automatic Segmentation:
 
         # Downsize if needed (must match training downsize)
         if self.downsize_factor != 1:
-            if is_3d_model:
-                # For 3D: downsize only Y, X (preserve Z)
-                new_shape = list(x.shape)
-                new_shape[-2] = x.shape[-2] // self.downsize_factor  # Y
-                new_shape[-1] = x.shape[-1] // self.downsize_factor  # X
-            else:
-                # For 2D: downsize Y, X
-                new_shape = list(x.shape)
-                new_shape[0] = x.shape[0] // self.downsize_factor  # Y
-                new_shape[1] = x.shape[1] // self.downsize_factor  # X
-            x = resize(
-                x, new_shape, order=1, preserve_range=True, anti_aliasing=True
-            )
+            x = self._downsize_image(x, self.downsize_factor, is_label=False)
             print(
                 f"   Downsized image: {original_shape} → {x.shape} (factor={self.downsize_factor})"
             )
@@ -522,13 +474,9 @@ StarDist Automatic Segmentation:
 
             # Resize labels back to original shape if downsizing was used
             if self.downsize_factor != 1:
-                labels = resize(
-                    labels,
-                    original_shape,
-                    order=0,
-                    preserve_range=True,
-                    anti_aliasing=False,
-                ).astype(labels.dtype)
+                labels = self._upsize_to_shape(
+                    labels, original_shape, is_label=True
+                )
                 print(
                     f"   Upsized labels back to original: {x.shape} → {labels.shape}"
                 )
@@ -640,7 +588,6 @@ task.outputs["mask"] = ndarr_mask
         Returns:
             dict with keys ``success`` (bool) and ``message`` (str).
         """
-        import json
 
         import keras
         from stardist.models import Config2D, Config3D, StarDist2D, StarDist3D
@@ -693,68 +640,21 @@ task.outputs["mask"] = ndarr_mask
                 f"🔽 Downsizing training data by factor {self.downsize_factor}..."
             )
 
-            def downsize_image(img, factor, is_label=False):
-                """Downsize image in XY only, preserving Z if present."""
-                if is_3d and img.ndim >= 3:
-                    # For 3D: axes are typically ZYX or ZYXC
-                    # Only downsize Y and X dimensions
-                    new_shape = list(img.shape)
-                    new_shape[-2] = img.shape[-2] // factor  # Y dimension
-                    new_shape[-1] = img.shape[-1] // factor  # X dimension
-                    if is_label:
-                        # Use order=0 (nearest neighbor) for labels to preserve label values
-                        return resize(
-                            img,
-                            new_shape,
-                            order=0,
-                            preserve_range=True,
-                            anti_aliasing=False,
-                        ).astype(img.dtype)
-                    else:
-                        return resize(
-                            img,
-                            new_shape,
-                            order=1,
-                            preserve_range=True,
-                            anti_aliasing=True,
-                        )
-                else:
-                    # For 2D: axes are typically YX or YXC
-                    new_shape = list(img.shape)
-                    new_shape[0] = img.shape[0] // factor  # Y dimension
-                    new_shape[1] = img.shape[1] // factor  # X dimension
-                    if is_label:
-                        return resize(
-                            img,
-                            new_shape,
-                            order=0,
-                            preserve_range=True,
-                            anti_aliasing=False,
-                        ).astype(img.dtype)
-                    else:
-                        return resize(
-                            img,
-                            new_shape,
-                            order=1,
-                            preserve_range=True,
-                            anti_aliasing=True,
-                        )
-
-            # Downsize all training images
+            # Downsize all training images via shared base-class helper
             X_train = [
-                downsize_image(x, self.downsize_factor, is_label=False)
+                self._downsize_image(x, self.downsize_factor, is_label=False)
                 for x in X_train
             ]
             Y_train = [
-                downsize_image(y, self.downsize_factor, is_label=True)
+                self._downsize_image(y, self.downsize_factor, is_label=True)
                 for y in Y_train
             ]
             X_val = [
-                downsize_image(x, self.downsize_factor, is_label=False)
+                self._downsize_image(x, self.downsize_factor, is_label=False)
                 for x in X_val
             ]
             Y_val = [
-                downsize_image(y, self.downsize_factor, is_label=True)
+                self._downsize_image(y, self.downsize_factor, is_label=True)
                 for y in Y_val
             ]
 
@@ -889,12 +789,7 @@ task.outputs["mask"] = ndarr_mask
         custom_params_path = os.path.join(
             model_base_path, model_name, "custom_params.json"
         )
-        custom_params = {"downsize_factor": self.downsize_factor}
-        with open(custom_params_path, "w") as f:
-            json.dump(custom_params, f, indent=2)
-        print(
-            f"   Saved downsize_factor={self.downsize_factor} to custom_params.json"
-        )
+        self._save_downsize_factor_to_json(custom_params_path)
 
         model.train(
             X_train,

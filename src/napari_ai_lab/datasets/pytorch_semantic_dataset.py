@@ -2,11 +2,17 @@ import numpy as np
 from tifffile import imread
 from tqdm import tqdm
 
+from ..utilities.resize_util import downsize_yx
+
 
 class PyTorchSemanticDataset:
 
     def __init__(
-        self, image_files, label_files_list, target_shape=(256, 256, 3)
+        self,
+        image_files,
+        label_files_list,
+        target_shape=(256, 256, 3),
+        downsize_factor: int = 1,
     ):
         """
 
@@ -22,6 +28,9 @@ class PyTorchSemanticDataset:
                     Alternitively one list of files can be used if the segmentation masks are index encoded.
         target_shape: tuple of length 2 specifying the sample resolutions of files that
                     will be kept. All other files will NOT be used.
+        downsize_factor: integer factor to downsize images and labels in YX
+                    after loading. Use 1 to disable. Images use bilinear, labels
+                    use nearest-neighbor (preserving label values).
         """
         assert len(image_files) == len(label_files_list[0])
         assert all(
@@ -29,6 +38,7 @@ class PyTorchSemanticDataset:
             for x, y in zip(image_files, label_files_list[0], strict=False)
         )
 
+        self.downsize_factor = downsize_factor
         self.images = []
         self.labels = []
 
@@ -43,6 +53,16 @@ class PyTorchSemanticDataset:
             for label_files in label_files_list:
                 label = imread(label_files[idx])
                 labels.append(label)
+
+            # Optional YX downsize (must match the segmenter's downsize_factor)
+            if self.downsize_factor != 1:
+                image = downsize_yx(
+                    image, self.downsize_factor, is_label=False
+                )
+                labels = [
+                    downsize_yx(lab, self.downsize_factor, is_label=True)
+                    for lab in labels
+                ]
 
             # add channel dim if not present
             if len(image.shape) == 2:

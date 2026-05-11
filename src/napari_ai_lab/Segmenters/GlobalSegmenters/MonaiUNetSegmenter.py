@@ -235,6 +235,18 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
+    downsize_factor: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 8,
+            "step": 1,
+            "default": 1,
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         # Initialize TrainingBase to set up loss tracking lists
@@ -310,6 +322,10 @@ MONAI UNet Automatic Segmentation:
             self.model = None
             raise
 
+        # Load downsize_factor (and other custom params) from sibling JSON
+        metadata_path = Path(model_file_path).with_suffix(".json")
+        self._load_downsize_factor_from_json(metadata_path)
+
     def segment(self, image, normalize=True, **kwargs):
         """
         Perform MONAI UNet segmentation on entire image.
@@ -340,6 +356,18 @@ MONAI UNet Automatic Segmentation:
         if len(image.shape) < 2:
             raise ValueError(
                 f"MonaiUNetSegmenter requires at least 2D images. Got shape: {image.shape}"
+            )
+
+        # Store original shape for later upsizing
+        original_shape = image.shape
+
+        # Downsize input image (must match training downsize)
+        if self.downsize_factor != 1:
+            image = self._downsize_image(
+                image, self.downsize_factor, is_label=False
+            )
+            print(
+                f"   Downsized image: {original_shape} → {image.shape} (factor={self.downsize_factor})"
             )
 
         # Prepare image for inference
@@ -389,8 +417,20 @@ MONAI UNet Automatic Segmentation:
         if not self.show_background_class:
             result = result - 1
 
-        return (result + 1).astype(np.uint16)
+        result = (result + 1).astype(np.uint16)
 
+        # Upsize labels back to original shape if downsizing was used
+        if self.downsize_factor != 1:
+            result = self._upsize_to_shape(
+                result, original_shape, is_label=True
+            )
+            print(
+                f"   Upsized labels back to original: {image.shape} → {result.shape}"
+            )
+
+        return result
+
+    """
     def predict(self, image):
         device = torch.device("cuda")
         self.model.to(device)
@@ -430,6 +470,7 @@ MONAI UNet Automatic Segmentation:
             predicted_classes = predicted_classes - 1
 
         return predicted_classes.cpu().detach().numpy().squeeze() + 1
+    """
 
     @classmethod
     def register(cls):
@@ -705,7 +746,10 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         )
 
         train_data = PyTorchSemanticDataset(
-            image_files=X, label_files_list=Y, target_shape=target_shape
+            image_files=X,
+            label_files_list=Y,
+            target_shape=target_shape,
+            downsize_factor=self.downsize_factor,
         )
 
         # NOTE: the length of the dataset might not be the same as n_samples
@@ -722,6 +766,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
                 image_files=X_val,
                 label_files_list=Y_val,
                 target_shape=target_shape,
+                downsize_factor=self.downsize_factor,
             )
             print(f"Validation data size: {len(validation_data)}")
             validation_loader = DataLoader(
@@ -828,6 +873,10 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         self.model_file_path = str(
             Path(self.model_save_dir) / self.training_model_name
         )
+
+        # Save downsize_factor (and other custom params) to sibling JSON
+        metadata_path = Path(self.model_file_path).with_suffix(".json")
+        self._save_downsize_factor_to_json(metadata_path)
 
         # Save training and validation losses to CSV
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
