@@ -112,6 +112,42 @@ Albumentations Advanced Augmentation:
         },
     )
 
+    brightness_limit: float = field(
+        default=0.9,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.9,
+        },
+    )
+
+    contrast_limit: float = field(
+        default=0.2,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.2,
+        },
+    )
+
+    normalization_jitter: float = field(
+        default=5.0,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 1.0,
+            "max": 20.0,
+            "step": 0.5,
+            "default": 5.0,
+        },
+    )
+
     seed: int | None = field(
         default=None,
         metadata={
@@ -136,6 +172,9 @@ Albumentations Advanced Augmentation:
         self.do_random_sized_crop = self.do_random_sized_crop
         self.do_random_brightness_contrast = self.do_random_brightness_contrast
         self.size_factor = self.size_factor
+        self.brightness_limit = self.brightness_limit
+        self.contrast_limit = self.contrast_limit
+        self.normalization_jitter = self.normalization_jitter
 
     @classmethod
     def register(cls):
@@ -155,6 +194,9 @@ Albumentations Advanced Augmentation:
             "do_random_sized_crop": self.do_random_sized_crop,
             "do_random_brightness_contrast": self.do_random_brightness_contrast,
             "size_factor": self.size_factor,
+            "brightness_limit": self.brightness_limit,
+            "contrast_limit": self.contrast_limit,
+            "normalization_jitter": self.normalization_jitter,
             "seed": self.seed,
         }
 
@@ -202,7 +244,14 @@ Albumentations Advanced Augmentation:
 
         if self.do_random_brightness_contrast:
             # TODO: add brightness and contrast limits as options
-            augmentations.append(A.RandomBrightnessContrast(p=0.8))
+            augmentations.append(
+                A.RandomBrightnessContrast(
+                    p=0.5,
+                    brightness_limit=self.brightness_limit,
+                    contrast_limit=self.contrast_limit,
+                    brightness_by_max=False,
+                )
+            )
 
         return A.Compose(augmentations)
 

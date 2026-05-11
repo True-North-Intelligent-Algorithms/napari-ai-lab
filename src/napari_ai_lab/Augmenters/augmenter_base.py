@@ -101,6 +101,7 @@ class AugmenterBase(ABC):
         )
         self.global_norm_low = None
         self.global_norm_high = None
+        self.normalization_jitter = 5.0
 
         # Create a dedicated random number generator for this augmenter instance
         # This ensures reproducibility and isolation from global random state
@@ -157,9 +158,21 @@ class AugmenterBase(ABC):
             Normalized image in range [0, 1]
         """
         if use_global_stats and self.global_norm_low is not None:
-            return normalize_intensity(
-                image, self.global_norm_low, self.global_norm_high
-            )
+            global_low = self.global_norm_low
+            global_high = self.global_norm_high
+
+            if self.normalization_jitter != 1:
+
+                randomize_normalize_low = 0.9 + self.normalization_jitter * (
+                    self.rng.uniform() ** 2
+                )
+                randomize_normalize_high = 0.9 + self.normalization_jitter * (
+                    self.rng.uniform() ** 2
+                )
+
+                global_low = (1.0 / randomize_normalize_low) * global_low
+                global_high = randomize_normalize_high * global_high
+            return normalize_intensity(image, global_low, global_high)
         else:
             return normalize_percentile(image)
 
