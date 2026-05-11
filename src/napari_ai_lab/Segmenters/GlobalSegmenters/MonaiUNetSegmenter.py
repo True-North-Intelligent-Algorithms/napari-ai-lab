@@ -268,6 +268,9 @@ MONAI UNet Automatic Segmentation:
         # Set by nd_easy_segment before calling train()
         self.training_model_name = ""
 
+        # Tracks which model is active for inference (stem of model filename)
+        self.inference_model_name = ""
+
     def __setattr__(self, name, value):
         """Override setattr to detect parameter changes."""
         # Set the new value
@@ -325,6 +328,46 @@ MONAI UNet Automatic Segmentation:
         # Load downsize_factor (and other custom params) from sibling JSON
         metadata_path = Path(model_file_path).with_suffix(".json")
         self._load_downsize_factor_from_json(metadata_path)
+
+    def get_model_axis_map(self) -> dict:
+        """
+        Scan model_save_dir for trained .pth models and return {stem: axis}.
+
+        The axis is read from the sibling .json metadata file if present,
+        otherwise defaults to "YX".
+        """
+        if not self.model_save_dir or not Path(self.model_save_dir).is_dir():
+            return {}
+        result = {}
+        for pth_file in sorted(Path(self.model_save_dir).glob("*.pth")):
+            name = pth_file.stem
+            axis = "YX"
+            json_path = pth_file.with_suffix(".json")
+            if json_path.exists():
+                try:
+                    import json as _json
+
+                    with open(json_path) as f:
+                        meta = _json.load(f)
+                    axis = meta.get("axes", axis)
+                except (OSError, ValueError, KeyError):
+                    pass
+            result[name] = axis
+        return result
+
+    def set_model(self, model_name: str):
+        """
+        Select a model by its stem name (as shown in the model combo).
+
+        Sets inference_model_name and model_file_path, then loads the model.
+        """
+        pth_path = Path(self.model_save_dir) / (model_name + ".pth")
+        self.inference_model_name = model_name
+        self.model_file_path = str(pth_path)
+        if pth_path.exists():
+            self.load_model(str(pth_path))
+        else:
+            print(f"⚠️ Model file not found: {pth_path}")
 
     def segment(self, image, normalize=True, **kwargs):
         """
@@ -873,6 +916,9 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         self.model_file_path = str(
             Path(self.model_save_dir) / self.training_model_name
         )
+
+        # Update inference_model_name so callers can select the newly trained model
+        self.inference_model_name = Path(self.training_model_name).stem
 
         # Save downsize_factor (and other custom params) to sibling JSON
         metadata_path = Path(self.model_file_path).with_suffix(".json")
