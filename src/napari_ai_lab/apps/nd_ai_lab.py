@@ -553,13 +553,9 @@ class NDAILab(QWidget):
             roi_slice = nd_indices + (slice(ystart, yend), slice(xstart, xend))
             pred_roi = pred_data[roi_slice]
 
-            # Copy to labels layer at the same location
-            if hasattr(self, "labels_layer") and self.annotations_layer:
-                self.annotations_layer.data[roi_slice] = pred_roi
-                self.annotations_layer.refresh()  # Force napari to update the display
-                print(f"✓ Copied {selected_name} predictions to labels layer")
-            else:
-                print("⚠️ No labels layer available")
+            self.annotations_layer.data[roi_slice] = pred_roi
+            self.annotations_layer.refresh()  # Force napari to update the display
+            print(f"✓ Copied {selected_name} predictions to labels layer")
 
             dialog.accept()
 
