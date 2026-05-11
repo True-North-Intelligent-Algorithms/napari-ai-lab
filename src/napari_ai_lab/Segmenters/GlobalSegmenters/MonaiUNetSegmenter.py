@@ -596,7 +596,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
             # Create progress bar context manager conditionally
             if use_tqdm:
                 pbar = tqdm(
-                    total=total_steps, desc=f"Epoch {epoch}", leave=True
+                    total=total_steps, desc=f"Epoch?? {epoch}", leave=True
                 )
             else:
                 # Create a dummy context manager that does nothing
@@ -606,7 +606,9 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
             with pbar if use_tqdm else nullcontext() as progress:
 
-                for feature, label in train_loader:
+                for num_batches, (feature, label) in enumerate(
+                    train_loader, start=1
+                ):
 
                     optimizer.zero_grad()
 
@@ -630,6 +632,10 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
                     if use_tqdm and progress is not None:
                         progress.update(label.shape[0])
+                        progress.set_postfix(
+                            loss=f"{loss_value.item():.4f}",
+                            avg=f"{total_loss / num_batches:.4f}",
+                        )
 
                     optimizer.step()
 
@@ -690,7 +696,8 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
         Args:
             updater (callable, optional): A callback function for progress updates.
-                Example: updater("Epoch 1 - loss: 0.5", 10)
+                Signature: updater(step, total_steps, message)
+                Example: updater(1, 10, "Epoch 1 - loss: 0.5")
                 If provided, use_tqdm will be automatically set to False.
             use_tqdm (bool, optional): If True, use tqdm progress bar for training.
                 Recommended for notebook environments to avoid excessive output.
@@ -739,7 +746,7 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
         patch_path = Path(self.patch_path)
 
         if updater is not None:
-            updater("Training Monai Semantic model", 0)
+            updater(0, 0, "Training Monai Semantic model")
 
         cuda_present = torch.cuda.is_available()
         ndevices = torch.cuda.device_count()
