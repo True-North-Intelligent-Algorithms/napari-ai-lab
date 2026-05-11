@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -267,15 +268,23 @@ class NDAILab(QWidget):
         self.dir_btn.clicked.connect(self._on_open_directory)
         layout.addWidget(self.dir_btn)
 
+        def _make_scroll(widget):
+            scroll = QScrollArea()
+            scroll.setWidget(widget)
+            scroll.setWidgetResizable(True)
+            return scroll
+
         # Tab widget
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.label_widget, "Label")
-        self.tabs.addTab(self.augment_widget, "Augment")
-        self.tabs.addTab(self.segment_widget, "Segment")
+        self.tabs.addTab(_make_scroll(self.label_widget), "Label")
+        self.tabs.addTab(_make_scroll(self.augment_widget), "Augment")
+        self.tabs.addTab(_make_scroll(self.segment_widget), "Segment")
 
         # Add training tab - shows training view of segment widget
         # Same widget, different controls (segmenter combo + training params only)
-        self.tabs.addTab(self.segment_widget.get_training_widget(), "Train")
+        self.tabs.addTab(
+            _make_scroll(self.segment_widget.get_training_widget()), "Train"
+        )
 
         layout.addWidget(self.tabs)
 
