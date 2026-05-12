@@ -127,7 +127,7 @@ class BaseNDApp(QWidget):
                         self.image_data_model.save_annotations(
                             self.annotation_layer.data,
                             self.current_image_index,
-                            current_step=self.viewer.dims.current_step,
+                            # current_step=self.viewer.dims.current_step,
                         )
                         print("Annotations saved before closing")
                     except (OSError, ValueError, RuntimeError) as e:
