@@ -886,6 +886,8 @@ result = torch.argmax(probabilities, dim=1).cpu().numpy().squeeze()
 
         # weights = weights*0.01
 
+        # weights = torch.tensor([2.0, 25.0, 25.0, 1.0]).to(device)
+
         # loss_function = torch.nn.CrossEntropyLoss(ignore_index=-1, weight=weights).to(device)
         loss_function = torch.nn.CrossEntropyLoss(ignore_index=-1).to(device)
         dtype = torch.LongTensor
