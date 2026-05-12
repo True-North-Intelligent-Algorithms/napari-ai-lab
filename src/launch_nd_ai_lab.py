@@ -64,58 +64,62 @@ AlbumentationsAugmenter.register()
 # Create viewer
 viewer = napari.Viewer()
 
+# Detect napari-ai-lab project root (works on both Windows and Linux)
+# This script is in: napari-ai-lab/src/launch_nd_ai_lab.py
+# So we go up one level to get to napari-ai-lab root
+project_root = Path(__file__).parent.parent
+test_images_dir = project_root / "tests" / "test_images"
+
+print(f"📁 Detected project root: {project_root}")
+print(f"📁 Test images directory: {test_images_dir}")
+
 test_sets = [
-    "vessels",
-    "neurips blood cells",
-    "fluorescent blobs",
-    "czi cells",
-    "cells cropped",
-    "Stardist_3D",
-    "nuclei",
+    "vessels",  # 0
+    "neurips blood cells",  # 1
+    "fluorescent blobs",  # 2
+    "czi cells",  # 3
+    "cells cropped",  # 4
+    "Stardist_3D",  # 5
+    "nuclei",  # 6
+    "spheres",  # 7
 ]
-test_set = test_sets[1]
+test_set = test_sets[0]
+
+annotations_viewer_type = "none"
 
 if test_set == "vessels":
     # Load test data (vessels_project)
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/vessels_project"
-    )
+    # parent_dir = test_images_dir / "vessels_project"
+    parent_dir = test_images_dir / "vessels_large"
     viewer_type = "none"
+    annotations_viewer_type = "stacked"
     axes_to_collapse = None
 elif test_set == "neurips blood cells":
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/neurips blood cells"
-    )
+    parent_dir = test_images_dir / "neurips blood cells"
     viewer_type = "stacked"
     axes_to_collapse = "C"
 elif test_set == "fluorescent blobs":
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/fluorescent blobs"
-    )
+    parent_dir = test_images_dir / "fluorescent blobs"
     viewer_type = "stacked"
     axes_to_collapse = None
 elif test_set == "czi cells":
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/czi_cells"
-    )
+    parent_dir = test_images_dir / "czi_cells"
     viewer_type = "none"
     axes_to_collapse = None
 elif test_set == "cells cropped":
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/cells_cropped"
-    )
+    parent_dir = test_images_dir / "cells_cropped"
     viewer_type = "none"
     axes_to_collapse = None
 elif test_set == "Stardist_3D":
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/Stardist_3D"
-    )
+    parent_dir = test_images_dir / "Stardist_3D"
     viewer_type = "sequence"
     axes_to_collapse = None
 elif test_set == "nuclei":
-    parent_dir = Path(
-        "/home/bnorthan/code/i2k/tnia/napari-ai-lab/tests/test_images/nuclei"
-    )
+    parent_dir = test_images_dir / "nuclei"
+    viewer_type = "stacked"
+    axes_to_collapse = None
+elif test_set == "spheres":
+    parent_dir = r"D:\deep-learning\labels\For_AI_lab_intensity"
     viewer_type = "stacked"
     axes_to_collapse = None
 
@@ -123,16 +127,19 @@ elif test_set == "nuclei":
 model = ImageDataModel(parent_dir)
 
 ##### HACK
-model.axis_types = "NYXC"  # Manually set axis types for testing purposes
+model.axis_types = "NZYX"  # Manually set axis types for testing purposes
 
 # Configure annotation and prediction writer types based on viewer_type
-if viewer_type == "stacked":
+if viewer_type == "stacked" or annotations_viewer_type == "stacked":
     model.set_annotation_io_type(
         "stacked_sequence", axes_to_collapse=axes_to_collapse
     )
     model.set_prediction_io_type(
         "stacked_sequence", axes_to_collapse=axes_to_collapse
     )
+    # Set save granularity for testing
+    model.set_annotation_save_granularity("YX")
+    model.set_prediction_save_granularity("YX")
 
 # Create combined widget WITH model
 nd_ai_lab_widget = NDAILab(viewer, model, axes_to_collapse=axes_to_collapse)
