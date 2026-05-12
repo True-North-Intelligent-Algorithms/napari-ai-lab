@@ -413,8 +413,16 @@ class NDEasySegment(BaseNDApp):
             self._do_segment_slice,
             self._on_segment_slice_done,
         )
-        self.segment_progress_logger.update_progress(2, 2, "✅ Complete")
-        self.segment_progress_logger.log_info("✅ Segmentation complete")
+
+        # If the segmenter produced a 3D "stacked labels" preview (e.g.
+        # MicroSamYoloSegmenter), show it as a separate labels layer.
+        # Only done in single-slice mode (not during _on_segment_all).
+        stacked = getattr(self.segmenter, "last_stacked_labels", None)
+        if stacked is not None:
+            self._show_stacked_labels_layer(stacked)
+
+        self.segment_progress_logger.update_progress(2, 2, "\u2705 Complete")
+        self.segment_progress_logger.log_info("\u2705 Segmentation complete")
 
     def _on_segment_all(self):
         """Segment all slices in the ND data automatically (threaded)."""
@@ -567,6 +575,14 @@ class NDEasySegment(BaseNDApp):
             print(
                 f"Automatic segmentation completed - updated layer: {segmenter_name}"
             )
+
+            # If the segmenter produced predicted object boxes, add them to a
+            # dedicated shapes layer at the correct slice position.
+            boxes = getattr(self.segmenter, "last_napari_boxes", None)
+            if boxes is not None and len(boxes) > 0:
+                self._add_predicted_boxes(
+                    boxes, current_step, segmentation_axis
+                )
 
         except (
             AttributeError,
@@ -887,6 +903,60 @@ class NDEasySegment(BaseNDApp):
         self.predictions_layers[segmenter_name] = new_layer
         print(f"Created new predictions layer: {segmenter_name}")
         return new_layer
+
+    # === Optional extra outputs from segmenters (e.g. MicroSamYoloSegmenter) ===
+    def _show_stacked_labels_layer(self, stacked_labels):
+        """Replace/create a 3D 'Stacked Labels (preview)' labels layer.
+
+        Used for segmenters that produce a 3D stack representing overlapping
+        2D labels. Not saved — purely a visualization aid.
+        """
+        layer_name = "Stacked Labels (preview)"
+        # Remove existing layer if present so we always show the latest preview
+        if layer_name in self.viewer.layers:
+            self.viewer.layers.remove(layer_name)
+        self.viewer.add_labels(stacked_labels, name=layer_name)
+
+    def _add_predicted_boxes(self, boxes, current_step, segmentation_axis):
+        """Add predicted object boxes to a 'predicted object boxes' shapes layer.
+
+        Boxes from the segmenter are 2D (YX). For ND images, leading
+        non-spatial step indices are prepended to each vertex so the boxes
+        appear on the correct slice.
+        """
+        layer_name = "predicted object boxes"
+        image_ndim = len(self.image_layer.data.shape)
+
+        # Determine number of leading (non-spatial) dims for the segmentation axis.
+        axis = segmentation_axis.replace("C", "")
+        spatial_ndim = len(axis)  # "YX" -> 2, "ZYX" -> 3
+        leading = list(current_step[: image_ndim - spatial_ndim])
+
+        # Prepend leading indices to every vertex of every box
+        nd_boxes = []
+        for box in boxes:
+            arr = np.asarray(box)
+            if leading:
+                pad = np.tile(
+                    np.array(leading, dtype=arr.dtype), (arr.shape[0], 1)
+                )
+                arr = np.concatenate([pad, arr], axis=1)
+            nd_boxes.append(arr)
+
+        # Get or create the shapes layer
+        if layer_name in self.viewer.layers:
+            shapes_layer = self.viewer.layers[layer_name]
+            shapes_layer.add_rectangles(nd_boxes)
+        else:
+            self.viewer.add_shapes(
+                nd_boxes,
+                name=layer_name,
+                shape_type="rectangle",
+                edge_color="green",
+                face_color="transparent",
+                edge_width=2,
+                ndim=image_ndim,
+            )
 
     def _setup_interactive_layers(self, image_data):
         """Setup interactive annotation layers (points and shapes)."""

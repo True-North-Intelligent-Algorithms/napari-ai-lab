@@ -16,7 +16,11 @@ from .GlobalSegmenterBase import GlobalSegmenterBase
 # Try imports; availability checked via are_dependencies_available
 try:
     from segment_everything.mask_detectors.microsam import microsam_detector
-    from segment_everything.object_detectors.yolo_detector import YoloDetector
+    from segment_everything.object_detectors.yolo_detector import (
+        YoloDetector,
+        convert_yolo_boxes_to_microsam,
+        convert_yolo_boxes_to_napari,
+    )
     from segment_everything.stacked_labels import StackedLabels
     from segment_everything.weights_helper import get_weights_path
 
@@ -163,6 +167,11 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         # YX and ZYX remain unchanged
         self.axis_map = {"YXC": "YX", "YX": "YX", "ZYX": "ZYX"}
 
+        # Extra outputs produced by the most recent segment() call.
+        # These are populated only by segmenters that support them; default None.
+        self.last_stacked_labels = None
+        self.last_napari_boxes = None
+
     def are_dependencies_available(self):
         return _is_seg_everything_available
 
@@ -208,16 +217,18 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
         yolo = YoloDetector(weights_path, self.yolo_model_name, device=y_dev)
 
         # Get boxes from YOLO
-        bboxes = yolo.get_microsam_bboxes(
+        bboxes = yolo.get_bounding_boxes(
             image, conf=self.conf, imgsz=self.imgsz
         )
+
+        microsam_boxes = convert_yolo_boxes_to_microsam(bboxes)
 
         # Use MicroSAM to generate masks for boxes
         detector = microsam_detector(
             model_type=self.microsam_model_type, device=ms_dev
         )
         detector.set_image(image)
-        mask_list = detector.segment_boxes(bboxes)
+        mask_list = detector.segment_boxes(microsam_boxes)
 
         # Stack and convert to labels
         stacked = StackedLabels(mask_list)
@@ -232,6 +243,13 @@ If not enough GPU memory, try setting one or both of `yolo_device` and
 
         stacked.filter_labels_3d_multi(stat_limits)
         labels = stacked.make_2d_labels(type="max")
+
+        stacked_labels = stacked.make_3d_labels()
+        napari_boxes = convert_yolo_boxes_to_napari(bboxes)
+
+        # Expose extra outputs so the host app can pick them up after segment()
+        self.last_stacked_labels = stacked_labels
+        self.last_napari_boxes = napari_boxes
 
         return labels.astype(np.uint16)
 
