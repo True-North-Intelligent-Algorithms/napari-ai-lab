@@ -1,10 +1,13 @@
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
 )
 
@@ -67,6 +70,33 @@ class NDEasyLabel(BaseNDApp):
         self.save_project_btn.clicked.connect(self._on_save_project)
         self.layout().addWidget(self.save_project_btn)
 
+        # Current label number spinbox
+        label_num_row = QHBoxLayout()
+        label_num_row.addWidget(QLabel("Current Label:"))
+        self.label_num_spinbox = QSpinBox()
+        self.label_num_spinbox.setMinimum(1)
+        self.label_num_spinbox.setMaximum(65535)
+        self.label_num_spinbox.setValue(self.current_label_num)
+        self.label_num_spinbox.valueChanged.connect(self._on_label_num_changed)
+        label_num_row.addWidget(self.label_num_spinbox)
+        self.layout().addLayout(label_num_row)
+
+        self.auto_increment_checkbox = QCheckBox("Auto-increment label")
+        self.auto_increment_checkbox.setChecked(True)
+        self.layout().addWidget(self.auto_increment_checkbox)
+
+        # Button to add an interactive-label (ROI box) shapes layer
+        self.add_interactive_layer_btn = QPushButton(
+            "Add Interactive-Label Layer"
+        )
+        self.add_interactive_layer_btn.clicked.connect(
+            self._on_add_interactive_label_layer
+        )
+        self.layout().addWidget(self.add_interactive_layer_btn)
+
+        # Holder for the interactive-label shapes layer (created on demand)
+        self.interactive_labels_layer = None
+
         # Add stretch to push everything to the top (prevents button stretching)
         self.layout().addStretch()
 
@@ -111,6 +141,10 @@ class NDEasyLabel(BaseNDApp):
         print(f"Axis changed to: {new_axis}")
         # Reinitialize segmenter with new axis configuration
         self._initialize_segmenter()
+
+    def _on_label_num_changed(self, value):
+        """Sync current_label_num when the spinbox is edited directly."""
+        self.current_label_num = value
 
     def _initialize_segmenter(self):
         """Initialize predictor if an image is loaded and a segmenter exists."""
@@ -239,7 +273,11 @@ class NDEasyLabel(BaseNDApp):
                 print(
                     f"Added segmentation with label {self.current_label_num}"
                 )
-                self.current_label_num += 1
+                if self.auto_increment_checkbox.isChecked():
+                    self.current_label_num += 1
+                    self.label_num_spinbox.blockSignals(True)
+                    self.label_num_spinbox.setValue(self.current_label_num)
+                    self.label_num_spinbox.blockSignals(False)
 
                 self.annotation_layer.refresh()
 
@@ -291,6 +329,121 @@ class NDEasyLabel(BaseNDApp):
             f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "
             f"(total boxes: {len(boxes_layer.data)})"
         )
+
+    def _on_add_interactive_label_layer(self):
+        """Create a shapes layer used to drive box-based interactive segmentation."""
+        if self.annotation_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image loaded",
+                "Load an image before adding the interactive-label layer.",
+            )
+            return
+
+        # If it already exists and is still in the viewer, just select it.
+        if (
+            self.interactive_labels_layer is not None
+            and self.interactive_labels_layer in self.viewer.layers
+        ):
+            self.viewer.layers.selection.active = self.interactive_labels_layer
+            return
+
+        annotation_ndim = len(self.annotation_layer.data.shape)
+        self.interactive_labels_layer = self.viewer.add_shapes(
+            ndim=annotation_ndim,
+            name="Interactive Labels",
+            face_color="transparent",
+            edge_color="yellow",
+            edge_width=3,
+        )
+        self.interactive_labels_layer.events.data.connect(
+            self._on_interactive_roi_change
+        )
+        self.viewer.layers.selection.active = self.interactive_labels_layer
+        print("✨ Added Interactive Labels shapes layer")
+
+    def _on_interactive_roi_change(self, event):
+        """Handle a new box on the interactive-labels layer: segment within the box."""
+        if event.action != "added":
+            return
+
+        shapes_layer = event.source
+        if len(shapes_layer.data) == 0:
+            return
+
+        if self.image_layer is None or self.annotation_layer is None:
+            print("No image / annotation layer available")
+            return
+
+        # Most recently added box (ndarray of shape (N_vertices, ndim))
+        box = shapes_layer.data[-1]
+
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+
+        # Strip leading non-spatial dims to match what the segmenter expects.
+        if selected_axis in ("YX", "YXC"):
+            spatial_box = box[:, -2:]
+        elif selected_axis in ("ZYX", "ZYXC"):
+            spatial_box = box[:, -3:]
+        else:
+            spatial_box = box
+
+        indices = get_current_slice_indices(
+            self.viewer.dims.current_step, selected_axis
+        )
+
+        # Adjust segmentation indices when image has extra dims (e.g. channel)
+        if self.image_layer.data.ndim > self.annotation_layer.data.ndim:
+            segmentation_indices = get_current_slice_indices(
+                self.viewer.dims.current_step,
+                selected_axis,
+                ignore_channel=True,
+            )
+        else:
+            segmentation_indices = indices
+
+        image_data = self.image_layer.data[indices]
+
+        # Sync segmenter with current parameters
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+
+        try:
+            mask = self.segmenter.segment(
+                image_data,
+                points=None,
+                shapes=[spatial_box],
+            )
+
+            self.annotation_layer.data[segmentation_indices][mask != 0] = (
+                mask[mask != 0] * self.current_label_num
+            )
+
+            print(
+                f"Added box-segmentation with label {self.current_label_num}"
+            )
+            if self.auto_increment_checkbox.isChecked():
+                self.current_label_num += 1
+                self.label_num_spinbox.blockSignals(True)
+                self.label_num_spinbox.setValue(self.current_label_num)
+                self.label_num_spinbox.blockSignals(False)
+
+            self.annotation_layer.refresh()
+
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            IndexError,
+        ) as e:
+            print(f"Error during box segmentation: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def _on_save_project(self):
         """Save annotations, boxes, and label patches in one go."""
