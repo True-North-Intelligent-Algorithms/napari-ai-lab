@@ -425,11 +425,20 @@ MONAI UNet Automatic Segmentation:
         self.model.eval()
 
         # Add channel and batch dimensions if needed
-        if len(image_norm.shape) == 2:  # YX -> 1, 1, Y, X
+        if len(image_norm.shape) == 2:  # YX -> (1, 1, Y, X)
             image_tensor = torch.from_numpy(image_norm[None, None, :, :])
-        elif len(image_norm.shape) == 3:  # ZYX or YXC
-            # Assume ZYX for 3D
-            image_tensor = torch.from_numpy(image_norm[None, None, :, :, :])
+        elif len(image_norm.shape) == 3:
+            # Detect channel-last (YXC) vs volumetric (ZYX).
+            # The dataset moves channels to axis 0: (H,W,C) -> (C,H,W).
+            # We must do the same so the model sees (1, C, H, W).
+            # Heuristic: if the last dim is small (≤4) treat it as channels.
+            if image_norm.shape[-1] <= 4:  # YXC -> (1, C, Y, X)
+                chw = np.transpose(image_norm, (2, 0, 1))
+                image_tensor = torch.from_numpy(chw[None, :, :, :])
+            else:  # ZYX -> (1, 1, Z, Y, X)
+                image_tensor = torch.from_numpy(
+                    image_norm[None, None, :, :, :]
+                )
         else:
             raise ValueError(f"Unsupported image shape: {image.shape}")
 
