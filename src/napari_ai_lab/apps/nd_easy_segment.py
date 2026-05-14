@@ -20,7 +20,11 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
-from ..utilities.slice_processor import SliceProcessor, SliceProcessorThread
+from ..utilities.slice_processor import (
+    SliceProcessor,
+    SliceProcessorThread,
+    TrainingThread,
+)
 from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
@@ -702,82 +706,120 @@ class NDEasySegment(BaseNDApp):
         for param_name, param_value in training_params.items():
             setattr(self.segmenter, param_name, param_value)
 
-        # Call the train method
-        try:
-            print("Starting training...")
+        # Stash flag so the finished handler knows whether to talk to the logger
+        self._training_use_progress_logger = use_progress_logger
 
-            # Log to progress widget if in embedded mode
-            if use_progress_logger:
-                self.progress_logger.log_info("Starting training...")
-                self.progress_logger.log_info(
-                    f"Model: {self.segmenter.training_model_name}"
-                )
-                self.progress_logger.log_info(
-                    f"Patches: {self.segmenter.patch_path}"
-                )
-
-            # Call train with or without updater based on mode
-            if use_progress_logger:
-                result = self.segmenter.train(
-                    updater=self.progress_logger.update_progress
-                )
-            else:
-                # No updater (dialog mode)
-                result = self.segmenter.train()
-
-            if result.get("success"):
-
-                if use_progress_logger:
-                    self.progress_logger.log_info(
-                        f"✅ {result.get('message', 'Training complete!')}"
-                    )
-
-                QMessageBox.information(
-                    self,
-                    "Training Complete",
-                    f"Training completed successfully!\n\n{result.get('message', '')}",
-                )
-            else:
-
-                if use_progress_logger:
-                    self.progress_logger.log_warning(
-                        f"Training status: {result.get('message', 'Unknown')}"
-                    )
-
-                QMessageBox.warning(
-                    self,
-                    "Training Status",
-                    f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
-                )
-
-            # Refresh model combos in both forms to include the newly trained model
-            trained_name = self.segmenter.inference_model_name
-            self.segmenter_parameter_form.refresh_model_combo(
-                select_name=trained_name
+        print("Starting training...")
+        if use_progress_logger:
+            self.progress_logger.log_info("Starting training...")
+            self.progress_logger.log_info(
+                f"Model: {self.segmenter.training_model_name}"
             )
-            # Also update the model_file_path field in the inference form
-            if (
-                hasattr(self.segmenter, "model_file_path")
-                and self.segmenter.model_file_path
-            ):
-                self.segmenter_parameter_form.set_parameter(
-                    "model_file_path", self.segmenter.model_file_path
-                )
-            if hasattr(self, "training_parameter_form"):
-                self.training_parameter_form.refresh_model_combo(
-                    select_name=trained_name
-                )
+            self.progress_logger.log_info(
+                f"Patches: {self.segmenter.patch_path}"
+            )
 
-        except (RuntimeError, ValueError, TypeError, OSError) as e:
-            error_msg = f"Training failed with error:\n{str(e)}"
+        # Disable train button while training runs (if present)
+        if hasattr(self, "train_btn"):
+            self.train_btn.setEnabled(False)
 
+        # Set to False to run training synchronously on the GUI thread
+        # (useful when stepping through the training code in a debugger).
+        thread_training = True
+
+        if not thread_training:
+            # Synchronous path — blocks the GUI but is debugger-friendly.
+            updater = (
+                self.progress_logger.update_progress
+                if use_progress_logger
+                else None
+            )
+            result = None
+            try:
+                result = self.segmenter.train(updater=updater)
+            except (
+                RuntimeError,
+                ValueError,
+                TypeError,
+                OSError,
+                IndexError,
+                AttributeError,
+            ) as e:
+                self._on_training_error(str(e))
+            self._on_training_finished(result)
+            return
+
+        # Run training in a worker thread so the GUI stays responsive.
+        # We must keep a reference to the thread wrapper until it finishes.
+        self._training_thread = TrainingThread(self.segmenter.train)
+
+        if use_progress_logger:
+            self._training_thread.progress.connect(
+                self.progress_logger.update_progress
+            )
+        self._training_thread.error.connect(self._on_training_error)
+        self._training_thread.finished.connect(self._on_training_finished)
+
+        self._training_thread.start()
+
+    def _on_training_error(self, error_msg: str):
+        """Handle an exception raised inside the training worker thread."""
+        full_msg = f"Training failed with error:\n{error_msg}"
+        if getattr(self, "_training_use_progress_logger", False):
+            self.progress_logger.log_error(full_msg)
+        QMessageBox.critical(self, "Training Error", full_msg)
+
+    def _on_training_finished(self, result):
+        """Handle training completion (called on the main/GUI thread)."""
+        # Re-enable the train button
+        if hasattr(self, "train_btn"):
+            self.train_btn.setEnabled(True)
+
+        use_progress_logger = getattr(
+            self, "_training_use_progress_logger", False
+        )
+
+        # If the worker emitted error(), result will be None and the error
+        # handler already informed the user; nothing more to do here.
+        if result is None:
+            return
+
+        if result.get("success"):
             if use_progress_logger:
-                self.progress_logger.log_error(error_msg)
-
-            QMessageBox.critical(
+                self.progress_logger.log_info(
+                    f"✅ {result.get('message', 'Training complete!')}"
+                )
+            QMessageBox.information(
                 self,
-                "Training Error",
-                error_msg,
+                "Training Complete",
+                f"Training completed successfully!\n\n{result.get('message', '')}",
+            )
+        else:
+            if use_progress_logger:
+                self.progress_logger.log_warning(
+                    f"Training status: {result.get('message', 'Unknown')}"
+                )
+            QMessageBox.warning(
+                self,
+                "Training Status",
+                f"Training status:\n{result.get('message', 'Unknown status')}\n{result.get('error', '')}",
+            )
+
+        # Refresh model combos in both forms to include the newly trained model
+        trained_name = self.segmenter.inference_model_name
+        self.segmenter_parameter_form.refresh_model_combo(
+            select_name=trained_name
+        )
+        if (
+            hasattr(self.segmenter, "model_file_path")
+            and self.segmenter.model_file_path
+        ):
+            self.segmenter_parameter_form.set_parameter(
+                "model_file_path", self.segmenter.model_file_path
+            )
+        if hasattr(self, "training_parameter_form"):
+            self.training_parameter_form.refresh_model_combo(
+                select_name=trained_name
             )
 
     # === Common Methods (from original nd_easy_label) ===
