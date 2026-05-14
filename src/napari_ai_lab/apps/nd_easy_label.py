@@ -146,6 +146,35 @@ class NDEasyLabel(BaseNDApp):
         """Sync current_label_num when the spinbox is edited directly."""
         self.current_label_num = value
 
+    def _apply_segmenter_mask(self, mask, segmentation_indices):
+        """Write a segmenter mask into the annotation layer.
+
+        If the segmenter exposes ``last_roi_bbox`` (a tuple of slices marking
+        the touched sub-region), the boolean-index write is restricted to
+        that sub-region.  Otherwise the full mask is scanned.  Equivalent
+        result either way — just much faster for ROI-style segmenters
+        (Otsu2D / Otsu3D), especially in 3D.
+        """
+        target = self.annotation_layer.data[segmentation_indices]
+        roi_bbox = getattr(self.segmenter, "last_roi_bbox", None)
+
+        if roi_bbox is not None:
+            sub_mask = mask[roi_bbox]
+            sub_target = target[roi_bbox]
+            nz = sub_mask != 0
+            sub_target[nz] = sub_mask[nz] * self.current_label_num
+        else:
+            nz = mask != 0
+            target[nz] = mask[nz] * self.current_label_num
+
+    def _maybe_increment_label(self):
+        """Auto-increment current_label_num and sync the spinbox if enabled."""
+        if self.auto_increment_checkbox.isChecked():
+            self.current_label_num += 1
+            self.label_num_spinbox.blockSignals(True)
+            self.label_num_spinbox.setValue(self.current_label_num)
+            self.label_num_spinbox.blockSignals(False)
+
     def _initialize_segmenter(self):
         """Initialize predictor if an image is loaded and a segmenter exists."""
         if self.image_layer is None:
@@ -261,23 +290,14 @@ class NDEasyLabel(BaseNDApp):
                     shapes=None,
                 )
 
-                # self.predictions_layer.data[indices] = (
-                #    mask  # self.current_label_num
-                # )
-
-                # Apply the mask to the labels layer
-                self.annotation_layer.data[segmentation_indices][mask != 0] = (
-                    mask[mask != 0] * self.current_label_num
-                )
+                # Apply the mask to the labels layer (restricted to ROI bbox
+                # if the segmenter advertises one).
+                self._apply_segmenter_mask(mask, segmentation_indices)
 
                 print(
                     f"Added segmentation with label {self.current_label_num}"
                 )
-                if self.auto_increment_checkbox.isChecked():
-                    self.current_label_num += 1
-                    self.label_num_spinbox.blockSignals(True)
-                    self.label_num_spinbox.setValue(self.current_label_num)
-                    self.label_num_spinbox.blockSignals(False)
+                self._maybe_increment_label()
 
                 self.annotation_layer.refresh()
 
@@ -418,18 +438,12 @@ class NDEasyLabel(BaseNDApp):
                 shapes=[spatial_box],
             )
 
-            self.annotation_layer.data[segmentation_indices][mask != 0] = (
-                mask[mask != 0] * self.current_label_num
-            )
+            self._apply_segmenter_mask(mask, segmentation_indices)
 
             print(
                 f"Added box-segmentation with label {self.current_label_num}"
             )
-            if self.auto_increment_checkbox.isChecked():
-                self.current_label_num += 1
-                self.label_num_spinbox.blockSignals(True)
-                self.label_num_spinbox.setValue(self.current_label_num)
-                self.label_num_spinbox.blockSignals(False)
+            self._maybe_increment_label()
 
             self.annotation_layer.refresh()
 

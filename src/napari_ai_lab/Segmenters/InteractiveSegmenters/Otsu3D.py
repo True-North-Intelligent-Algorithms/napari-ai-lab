@@ -90,6 +90,10 @@ Instructions for Otsu 3D Segmentation:
         super().__init__()
         self._supported_axes = ["ZYX", "ZYXC"]
         self._potential_axes = ["ZYX"]
+        # Optional bbox of the most recent segmentation (tuple of slices) or None
+        # if the whole volume was processed.  Callers may use it to restrict
+        # mask-application work to the touched region.
+        self.last_roi_bbox = None
 
     def segment(self, image, points=None, shapes=None, **kwargs):
         """Perform 3D Otsu segmentation. See class docstring for behaviour."""
@@ -152,12 +156,18 @@ Instructions for Otsu 3D Segmentation:
 
             if roi.size == 0:
                 print("Otsu3D: ROI is empty, returning empty mask")
+                self.last_roi_bbox = None
                 return full_mask
 
             threshold = filters.threshold_otsu(roi)
             roi_mask = (roi > threshold).astype(np.uint8)
             roi_mask = self._apply_post_processing(roi_mask)
             full_mask[z0:z1, y0:y1, x0:x1] = roi_mask
+            self.last_roi_bbox = (
+                slice(z0, z1),
+                slice(y0, y1),
+                slice(x0, x1),
+            )
 
             print(
                 f"Otsu3D: ROI z=[{z0}:{z1}] y=[{y0}:{y1}] x=[{x0}:{x1}] "
@@ -167,6 +177,7 @@ Instructions for Otsu 3D Segmentation:
             threshold = filters.threshold_otsu(image_gray)
             full_mask = (image_gray > threshold).astype(np.uint8)
             full_mask = self._apply_post_processing(full_mask)
+            self.last_roi_bbox = None
             print(f"Otsu3D: Full-volume threshold {threshold:.2f}")
 
         return full_mask

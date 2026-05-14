@@ -71,6 +71,10 @@ Instructions for Otsu 2D Segmentation:
         super().__init__()
         self._supported_axes = ["YX", "YXC"]
         self._potential_axes = ["YX"]
+        # Optional bbox of the most recent segmentation (tuple of slices) or None
+        # if the whole image was processed.  Callers may use it to restrict
+        # mask-application work to the touched region.
+        self.last_roi_bbox = None
 
     def segment(self, image, points=None, shapes=None, **kwargs):
         """
@@ -146,12 +150,14 @@ Instructions for Otsu 2D Segmentation:
 
             if roi.size == 0:
                 print("Otsu2D: ROI is empty, returning empty mask")
+                self.last_roi_bbox = None
                 return full_mask
 
             threshold = filters.threshold_otsu(roi)
             roi_mask = (roi > threshold).astype(np.uint8)
             roi_mask = self._apply_post_processing(roi_mask)
             full_mask[y0:y1, x0:x1] = roi_mask
+            self.last_roi_bbox = (slice(y0, y1), slice(x0, x1))
 
             print(
                 f"Otsu2D: ROI [{y0}:{y1}, {x0}:{x1}] threshold={threshold:.2f}"
@@ -161,6 +167,7 @@ Instructions for Otsu 2D Segmentation:
             threshold = filters.threshold_otsu(image_gray)
             full_mask = (image_gray > threshold).astype(np.uint8)
             full_mask = self._apply_post_processing(full_mask)
+            self.last_roi_bbox = None
             print(f"Otsu2D: Full-image threshold {threshold:.2f}")
 
         return full_mask
