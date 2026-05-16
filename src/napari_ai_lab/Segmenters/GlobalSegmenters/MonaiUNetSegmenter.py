@@ -69,6 +69,15 @@ MONAI UNet Automatic Segmentation:
         },
     )
 
+    use_tiles: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "inference",
+            "default": True,
+        },
+    )
+
     show_background_class: bool = field(
         default=True,
         metadata={
@@ -444,21 +453,42 @@ MONAI UNet Automatic Segmentation:
 
         image_tensor = image_tensor.float().to(device)
 
-        # Perform sliding window inference
-        with torch.no_grad():
-            if len(image.shape) == 2:
-                roi_size = (self.tile_size, self.tile_size)
-            else:
-                roi_size = (self.tile_size, self.tile_size)
+        # Perform inference (tiled or full)
+        import time
 
-            y = sliding_window_inference(
-                image_tensor,
-                roi_size,
-                sw_batch_size=1,
-                predictor=self.model,
-                mode="gaussian",
-                overlap=0.125,
-            )
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            if self.use_tiles:
+                roi_size = (self.tile_size, self.tile_size)
+                y = sliding_window_inference(
+                    image_tensor,
+                    roi_size,
+                    sw_batch_size=1,
+                    predictor=self.model,
+                    mode="gaussian",
+                    overlap=0.125,
+                )
+            else:
+                # UNet requires spatial dims divisible by 2^depth.
+                stride = 2**self.depth
+                # image_tensor shape: (1, C, ..., H, W) — pad last two dims.
+                h, w = image_tensor.shape[-2], image_tensor.shape[-1]
+                pad_h = (stride - h % stride) % stride
+                pad_w = (stride - w % stride) % stride
+                if pad_h > 0 or pad_w > 0:
+                    # F.pad expects (left, right, top, bottom) for last two dims
+                    image_tensor = torch.nn.functional.pad(
+                        image_tensor, (0, pad_w, 0, pad_h)
+                    )
+                y = self.model(image_tensor)
+                # Crop back to original spatial size
+                if pad_h > 0 or pad_w > 0:
+                    y = y[..., :h, :w]
+        elapsed = time.perf_counter() - t0
+        mode_str = (
+            f"tiled ({self.tile_size}px)" if self.use_tiles else "full image"
+        )
+        print(f"   Inference ({mode_str}): {elapsed:.2f}s")
 
         # Apply softmax and get predicted classes
         probabilities = F.softmax(y, dim=1)
