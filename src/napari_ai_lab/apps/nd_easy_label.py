@@ -1,5 +1,6 @@
 import napari
 import numpy as np
+from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -395,69 +396,97 @@ class NDEasyLabel(BaseNDApp):
             print("No image / annotation layer available")
             return
 
-        # Most recently added box (ndarray of shape (N_vertices, ndim))
-        box = shapes_layer.data[-1]
+        # Re-entrancy / overlap guard: ignore new boxes while one is still
+        # being processed (e.g. user draws a second box very quickly).
+        if getattr(self, "_interactive_roi_busy", False):
+            return
+        self._interactive_roi_busy = True
 
-        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        # Snapshot the latest box NOW (before deferring), so we don't depend
+        # on what happens to shapes_layer.data in the meantime.
+        box = np.asarray(shapes_layer.data[-1])
 
-        # Strip leading non-spatial dims to match what the segmenter expects.
-        if selected_axis in ("YX", "YXC"):
-            spatial_box = box[:, -2:]
-        elif selected_axis in ("ZYX", "ZYXC"):
-            spatial_box = box[:, -3:]
-        else:
-            spatial_box = box
-
-        indices = get_current_slice_indices(
-            self.viewer.dims.current_step, selected_axis
+        # Defer the actual work until AFTER napari's add_rectangle generator
+        # finishes.  Mutating shapes_layer.data inside this callback would
+        # corrupt that generator and trigger an IndexError on mouse release.
+        QTimer.singleShot(
+            0, lambda: self._process_interactive_roi(shapes_layer, box)
         )
 
-        # Adjust segmentation indices when image has extra dims (e.g. channel)
-        if self.image_layer.data.ndim > self.annotation_layer.data.ndim:
-            segmentation_indices = get_current_slice_indices(
-                self.viewer.dims.current_step,
-                selected_axis,
-                ignore_channel=True,
-            )
-        else:
-            segmentation_indices = indices
-
-        image_data = self.image_layer.data[indices]
-
-        # Sync segmenter with current parameters
-        self.segmenter = (
-            self.segmenter_parameter_form.sync_nd_operation_instance(
-                self.segmenter
-            )
-        )
-
+    def _process_interactive_roi(self, shapes_layer, box):
+        """Deferred body of _on_interactive_roi_change (runs on next tick)."""
         try:
-            mask = self.segmenter.segment(
-                image_data,
-                points=None,
-                shapes=[spatial_box],
+            if shapes_layer not in self.viewer.layers:
+                return
+
+            # Now it's safe to trim the shapes layer to just the latest box.
+            try:
+                shapes_layer.data = [box]
+            except (ValueError, RuntimeError) as e:
+                print(f"Could not trim interactive-labels layer: {e}")
+
+            selected_axis = self.segmenter_parameter_form.get_selected_axis()
+
+            # Strip leading non-spatial dims to match what the segmenter expects.
+            if selected_axis in ("YX", "YXC"):
+                spatial_box = box[:, -2:]
+            elif selected_axis in ("ZYX", "ZYXC"):
+                spatial_box = box[:, -3:]
+            else:
+                spatial_box = box
+
+            indices = get_current_slice_indices(
+                self.viewer.dims.current_step, selected_axis
             )
 
-            self._apply_segmenter_mask(mask, segmentation_indices)
+            # Adjust segmentation indices when image has extra dims (e.g. channel)
+            if self.image_layer.data.ndim > self.annotation_layer.data.ndim:
+                segmentation_indices = get_current_slice_indices(
+                    self.viewer.dims.current_step,
+                    selected_axis,
+                    ignore_channel=True,
+                )
+            else:
+                segmentation_indices = indices
 
-            print(
-                f"Added box-segmentation with label {self.current_label_num}"
+            image_data = self.image_layer.data[indices]
+
+            # Sync segmenter with current parameters
+            self.segmenter = (
+                self.segmenter_parameter_form.sync_nd_operation_instance(
+                    self.segmenter
+                )
             )
-            self._maybe_increment_label()
 
-            self.annotation_layer.refresh()
+            try:
+                mask = self.segmenter.segment(
+                    image_data,
+                    points=None,
+                    shapes=[spatial_box],
+                )
 
-        except (
-            AttributeError,
-            ValueError,
-            TypeError,
-            RuntimeError,
-            IndexError,
-        ) as e:
-            print(f"Error during box segmentation: {e}")
-            import traceback
+                self._apply_segmenter_mask(mask, segmentation_indices)
 
-            traceback.print_exc()
+                print(
+                    f"Added box-segmentation with label {self.current_label_num}"
+                )
+                self._maybe_increment_label()
+
+                self.annotation_layer.refresh()
+
+            except (
+                AttributeError,
+                ValueError,
+                TypeError,
+                RuntimeError,
+                IndexError,
+            ) as e:
+                print(f"Error during box segmentation: {e}")
+                import traceback
+
+                traceback.print_exc()
+        finally:
+            self._interactive_roi_busy = False
 
     def _on_save_project(self):
         """Save annotations, boxes, and label patches in one go."""
