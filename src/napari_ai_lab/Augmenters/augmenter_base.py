@@ -113,8 +113,8 @@ class AugmenterBase(ABC):
     def compute_global_normalization_stats(
         self,
         image: np.ndarray,
-        percentile_low: float = 0,
-        percentile_high: float = 100,
+        percentile_low: float = 1,
+        percentile_high: float = 98,
     ):
         """
         Compute global normalization statistics from full image.
@@ -129,7 +129,7 @@ class AugmenterBase(ABC):
         percentile_low : float
             Lower percentile (default: 1)
         percentile_high : float
-            Upper percentile (default: 99)
+            Upper percentile (default: 98)
         """
         self.global_norm_low, self.global_norm_high = compute_percentiles(
             image, percentile_low, percentile_high
@@ -161,17 +161,29 @@ class AugmenterBase(ABC):
             global_low = self.global_norm_low
             global_high = self.global_norm_high
 
-            if self.normalization_jitter != 1:
+            if self.normalization_jitter > 1:
+                # Log-symmetric multiplicative jitter biased toward 1.0.
+                # Let s = 2u - 1 in [-1, 1], then signed_sq = sign(s)*s**2 in
+                # [-1, 1] but heavily biased toward 0.  factor = J ** signed_sq
+                # is in [1/J, J] and most often near 1.
+                # e.g. J=2 -> factor in [0.5, 2]; J=4 -> [0.25, 4].
+                # Each end of the range is jittered independently so the
+                # range can both widen and narrow vs. the global one.
+                def _factor(rng, j):
+                    s = 2.0 * rng.uniform() - 1.0
+                    signed_sq = (1.0 if s >= 0 else -1.0) * (s * s)
+                    return j**signed_sq
 
-                randomize_normalize_low = 0.9 + self.normalization_jitter * (
-                    self.rng.uniform() ** 2
-                )
-                randomize_normalize_high = 0.9 + self.normalization_jitter * (
-                    self.rng.uniform() ** 2
-                )
+                low_factor = _factor(self.rng, self.normalization_jitter)
+                high_factor = _factor(self.rng, self.normalization_jitter)
 
-                global_low = (1.0 / randomize_normalize_low) * global_low
-                global_high = randomize_normalize_high * global_high
+                global_low = global_low * low_factor
+                global_high = global_high * high_factor
+
+                # Safety: if the two factors happened to cross the ends,
+                # swap so low < high.
+                if global_low > global_high:
+                    global_low, global_high = global_high, global_low
             return normalize_intensity(image, global_low, global_high)
         else:
             return normalize_percentile(image)
