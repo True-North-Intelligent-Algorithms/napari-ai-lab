@@ -126,10 +126,20 @@ class NDAILab(QWidget):
             axes_to_collapse=self.axes_to_collapse,
         )
 
+        # Per-axis scale for annotation layers (collapsed axes dropped)
+        annotation_scale = (
+            self.image_data_model.get_scale(
+                axes_to_collapse=self.axes_to_collapse
+            )
+            or None
+        )
+
         # Create shared layers ONCE
 
         self.annotations_layer = self.viewer.add_labels(
-            labels_data, name="Labels (Persistent)"
+            labels_data,
+            name="Labels (Persistent)",
+            scale=annotation_scale,
         )
 
         # Dictionary to hold prediction layers for different segmenters
@@ -156,6 +166,7 @@ class NDAILab(QWidget):
             border_width=0.5,
             size=1,
             ndim=annotation_ndim,
+            scale=annotation_scale,
         )
 
         # Create shapes layer for segment widget (if in interactive mode)
@@ -165,6 +176,7 @@ class NDAILab(QWidget):
             face_color="transparent",
             edge_width=2,
             ndim=annotation_ndim,
+            scale=annotation_scale,
         )
 
         # Create boxes layer for label widget (bounding-box annotations)
@@ -175,6 +187,7 @@ class NDAILab(QWidget):
             edge_color="blue",
             edge_width=5,
             text={"string": "{split_set}", "size": 15, "color": "green"},
+            scale=annotation_scale,
         )
 
         from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
@@ -185,6 +198,7 @@ class NDAILab(QWidget):
             face_color="transparent",
             edge_width=5,
             ndim=annotation_ndim,
+            scale=annotation_scale,
         )
 
         self.viewer.add_layer(self.bounding_boxes_layer)

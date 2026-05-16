@@ -23,6 +23,7 @@ from napari_ai_lab.Segmenters.GlobalSegmenters import (
     CellCastStardistSegmenter,
     CellposeSegmenter,
     MicroSamSegmenter,
+    MicroSamYoloSegmenter,
     MonaiUNetSegmenter,
     StardistSegmenter,
     ThresholdSegmenter,
@@ -50,6 +51,8 @@ if MicroSamSegmenter is not None:
     MicroSamSegmenter.register()
 if MonaiUNetSegmenter is not None:
     MonaiUNetSegmenter.register()
+if MicroSamYoloSegmenter is not None:
+    MicroSamYoloSegmenter.register()
 
 # Register interactive segmenters
 Square2D.register()
@@ -82,6 +85,7 @@ test_sets = [
     "Stardist_3D",  # 5
     "nuclei",  # 6
     "spheres",  # 7
+    "overlapping",  # 8
 ]
 test_set = test_sets[0]
 
@@ -90,7 +94,7 @@ annotations_viewer_type = "none"
 if test_set == "vessels":
     # Load test data (vessels_project)
     # parent_dir = test_images_dir / "vessels_project"
-    parent_dir = test_images_dir / "vessels_large"
+    parent_dir = test_images_dir / "vessels_ds2"
     viewer_type = "none"
     annotations_viewer_type = "stacked"
     axes_to_collapse = None
@@ -121,6 +125,10 @@ elif test_set == "nuclei":
 elif test_set == "spheres":
     parent_dir = r"D:\deep-learning\labels\For_AI_lab_intensity"
     viewer_type = "stacked"
+    axes_to_collapse = None
+elif test_set == "overlapping":
+    parent_dir = test_images_dir / "overlapping"
+    viewer_type = None
     axes_to_collapse = None
 
 # Create model
@@ -164,7 +172,7 @@ if viewer_type in ["stacked", "sequence"]:
 else:
     # Load first image (viewer_type = "none" logic)
     image_data = model.load_image(0)
-    image_layer = viewer.add_image(image_data, name="Image")
+    image_layer = viewer.add_image(image_data, name="Image", scale=model.get_scale())
 
     # Phase 3: Central layer setup - call nd_ai_lab's _set_image_layer
     # This creates all layers once and distributes to sub-apps

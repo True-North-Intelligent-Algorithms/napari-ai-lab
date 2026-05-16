@@ -376,6 +376,10 @@ class NDEasyLabel(BaseNDApp):
             face_color="transparent",
             edge_color="yellow",
             edge_width=3,
+            scale=self.image_data_model.get_scale(
+                axes_to_collapse=self.axes_to_collapse
+            )
+            or None,
         )
         self.interactive_labels_layer.events.data.connect(
             self._on_interactive_roi_change
@@ -617,8 +621,13 @@ class NDEasyLabel(BaseNDApp):
             )
 
             # Add labels layer and store reference
+            annotation_scale = self.image_data_model.get_scale(
+                axes_to_collapse=self.axes_to_collapse
+            )
             self.annotation_layer = self.viewer.add_labels(
-                labels_data, name="Labels (Persistent)"
+                labels_data,
+                name="Labels (Persistent)",
+                scale=annotation_scale or None,
             )
 
             # Add points layer for annotation with point type choices
@@ -640,6 +649,7 @@ class NDEasyLabel(BaseNDApp):
                 border_width=0.5,
                 size=1,
                 ndim=annotation_ndim,
+                scale=annotation_scale or None,
             )
 
             # Connect point event handler
@@ -652,6 +662,7 @@ class NDEasyLabel(BaseNDApp):
                 face_color="transparent",
                 edge_width=2,
                 ndim=annotation_ndim,
+                scale=annotation_scale or None,
             )
 
             # Connect shapes event handler
@@ -664,6 +675,7 @@ class NDEasyLabel(BaseNDApp):
                 edge_color="blue",
                 edge_width=5,
                 text={"string": "{split_set}", "size": 15, "color": "green"},
+                scale=annotation_scale or None,
             )
 
             # Connect boxes layer event handler

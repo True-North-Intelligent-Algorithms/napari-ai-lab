@@ -837,8 +837,13 @@ class NDEasySegment(BaseNDApp):
             axes_to_collapse=self.axes_to_collapse,
         )
 
+        annotation_scale = self.image_data_model.get_scale(
+            axes_to_collapse=self.axes_to_collapse
+        )
         self.annotation_layer = self.viewer.add_labels(
-            labels_data, name="Labels (Persistent)"
+            labels_data,
+            name="Labels (Persistent)",
+            scale=annotation_scale or None,
         )
 
         # Dictionary to hold prediction layers for different segmenters
@@ -905,7 +910,12 @@ class NDEasySegment(BaseNDApp):
                 ):
                     # Add as labels layer with method name
                     layer = self.viewer.add_labels(
-                        predictions, name=method_name
+                        predictions,
+                        name=method_name,
+                        scale=self.image_data_model.get_scale(
+                            axes_to_collapse=self.axes_to_collapse
+                        )
+                        or None,
                     )
                     self.predictions_layers[method_name] = layer
                     print(
@@ -940,7 +950,12 @@ class NDEasySegment(BaseNDApp):
             predictions_shape, dtype=np.uint16
         )
         new_layer = self.viewer.add_labels(
-            empty_predictions, name=segmenter_name
+            empty_predictions,
+            name=segmenter_name,
+            scale=self.image_data_model.get_scale(
+                axes_to_collapse=self.axes_to_collapse
+            )
+            or None,
         )
         self.predictions_layers[segmenter_name] = new_layer
         print(f"Created new predictions layer: {segmenter_name}")
@@ -1018,15 +1033,29 @@ class NDEasySegment(BaseNDApp):
             border_width=0.5,
             size=1,
             ndim=annotation_ndim,
+            scale=self.image_data_model.get_scale(
+                axes_to_collapse=self.axes_to_collapse
+            )
+            or None,
         )
         self.points_layer.events.data.connect(self._on_points_changed)
 
         # Shapes layer
         annotation_ndim = min(len(image_data.shape), 3)
+        shapes_scale = self.image_data_model.get_scale(
+            axes_to_collapse=self.axes_to_collapse
+        )
+        # Trim to match the (possibly clamped) annotation_ndim by taking
+        # the trailing axes (Y/X[/Z]).
+        if shapes_scale and len(shapes_scale) >= annotation_ndim:
+            shapes_scale = shapes_scale[-annotation_ndim:]
+        else:
+            shapes_scale = None
         self.shapes_layer = self.viewer.add_shapes(
             name="Shapes Layer",
             edge_color="green",
             face_color="transparent",
             edge_width=2,
             ndim=annotation_ndim,
+            scale=shapes_scale,
         )

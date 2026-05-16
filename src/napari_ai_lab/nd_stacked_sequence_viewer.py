@@ -108,9 +108,20 @@ class NDStackedSequenceViewer(QWidget):
                     self.viewer.layers.remove(self.current_image_layer)
                     self.current_image_layer = None
 
-                # Add stacked image to viewer
+                # Add stacked image to viewer.  The stacked array gains a
+                # leading sequence dimension, so prepend 1.0 to the model's
+                # per-axis scale to keep lengths aligned.
+                base_scale = model.get_scale()
+                stack_scale = (
+                    [1.0, *base_scale]
+                    if base_scale
+                    and len(base_scale) == stacked_images.ndim - 1
+                    else None
+                )
                 self.current_image_layer = self.viewer.add_image(
-                    stacked_images, name="Stacked Image Series"
+                    stacked_images,
+                    name="Stacked Image Series",
+                    scale=stack_scale,
                 )
 
                 # Reset current index

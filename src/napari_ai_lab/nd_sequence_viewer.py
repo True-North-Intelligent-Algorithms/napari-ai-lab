@@ -224,7 +224,9 @@ class NDSequenceViewer(QWidget):
 
             # Add image to viewer
             self.current_image_layer = self.viewer.add_image(
-                image_data, name=f"Series Image: {image_path.name}"
+                image_data,
+                name=f"Series Image: {image_path.name}",
+                scale=self.image_data_model.get_scale(),
             )
 
             # Emit signal that image has changed with image layer and index

@@ -97,6 +97,7 @@ class ImageDataModel:
         self._input_images_io = None
         self._current_segmenter_name: str | None = None
         self.axis_types: str | None = None
+        self.scale: list[float] | None = None
         self.annotation_save_granularity: str = "file"
         self.prediction_save_granularity: str = "file"
 
@@ -159,6 +160,42 @@ class ImageDataModel:
         """Get total number of images in directory."""
         return len(self.get_image_paths())
 
+    def get_scale(
+        self, axes_to_collapse: str | list[str] | None = None
+    ) -> list[float]:
+        """Return per-axis scale, optionally with some axes dropped.
+
+        Parameters
+        ----------
+        axes_to_collapse : str | list[str] | None
+            Axis letters to omit from the returned scale (e.g. ``"C"``).
+            Matches the same convention used by
+            ``load_existing_annotations``.
+
+        Returns
+        -------
+        list[float]
+            Scale list of length ``len(self.axis_types) - len(axes_to_collapse)``.
+            Falls back to all-ones if ``self.scale`` is not yet populated.
+        """
+        if self.scale is None or self.axis_types is None:
+            # Best-effort fallback: no image loaded yet.
+            return []
+
+        if not axes_to_collapse:
+            return list(self.scale)
+
+        if isinstance(axes_to_collapse, str):
+            drop = set(axes_to_collapse)
+        else:
+            drop = {ax for ax in axes_to_collapse}
+
+        return [
+            s
+            for ax, s in zip(self.axis_types, self.scale, strict=False)
+            if ax not in drop
+        ]
+
     def load_image(
         self, image_index: int, stacked: bool = False
     ) -> np.ndarray:
@@ -197,6 +234,10 @@ class ImageDataModel:
         image_path = image_paths[image_index]
         print(f"Loading image: {image_path}")
 
+        # Scaling per axis letter, in microns.  Populated for CZI; left empty
+        # (-> defaults to 1.0 per axis) for everything else.
+        scale_by_axis: dict[str, float] = {}
+
         # TODO: refactor to use io classes and eventually ndev-io
         if image_path.suffix.lower() == ".czi":
             # Use czifile for .czi format
@@ -205,6 +246,26 @@ class ImageDataModel:
             with CziFile(str(image_path)) as czi:
                 self.image_data = czi.asarray()
                 self.axis_types = czi.axes
+
+                from xml.etree import ElementTree as ET
+
+                metadata = czi.metadata()
+
+                root = ET.fromstring(metadata)
+
+                # CZI stores Distance/Value in meters -> convert to microns.
+                for axis_letter in ("X", "Y", "Z"):
+                    node = root.find(
+                        f".//Scaling/Items/Distance[@Id='{axis_letter}']/Value"
+                    )
+                    if node is not None and node.text:
+                        try:
+                            meters = float(node.text)
+                        except ValueError:
+                            continue
+                        microns = meters * 1.0e6
+                        scale_by_axis[axis_letter] = microns
+                        print(f"{axis_letter}: {microns:.4f} \u00b5m")
         else:
             # Use skimage for other formats
             self.image_data = imread(str(image_path))
@@ -220,8 +281,22 @@ class ImageDataModel:
 
         # Squeeze to remove singleton dimensions
         self.image_data = np.squeeze(self.image_data)
+
+        # Build self.scale aligned with the final self.axis_types.  Axes
+        # without a known physical scale (e.g. T, C, or any non-CZI image)
+        # get 1.0 so passing scale to a napari layer is always safe.
+        if self.axis_types is not None and len(self.axis_types) == len(
+            self.image_data.shape
+        ):
+            self.scale = [
+                float(scale_by_axis.get(ax, 1.0)) for ax in self.axis_types
+            ]
+        else:
+            self.scale = [1.0] * self.image_data.ndim
+
         print(f"Loaded image shape: {self.image_data.shape}")
         print(f"Axis types: {self.axis_types}")
+        print(f"Scale (per axis): {self.scale}")
 
         return self.image_data
 
