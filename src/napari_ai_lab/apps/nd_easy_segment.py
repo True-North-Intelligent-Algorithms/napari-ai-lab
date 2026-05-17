@@ -10,6 +10,7 @@ import contextlib
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QGroupBox,
     QHBoxLayout,
@@ -109,6 +110,10 @@ class NDEasySegment(BaseNDApp):
             self._on_segmenter_changed
         )
         main_layout.addWidget(self.segmenter_combo)
+
+        self.save_slice_wise_cb = QCheckBox("Save slice-wise predictions")
+        self.save_slice_wise_cb.setChecked(True)
+        main_layout.addWidget(self.save_slice_wise_cb)
 
         # Parameter form widget (from base)
         main_layout.addWidget(self._create_segmenter_parameter_form())
@@ -640,13 +645,14 @@ class NDEasySegment(BaseNDApp):
             segmenter_name = self._seg_segmenter_name
 
             # Save predictions via model
-            self.image_data_model.save_predictions(
-                mask,
-                self.current_image_index,
-                current_step=current_step,
-                selected_axis=segmentation_axis,
-                axes_to_collapse=self.axes_to_collapse,
-            )
+            if self.save_slice_wise_cb.isChecked():
+                self.image_data_model.save_predictions(
+                    mask,
+                    self.current_image_index,
+                    current_step=current_step,
+                    selected_axis=segmentation_axis,
+                    axes_to_collapse=self.axes_to_collapse,
+                )
 
             segmentation_indices = get_current_slice_indices(
                 current_step, segmentation_axis, ignore_channel=True
