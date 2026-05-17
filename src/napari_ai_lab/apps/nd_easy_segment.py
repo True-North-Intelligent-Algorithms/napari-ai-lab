@@ -5,6 +5,8 @@ This module provides a unified interface for both interactive (point/shape-based
 and automatic (full plane/volume) segmentation workflows.
 """
 
+import contextlib
+
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
@@ -15,6 +17,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QSpinBox,
     QVBoxLayout,
 )
 
@@ -119,9 +122,25 @@ class NDEasySegment(BaseNDApp):
         self.segment_current_btn.clicked.connect(self._on_segment_current)
         auto_layout.addWidget(self.segment_current_btn)
 
-        self.segment_all_btn = QPushButton("Segment All Images")
-        self.segment_all_btn.clicked.connect(self._on_segment_all)
+        self.segment_all_btn = QPushButton("Segment Range")
+        self.segment_all_btn.clicked.connect(self._on_segment_range)
         auto_layout.addWidget(self.segment_all_btn)
+
+        # Start/end slice spinboxes for the range
+        range_row = QHBoxLayout()
+        range_row.addWidget(QLabel("Start:"))
+        self.start_slice_spin = QSpinBox()
+        self.start_slice_spin.setMinimum(0)
+        self.start_slice_spin.setMaximum(0)
+        self.start_slice_spin.setValue(0)
+        range_row.addWidget(self.start_slice_spin)
+        range_row.addWidget(QLabel("End:"))
+        self.end_slice_spin = QSpinBox()
+        self.end_slice_spin.setMinimum(0)
+        self.end_slice_spin.setMaximum(0)
+        self.end_slice_spin.setValue(0)
+        range_row.addWidget(self.end_slice_spin)
+        auto_layout.addLayout(range_row)
 
         self.train_btn = QPushButton("Train")
         self.train_btn.clicked.connect(self._on_train)
@@ -312,6 +331,53 @@ class NDEasySegment(BaseNDApp):
             self.training_parameter_form.set_nd_operation(segmenter)
             self._cross_connect_combos()
 
+        # Update range bounds and connect axis-change signal (idempotent)
+        with contextlib.suppress(TypeError, RuntimeError):
+            self.segmenter_parameter_form.axis_changed.disconnect(
+                self._update_range_bounds
+            )
+        with contextlib.suppress(AttributeError, RuntimeError):
+            self.segmenter_parameter_form.axis_changed.connect(
+                self._update_range_bounds
+            )
+        self._update_range_bounds()
+
+    def _update_range_bounds(self, *_):
+        """Recompute Segment-Range spinbox bounds from current image+axis."""
+        if not (
+            hasattr(self, "start_slice_spin")
+            and hasattr(self, "end_slice_spin")
+        ):
+            return
+        if self.image_layer is None:
+            return
+        try:
+            selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        except AttributeError:
+            selected_axis = None
+        if not selected_axis:
+            return
+        try:
+            processor = SliceProcessor(
+                self.image_layer.data.shape,
+                selected_axis,
+                self.axes_to_collapse,
+            )
+        except (ValueError, AttributeError):
+            return
+        max_idx = max(0, processor.total_slices - 1)
+        # Preserve current selection where possible.
+        old_start = self.start_slice_spin.value()
+        old_end = self.end_slice_spin.value()
+        self.start_slice_spin.setMaximum(max_idx)
+        self.end_slice_spin.setMaximum(max_idx)
+        # If bounds previously degenerate (0..0), reset to full range.
+        if old_end == 0 and old_start == 0:
+            self.end_slice_spin.setValue(max_idx)
+        else:
+            self.start_slice_spin.setValue(min(old_start, max_idx))
+            self.end_slice_spin.setValue(min(old_end, max_idx))
+
     def _cross_connect_combos(self):
         """Cross-wire model and axis combos so changing one updates the other."""
         seg = self.segmenter_parameter_form
@@ -420,7 +486,7 @@ class NDEasySegment(BaseNDApp):
 
         # If the segmenter produced a 3D "stacked labels" preview (e.g.
         # MicroSamYoloSegmenter), show it as a separate labels layer.
-        # Only done in single-slice mode (not during _on_segment_all).
+        # Only done in single-slice mode (not during _on_segment_range).
         stacked = getattr(self.segmenter, "last_stacked_labels", None)
         if stacked is not None:
             self._show_stacked_labels_layer(stacked)
@@ -428,8 +494,8 @@ class NDEasySegment(BaseNDApp):
         self.segment_progress_logger.update_progress(2, 2, "\u2705 Complete")
         self.segment_progress_logger.log_info("\u2705 Segmentation complete")
 
-    def _on_segment_all(self):
-        """Segment all slices in the ND data automatically (threaded)."""
+    def _on_segment_range(self):
+        """Segment a range of slices in the ND data (threaded)."""
         if self.image_layer is None:
             QMessageBox.warning(self, "Warning", "No images loaded")
             return
@@ -441,10 +507,10 @@ class NDEasySegment(BaseNDApp):
         # Clear progress logger
         self.segment_progress_logger.clear()
         self.segment_progress_logger.log_info(
-            "Starting segmentation of all slices..."
+            "Starting segmentation of slice range..."
         )
 
-        print("Segmenting all slices...")
+        print("Segmenting slice range...")
 
         # Ensure segmenter is synced with current parameters
         self.segmenter = (
@@ -471,9 +537,24 @@ class NDEasySegment(BaseNDApp):
             image_shape, selected_axis, self.axes_to_collapse
         )
 
-        print(f"Total slices to segment: {processor.total_slices}")
+        # Clamp spinbox bounds to the processor's slice count and read range.
+        max_idx = max(0, processor.total_slices - 1)
+        self.start_slice_spin.setMaximum(max_idx)
+        self.end_slice_spin.setMaximum(max_idx)
+        start_idx = min(self.start_slice_spin.value(), max_idx)
+        end_idx = min(self.end_slice_spin.value(), max_idx)
+        if end_idx < start_idx:
+            end_idx = start_idx
+            self.end_slice_spin.setValue(end_idx)
+        num_to_run = end_idx - start_idx + 1
+
+        print(
+            f"Total slices: {processor.total_slices}, "
+            f"running {num_to_run} ({start_idx}..{end_idx})"
+        )
         self.segment_progress_logger.log_info(
-            f"Total slices to segment: {processor.total_slices}"
+            f"Total slices: {processor.total_slices}, "
+            f"running {num_to_run} ({start_idx}..{end_idx})"
         )
 
         # Disable button while running
@@ -481,7 +562,10 @@ class NDEasySegment(BaseNDApp):
 
         # Launch threaded processing
         self._segment_thread = SliceProcessorThread(
-            processor, self._do_segment_slice
+            processor,
+            self._do_segment_slice,
+            start_index=start_idx,
+            end_index=end_idx,
         )
         self._segment_thread.progress.connect(self._on_segment_all_progress)
         self._segment_thread.slice_done.connect(self._on_segment_slice_done)
@@ -829,6 +913,9 @@ class NDEasySegment(BaseNDApp):
         """Set up annotation layers based on the provided image layer."""
         self.image_layer = image_layer
         image_data = image_layer.data
+
+        # Refresh the Segment-Range spinbox bounds based on the new image.
+        self._update_range_bounds()
 
         # Load existing labels or create empty ones
         labels_data = self.image_data_model.load_existing_annotations(

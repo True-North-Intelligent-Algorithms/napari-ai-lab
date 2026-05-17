@@ -81,8 +81,15 @@ class SliceProcessor:
             on_slice_done(current_step, result)
         return result
 
-    def process_all(self, operation_fn, on_slice_done=None, on_progress=None):
-        """Process all non-spatial slices.
+    def process_all(
+        self,
+        operation_fn,
+        on_slice_done=None,
+        on_progress=None,
+        start_index=None,
+        end_index=None,
+    ):
+        """Process non-spatial slices in the (optional) flat index range.
 
         Args:
             operation_fn: Callable(current_step) -> result.
@@ -90,10 +97,29 @@ class SliceProcessor:
                 after each slice.
             on_progress: Optional callable(current_index, total_slices)
                 called before each slice for progress reporting.
+            start_index: Optional inclusive flat index of the first slice
+                to process.  Defaults to 0.
+            end_index: Optional inclusive flat index of the last slice to
+                process.  Defaults to ``total_slices - 1``.
         """
+        first = 0 if start_index is None else max(0, int(start_index))
+        last = (
+            self.total_slices - 1
+            if end_index is None
+            else min(self.total_slices - 1, int(end_index))
+        )
+        if first > last:
+            return
+        total = last - first + 1
+        report_idx = 0
         for idx, current_step in self.iter_steps():
+            if idx < first:
+                continue
+            if idx > last:
+                break
+            report_idx += 1
             if on_progress:
-                on_progress(idx + 1, self.total_slices)
+                on_progress(report_idx, total)
             self.process_slice(current_step, operation_fn, on_slice_done)
 
 
@@ -108,10 +134,14 @@ class _SliceWorker(QObject):
     finished = Signal()
     error = Signal(str)
 
-    def __init__(self, processor, operation_fn):
+    def __init__(
+        self, processor, operation_fn, start_index=None, end_index=None
+    ):
         super().__init__()
         self.processor = processor
         self.operation_fn = operation_fn
+        self.start_index = start_index
+        self.end_index = end_index
 
     def run(self):
         """Execute process_all; called on the worker thread."""
@@ -122,6 +152,8 @@ class _SliceWorker(QObject):
                     step, result
                 ),
                 on_progress=lambda cur, tot: self.progress.emit(cur, tot),
+                start_index=self.start_index,
+                end_index=self.end_index,
             )
         except (
             RuntimeError,
@@ -150,9 +182,16 @@ class SliceProcessorThread:
     The caller must keep a reference to this object until ``finished`` fires.
     """
 
-    def __init__(self, processor, operation_fn):
+    def __init__(
+        self, processor, operation_fn, start_index=None, end_index=None
+    ):
         self.thread = QThread()
-        self.worker = _SliceWorker(processor, operation_fn)
+        self.worker = _SliceWorker(
+            processor,
+            operation_fn,
+            start_index=start_index,
+            end_index=end_index,
+        )
         self.worker.moveToThread(self.thread)
 
         # Wire lifecycle
