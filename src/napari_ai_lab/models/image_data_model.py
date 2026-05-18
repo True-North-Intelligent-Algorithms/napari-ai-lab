@@ -792,6 +792,92 @@ class ImageDataModel:
         """Return the path to boxes.csv inside the labels directory."""
         return self.get_labels_directory() / "boxes.csv"
 
+    def get_labels3d_directory(self) -> Path:
+        """Get the directory for 3D-box CSV (mirrors labels/ for 2D boxes)."""
+        labels3d_dir = self.parent_directory / "labels3d"
+        labels3d_dir.mkdir(parents=True, exist_ok=True)
+        return labels3d_dir
+
+    def get_boxes3d_csv_path(self) -> Path:
+        """Return the path to boxes.csv inside the labels3d directory."""
+        return self.get_labels3d_directory() / "boxes.csv"
+
+    def save_3D_boxes(
+        self,
+        boxes_layer_data: list,
+        image_index: int,
+    ) -> bool:
+        """Save all 3D bounding boxes to ``labels3d/boxes.csv``.
+
+        Each box is stored as one row with the full vertex array JSON-encoded
+        in a single ``coords`` column (simplest round-trippable format).
+
+        Columns: ``file_name, ndim, n_vertices, coords``.
+        """
+        import csv
+        import json
+
+        import numpy as np
+
+        csv_path = self.get_boxes3d_csv_path()
+
+        try:
+            image_paths = self.get_image_paths()
+            if not 0 <= image_index < len(image_paths):
+                print(
+                    f"⚠️  save_3D_boxes: image_index {image_index} out of range"
+                )
+                return False
+            file_name = image_paths[image_index].name
+        except (AttributeError, IndexError, OSError) as e:
+            print(f"⚠️  save_3D_boxes: could not resolve file name ({e})")
+            return False
+
+        rows: list[dict] = []
+        for box in boxes_layer_data:
+            arr = np.asarray(box, dtype=float)
+            rows.append(
+                {
+                    "file_name": file_name,
+                    "ndim": arr.shape[-1] if arr.ndim >= 2 else arr.shape[0],
+                    "n_vertices": arr.shape[0] if arr.ndim >= 2 else 1,
+                    "coords": json.dumps(arr.tolist()),
+                }
+            )
+
+        fieldnames = ["file_name", "ndim", "n_vertices", "coords"]
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"📦 Saved {len(rows)} 3D box(es) → {csv_path}")
+        return True
+
+    def load_3D_boxes(self) -> list[np.ndarray]:
+        """Load 3D bounding boxes from ``labels3d/boxes.csv``.
+
+        Returns a list of vertex arrays (one per box), or [] when missing.
+        """
+        import csv
+        import json
+
+        import numpy as np
+
+        csv_path = self.get_boxes3d_csv_path()
+        if not csv_path.exists():
+            return []
+
+        boxes: list[np.ndarray] = []
+        with open(csv_path, newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                try:
+                    coords = json.loads(row["coords"])
+                    boxes.append(np.asarray(coords, dtype=float))
+                except (ValueError, KeyError, TypeError) as e:
+                    print(f"⚠️  load_3D_boxes: skipping bad row ({e})")
+        return boxes
+
     def _is_stacked_sequence(self) -> bool:
         """Return True when the input images are loaded as a stacked sequence."""
         return self.input_images_io_type == "stacked_sequence"
@@ -1172,6 +1258,103 @@ class ImageDataModel:
             f"📦 crop_and_save_label_patches: saved {saved_count} patch pair(s) → {labels_dir}"
         )
         return labels_dir
+
+    def crop_and_save_3D_label_patches(
+        self,
+        boxes_3D_layer_data: list,
+        image_array: np.ndarray,
+        annotations_array: np.ndarray,
+        image_index: int,
+    ) -> Path:
+        """
+        Mirror of :py:meth:`crop_and_save_label_patches` for 3D bounding boxes.
+
+        Saves paired Z-Y-X image/annotation crops under
+        ``labels3d/input0/`` and ``labels3d/truth0/``.  Each 3D box's
+        Z/Y/X extents are taken directly from its 8 vertices (columns
+        -3, -2, -1).  Channel (``C``) axes are taken in full; any
+        additional leading non-spatial axes fall back to ``image_index``
+        (0 for non-stacked).
+        """
+        import shutil
+
+        import numpy as np
+        from skimage.io import imsave
+
+        from ..utilities.io_util import generate_patch_names
+
+        image_paths = self.get_image_paths()
+        labels3d_dir = self.get_labels3d_directory()
+        input_dir = labels3d_dir / "input0"
+        truth_dir = labels3d_dir / "truth0"
+
+        for d in (input_dir, truth_dir):
+            if d.exists():
+                shutil.rmtree(d)
+            d.mkdir(parents=True)
+
+        stem = image_paths[image_index].stem
+        saved_count = 0
+
+        for box in boxes_3D_layer_data:
+            box = np.asarray(box)
+            if box.ndim != 2 or box.shape[-1] < 3:
+                print(f"⚠️  3D box has unexpected shape {box.shape} — skipping")
+                continue
+
+            zstart = int(np.floor(np.min(box[:, -3])))
+            zend = int(np.ceil(np.max(box[:, -3])))
+            ystart = int(np.floor(np.min(box[:, -2])))
+            yend = int(np.ceil(np.max(box[:, -2])))
+            xstart = int(np.floor(np.min(box[:, -1])))
+            xend = int(np.ceil(np.max(box[:, -1])))
+
+            if zend <= zstart or yend <= ystart or xend <= xstart:
+                print(f"⚠️  Degenerate 3D box for '{stem}' — skipping")
+                continue
+
+            slices = []
+            for ax in self.axis_types:
+                if ax == "C":
+                    slices.append(slice(None))
+                elif ax == "Z":
+                    slices.append(slice(zstart, zend))
+                elif ax == "Y":
+                    slices.append(slice(ystart, yend))
+                elif ax == "X":
+                    slices.append(slice(xstart, xend))
+                else:
+                    slices.append(image_index)
+
+            image_crop = image_array[tuple(slices)]
+
+            if annotations_array.ndim == image_array.ndim:
+                ann_slices = slices
+            else:
+                ann_slices = [
+                    s
+                    for ax, s in zip(self.axis_types, slices, strict=False)
+                    if ax != "C"
+                ]
+            annotation_crop = annotations_array[tuple(ann_slices)]
+
+            image_name, mask_name = generate_patch_names(
+                str(input_dir), str(truth_dir), stem
+            )
+
+            imsave(image_name, image_crop)
+            imsave(mask_name, annotation_crop.astype(np.uint16))
+
+            print(
+                f"✅ Saved 3D patch pair: {Path(image_name).name} "
+                f"({zend - zstart}×{yend - ystart}×{xend - xstart})"
+            )
+            saved_count += 1
+
+        print(
+            f"📦 crop_and_save_3D_label_patches: saved {saved_count} patch pair(s) → {labels3d_dir}"
+        )
+        return labels3d_dir
 
     def save_annotations(
         self,

@@ -816,6 +816,36 @@ class NDEasyLabel(BaseNDApp):
         else:
             print("No boxes drawn — skipping label patch save.")
 
+        # Save 3D bounding boxes (if the shared 3D boxes layer exists)
+        boxes_3D_layer = getattr(self, "boxes_3D_layer", None)
+        if boxes_3D_layer is not None and self.image_data_model is not None:
+            try:
+                self.image_data_model.save_3D_boxes(
+                    list(boxes_3D_layer.data),
+                    self.current_image_index,
+                )
+            except (AttributeError, OSError, ValueError) as e:
+                print(f"Failed to save 3D boxes: {e}")
+
+            # Save 3D patch pairs (input0 / truth0 under labels3d/)
+            if (
+                len(boxes_3D_layer.data) > 0
+                and self.image_layer is not None
+                and self.annotation_layer is not None
+            ):
+                try:
+                    self.image_data_model.crop_and_save_3D_label_patches(
+                        list(boxes_3D_layer.data),
+                        self.image_layer.data,
+                        self.annotation_layer.data,
+                        self.current_image_index,
+                    )
+                    print("3D label patches saved.")
+                except (AttributeError, ValueError, OSError, IndexError) as e:
+                    print(f"Failed to save 3D label patches: {e}")
+            else:
+                print("No 3D boxes drawn — skipping 3D label patch save.")
+
     def _save_label_patches_on_close(self):
         """Called by the close handler to save label patches silently (no dialog)."""
         boxes_layer = getattr(self, "boxes_layer", None)
@@ -834,6 +864,24 @@ class NDEasyLabel(BaseNDApp):
             self.current_image_index,
         )
         print("Label patches saved on close.")
+
+        # Also save 3D boxes + 3D patches on close (mirrors _on_save_project).
+        boxes_3D_layer = getattr(self, "boxes_3D_layer", None)
+        if boxes_3D_layer is not None and len(boxes_3D_layer.data) > 0:
+            try:
+                self.image_data_model.save_3D_boxes(
+                    list(boxes_3D_layer.data),
+                    self.current_image_index,
+                )
+                self.image_data_model.crop_and_save_3D_label_patches(
+                    list(boxes_3D_layer.data),
+                    self.image_layer.data,
+                    self.annotation_layer.data,
+                    self.current_image_index,
+                )
+                print("3D label patches saved on close.")
+            except (AttributeError, ValueError, OSError, IndexError) as e:
+                print(f"Failed to save 3D boxes/patches on close: {e}")
 
     def _get_current_image_name(self) -> str | None:
         """Return the file name of the currently displayed image, or None."""
@@ -908,6 +956,31 @@ class NDEasyLabel(BaseNDApp):
         if shapes:
             self.boxes_layer.add(shapes, shape_type=shape_types)
             print(f"📦 Loaded {len(shapes)} existing boxes into boxes_layer")
+
+    def _load_existing_3D_boxes(self):
+        """Load saved 3D bounding boxes from labels3d/boxes.csv into boxes_3D_layer."""
+        boxes_3D_layer = getattr(self, "boxes_3D_layer", None)
+        if boxes_3D_layer is None or self.image_data_model is None:
+            return
+        try:
+            saved = self.image_data_model.load_3D_boxes()
+        except (OSError, ValueError) as e:
+            print(f"Failed to load existing 3D boxes: {e}")
+            return
+        if not saved:
+            return
+        try:
+            boxes_3D_layer.add(saved)
+        except (AttributeError, ValueError, TypeError) as e:
+            # Fall back to direct data assignment if .add isn't supported.
+            try:
+                boxes_3D_layer.data = list(boxes_3D_layer.data) + list(saved)
+            except (ValueError, TypeError) as e2:
+                print(f"Failed to populate boxes_3D_layer: {e} / {e2}")
+                return
+        print(
+            f"📦 Loaded {len(saved)} existing 3D box(es) into boxes_3D_layer"
+        )
 
     # _on_open_directory and load_image_directory inherited from BaseNDApp
     def _set_image_layer(self, image_layer):

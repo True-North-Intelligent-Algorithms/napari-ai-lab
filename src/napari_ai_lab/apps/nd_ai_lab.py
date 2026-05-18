@@ -254,6 +254,12 @@ class NDAILab(QWidget):
         self.label_widget.boxes_3D_layer = self.boxes_3D_layer
         self.segment_widget.boxes_3D_layer = self.boxes_3D_layer
 
+        # Load any previously saved 3D boxes from labels3d/boxes.csv BEFORE
+        # connecting the interactive handler, so populating the layer doesn't
+        # trigger segmentation on every saved box.
+        if hasattr(self.label_widget, "_load_existing_3D_boxes"):
+            self.label_widget._load_existing_3D_boxes()
+
         # Wire shared 3D boxes layer to the label widget's 3D handler so it
         # can be chosen from the Interactive Layer combo ("3D Bounding Boxes").
         # The handler itself ignores the event unless the combo selects it.
