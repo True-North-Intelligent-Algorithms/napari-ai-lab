@@ -131,11 +131,22 @@ Instructions for Otsu 3D Segmentation:
             x1 = min(w, int(np.ceil(np.max(xs))))
 
             if box.shape[1] >= 3:
-                cz = int(round(float(np.mean(box[:, -3]))))
+                zs = box[:, -3]
+                z_min = float(np.min(zs))
+                z_max = float(np.max(zs))
+                if z_max - z_min > 0.5:
+                    # True 3D box: use its Z extent directly.
+                    z0 = max(0, int(np.floor(z_min)))
+                    z1 = min(d, int(np.ceil(z_max)))
+                else:
+                    # 2D box drawn on one Z plane: extend by half_z.
+                    cz = int(round(float(np.mean(zs))))
+                    z0 = max(0, cz - half_z)
+                    z1 = min(d, cz + half_z)
             else:
                 cz = d // 2
-            z0 = max(0, cz - half_z)
-            z1 = min(d, cz + half_z)
+                z0 = max(0, cz - half_z)
+                z1 = min(d, cz + half_z)
             print(
                 f"Otsu3D: using box ROI z=[{z0}:{z1}] y=[{y0}:{y1}] x=[{x0}:{x1}]"
             )

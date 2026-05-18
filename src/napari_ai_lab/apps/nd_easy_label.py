@@ -86,6 +86,15 @@ class NDEasyLabel(BaseNDApp):
         self.auto_increment_checkbox.setChecked(True)
         self.layout().addWidget(self.auto_increment_checkbox)
 
+        # Combo: choose which layer drives live interactive segmentation.
+        # Populated dynamically ("None" plus whatever box-like layers exist).
+        interactive_layer_row = QHBoxLayout()
+        interactive_layer_row.addWidget(QLabel("Interactive Layer:"))
+        self.interactive_layer_combo = QComboBox()
+        self.interactive_layer_combo.addItem("None")
+        interactive_layer_row.addWidget(self.interactive_layer_combo)
+        self.layout().addLayout(interactive_layer_row)
+
         # Button to add an interactive-label (ROI box) shapes layer
         self.add_interactive_layer_btn = QPushButton(
             "Add Interactive-Label Layer"
@@ -95,8 +104,19 @@ class NDEasyLabel(BaseNDApp):
         )
         self.layout().addWidget(self.add_interactive_layer_btn)
 
+        # Button to add an interactive 3D bounding-boxes layer
+        self.add_interactive_3D_boxes_btn = QPushButton(
+            "Add Interactive 3D Boxes Layer"
+        )
+        self.add_interactive_3D_boxes_btn.clicked.connect(
+            self._on_add_interactive_3D_boxes_layer
+        )
+        self.layout().addWidget(self.add_interactive_3D_boxes_btn)
+
         # Holder for the interactive-label shapes layer (created on demand)
         self.interactive_labels_layer = None
+        # Holder for the interactive 3D bounding-boxes layer (created on demand)
+        self.interactive_3D_boxes_layer = None
 
         # Add stretch to push everything to the top (prevents button stretching)
         self.layout().addStretch()
@@ -164,9 +184,16 @@ class NDEasyLabel(BaseNDApp):
             sub_target = target[roi_bbox]
             nz = sub_mask != 0
             sub_target[nz] = sub_mask[nz] * self.current_label_num
+            # Clear voxels in ROI that previously held the current label but
+            # are now background in the new mask (e.g. tighter interactive
+            # re-segmentation).
+            clear = (sub_mask == 0) & (sub_target == self.current_label_num)
+            sub_target[clear] = 0
         else:
             nz = mask != 0
             target[nz] = mask[nz] * self.current_label_num
+            clear = (mask == 0) & (target == self.current_label_num)
+            target[clear] = 0
 
     def _maybe_increment_label(self):
         """Auto-increment current_label_num and sync the spinbox if enabled."""
@@ -331,31 +358,249 @@ class NDEasyLabel(BaseNDApp):
                 print(f"  Shape {i+1}: {shape.shape} with {len(shape)} points")
 
     def _on_boxes_changed(self, event):
-        """Handle boxes layer data changes - just logs the new box; saving happens with annotations."""
-        if event.action != "added":
-            return
+        """Handle boxes layer data changes - just logs the new box; saving happens with annotations.
 
-        boxes_layer = event.source
-        if len(boxes_layer.data) == 0:
-            return
+        If the Interactive Layer combo selects this "Label box" layer, also
+        runs interactive 2D segmentation using the currently active box.
+        """
+        if event.action == "added":
+            boxes_layer = event.source
+            if len(boxes_layer.data) > 0:
+                box = boxes_layer.data[-1]
+                ystart = int(np.floor(np.min(box[:, -2])))
+                yend = int(np.ceil(np.max(box[:, -2])))
+                xstart = int(np.floor(np.min(box[:, -1])))
+                xend = int(np.ceil(np.max(box[:, -1])))
+                print(
+                    f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "
+                    f"(total boxes: {len(boxes_layer.data)})"
+                )
 
-        box = boxes_layer.data[-1]
-        # Use floor for start and ceil for end to ensure end > start
-        ystart = int(np.floor(np.min(box[:, -2])))
-        yend = int(np.ceil(np.max(box[:, -2])))
-        xstart = int(np.floor(np.min(box[:, -1])))
-        xend = int(np.ceil(np.max(box[:, -1])))
-
-        print(
-            f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "
-            f"(total boxes: {len(boxes_layer.data)})"
-        )
+        # Optional: drive interactive 2D segmentation from the active Label box.
+        if event.action in (
+            "added",
+            "changed",
+        ) and self._is_chosen_interactive_layer(event.source):
+            if self.image_layer is None or self.annotation_layer is None:
+                return
+            box = self._get_active_box(event.source)
+            if box is None:
+                return
+            self._process_2D_box(
+                box, increment_label=(event.action == "added")
+            )
 
     def _on_3D_boxes_changed(self, event):
-        """Handle changes to the 3D bounding boxes layer."""
-        print(f"3D boxes event action: {event.action}")
-        print(f"3D boxes event source: {event.source}")
-        print()
+        """Run 3D segmentation when a 3D bounding box is added or changed.
+
+        Only triggers when the Interactive Layer combo selects this layer.
+        For the "Interactive 3D Boxes" choice, also enforces one-box-at-a-time
+        (the previous box is replaced by the new one).
+        """
+        if event.action not in ("added", "changed"):
+            return
+
+        layer = event.source
+        if not self._is_chosen_interactive_layer(layer):
+            return
+
+        if len(layer.data) == 0:
+            return
+        if self.image_layer is None or self.annotation_layer is None:
+            print("No image / annotation layer available")
+            return
+
+        box = self._get_active_box(layer)
+        if box is None:
+            return
+
+        chosen = self.interactive_layer_combo.currentText()
+        # Interactive variant: keep only the most recently added box.
+        if (
+            chosen == "Interactive 3D Boxes"
+            and event.action == "added"
+            and len(layer.data) > 1
+        ):
+            QTimer.singleShot(
+                0,
+                lambda b=box, lyr=layer: self._trim_layer_to_single_box(
+                    lyr, b
+                ),
+            )
+
+        self._process_3D_box(box, increment_label=(event.action == "added"))
+
+    def _process_3D_box(self, box, increment_label):
+        """Send a 3D bounding box to the current segmenter and apply the mask."""
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+
+        # Keep only the spatial Z,Y,X columns (the box may carry extra leading dims).
+        spatial_box = box[:, -3:]
+
+        indices = get_current_slice_indices(
+            self.viewer.dims.current_step, selected_axis
+        )
+        if self.image_layer.data.ndim > self.annotation_layer.data.ndim:
+            segmentation_indices = get_current_slice_indices(
+                self.viewer.dims.current_step,
+                selected_axis,
+                ignore_channel=True,
+            )
+        else:
+            segmentation_indices = indices
+
+        image_data = self.image_layer.data[indices]
+
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+
+        try:
+            mask = self.segmenter.segment(
+                image_data,
+                points=None,
+                shapes=[spatial_box],
+            )
+            self._apply_segmenter_mask(mask, segmentation_indices)
+            print(
+                f"3D box segmentation applied with label {self.current_label_num}"
+            )
+            if increment_label:
+                self._maybe_increment_label()
+            self.annotation_layer.refresh()
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            IndexError,
+        ) as e:
+            print(f"Error during 3D box segmentation: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    # === Interactive layer combo helpers ===
+    def _interactive_layer_map(self):
+        """Map combo entry name -> layer instance (None when not present)."""
+        return {
+            "Interactive 3D Boxes": getattr(
+                self, "interactive_3D_boxes_layer", None
+            ),
+            "Interactive Boxes": getattr(
+                self, "interactive_labels_layer", None
+            ),
+            "3D Bounding Boxes": getattr(self, "boxes_3D_layer", None),
+            "Label box": getattr(self, "boxes_layer", None),
+        }
+
+    def _refresh_interactive_layer_combo(self):
+        """Repopulate the Interactive Layer combo with the layers that exist."""
+        combo = getattr(self, "interactive_layer_combo", None)
+        if combo is None:
+            return
+        current = combo.currentText()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("None")
+        for name, layer in self._interactive_layer_map().items():
+            if layer is not None and layer in self.viewer.layers:
+                combo.addItem(name)
+        idx = combo.findText(current)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _is_chosen_interactive_layer(self, layer):
+        """True if `layer` is the one selected in the Interactive Layer combo."""
+        combo = getattr(self, "interactive_layer_combo", None)
+        if combo is None:
+            return False
+        chosen = combo.currentText()
+        if chosen == "None":
+            return False
+        return self._interactive_layer_map().get(chosen) is layer
+
+    def _get_active_box(self, layer):
+        """Return the active (selected) box on `layer`, or the last one if none selected."""
+        if layer is None or len(layer.data) == 0:
+            return None
+        selected = getattr(layer, "selected_data", None)
+        try:
+            sel_indices = list(selected) if selected else []
+        except TypeError:
+            sel_indices = []
+        idx = sel_indices[0] if sel_indices else len(layer.data) - 1
+        try:
+            return np.asarray(layer.data[idx])
+        except (IndexError, TypeError):
+            return None
+
+    def _trim_layer_to_single_box(self, layer, box):
+        """Replace `layer.data` with a single box (one-at-a-time interactive layers)."""
+        if layer not in self.viewer.layers:
+            return
+        try:
+            layer.data = [box]
+        except (ValueError, RuntimeError, TypeError) as e:
+            print(f"Could not trim interactive layer to single box: {e}")
+
+    def _process_2D_box(self, box, increment_label):
+        """Segment using a 2D ROI box (active box from a multi-box layer)."""
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        box = np.asarray(box)
+
+        if selected_axis in ("YX", "YXC"):
+            spatial_box = box[:, -2:]
+        elif selected_axis in ("ZYX", "ZYXC"):
+            spatial_box = box[:, -3:]
+        else:
+            spatial_box = box
+
+        indices = get_current_slice_indices(
+            self.viewer.dims.current_step, selected_axis
+        )
+        if self.image_layer.data.ndim > self.annotation_layer.data.ndim:
+            segmentation_indices = get_current_slice_indices(
+                self.viewer.dims.current_step,
+                selected_axis,
+                ignore_channel=True,
+            )
+        else:
+            segmentation_indices = indices
+
+        image_data = self.image_layer.data[indices]
+
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+
+        try:
+            mask = self.segmenter.segment(
+                image_data, points=None, shapes=[spatial_box]
+            )
+            self._apply_segmenter_mask(mask, segmentation_indices)
+            print(
+                f"2D box segmentation applied with label {self.current_label_num}"
+            )
+            if increment_label:
+                self._maybe_increment_label()
+            self.annotation_layer.refresh()
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            IndexError,
+        ) as e:
+            print(f"Error during 2D box segmentation: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def _on_add_interactive_label_layer(self):
         """Create a shapes layer used to drive box-based interactive segmentation."""
@@ -392,10 +637,65 @@ class NDEasyLabel(BaseNDApp):
         )
         self.viewer.layers.selection.active = self.interactive_labels_layer
         print("✨ Added Interactive Labels shapes layer")
+        self._refresh_interactive_layer_combo()
+        idx = self.interactive_layer_combo.findText("Interactive Boxes")
+        if idx >= 0:
+            self.interactive_layer_combo.setCurrentIndex(idx)
+
+    def _on_add_interactive_3D_boxes_layer(self):
+        """Create an interactive 3D bounding-boxes layer that drives 3D segmentation."""
+        if self.annotation_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image loaded",
+                "Load an image before adding the interactive 3D boxes layer.",
+            )
+            return
+
+        # Reuse if it already exists and is still in the viewer.
+        if (
+            self.interactive_3D_boxes_layer is not None
+            and self.interactive_3D_boxes_layer in self.viewer.layers
+        ):
+            self.viewer.layers.selection.active = (
+                self.interactive_3D_boxes_layer
+            )
+            return
+
+        from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
+
+        annotation_ndim = len(self.annotation_layer.data.shape)
+        scale = (
+            self.image_data_model.get_scale(
+                axes_to_collapse=self.axes_to_collapse
+            )
+            or None
+        )
+        self.interactive_3D_boxes_layer = BoundingBoxLayer(
+            name="Interactive 3D Boxes",
+            edge_color="yellow",
+            face_color="transparent",
+            edge_width=3,
+            ndim=annotation_ndim,
+            scale=scale,
+        )
+        self.viewer.add_layer(self.interactive_3D_boxes_layer)
+        self.interactive_3D_boxes_layer.events.data.connect(
+            self._on_3D_boxes_changed
+        )
+        self.viewer.layers.selection.active = self.interactive_3D_boxes_layer
+        print("✨ Added Interactive 3D Boxes layer")
+        self._refresh_interactive_layer_combo()
+        idx = self.interactive_layer_combo.findText("Interactive 3D Boxes")
+        if idx >= 0:
+            self.interactive_layer_combo.setCurrentIndex(idx)
 
     def _on_interactive_roi_change(self, event):
         """Handle a new box on the interactive-labels layer: segment within the box."""
         if event.action != "added":
+            return
+
+        if not self._is_chosen_interactive_layer(event.source):
             return
 
         shapes_layer = event.source
@@ -689,6 +989,9 @@ class NDEasyLabel(BaseNDApp):
 
             # Load any previously saved boxes from CSV
             self._load_existing_boxes()
+
+            # Refresh interactive-layer combo now that boxes_layer exists.
+            self._refresh_interactive_layer_combo()
 
             print(
                 f"Successfully set up annotation layers for image layer: {image_layer.name}"

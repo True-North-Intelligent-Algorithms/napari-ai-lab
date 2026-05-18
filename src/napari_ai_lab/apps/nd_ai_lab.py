@@ -246,18 +246,26 @@ class NDAILab(QWidget):
         if self.boxes_layer and hasattr(self, "_on_boxes_changed"):
             self.boxes_layer.events.data.connect(self._on_boxes_changed)
 
-        # Distribute the 3D boxes layer to label and segment widgets and
-        # wire up their _on_3D_boxes_changed handlers.
+        # Distribute the 3D boxes layer to label and segment widgets.
+        # Note: this is the annotation/labeling 3D boxes layer.  Interactive
+        # segmentation is driven by each widget's own "Interactive 3D Boxes"
+        # layer (created on demand from the widget UI), so we do NOT wire
+        # this layer's events to _on_3D_boxes_changed here.
         self.label_widget.boxes_3D_layer = self.boxes_3D_layer
         self.segment_widget.boxes_3D_layer = self.boxes_3D_layer
+
+        # Wire shared 3D boxes layer to the label widget's 3D handler so it
+        # can be chosen from the Interactive Layer combo ("3D Bounding Boxes").
+        # The handler itself ignores the event unless the combo selects it.
         if hasattr(self.label_widget, "_on_3D_boxes_changed"):
             self.boxes_3D_layer.events.data.connect(
                 self.label_widget._on_3D_boxes_changed
             )
-        if hasattr(self.segment_widget, "_on_3D_boxes_changed"):
-            self.boxes_3D_layer.events.data.connect(
-                self.segment_widget._on_3D_boxes_changed
-            )
+
+        # Refresh the label widget's interactive-layer combo so it lists the
+        # newly-distributed Label box / 3D Bounding Boxes layers.
+        if hasattr(self.label_widget, "_refresh_interactive_layer_combo"):
+            self.label_widget._refresh_interactive_layer_combo()
 
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer
