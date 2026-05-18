@@ -404,6 +404,12 @@ class NDEasySegment(BaseNDApp):
             trn._axis_combo.currentTextChanged.connect(seg.set_axis_combo)
 
     # === Interactive Mode Methods ===
+    def _on_3D_boxes_changed(self, event):
+        """Handle changes to the 3D bounding boxes layer."""
+        print(f"3D boxes event action: {event.action}")
+        print(f"3D boxes event source: {event.source}")
+        print()
+
     def _on_points_changed(self, event):
         """Handle points layer data changes - interactive segmentation."""
         if not self.is_interactive_mode():

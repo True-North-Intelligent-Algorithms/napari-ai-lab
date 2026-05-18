@@ -192,8 +192,8 @@ class NDAILab(QWidget):
 
         from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
 
-        self.bounding_boxes_layer = BoundingBoxLayer(
-            name="Bounding Boxes",
+        self.boxes_3D_layer = BoundingBoxLayer(
+            name="3D Bounding Boxes",
             edge_color="magenta",
             face_color="transparent",
             edge_width=5,
@@ -201,7 +201,7 @@ class NDAILab(QWidget):
             scale=annotation_scale,
         )
 
-        self.viewer.add_layer(self.bounding_boxes_layer)
+        self.viewer.add_layer(self.boxes_3D_layer)
 
         # Distribute layers to sub-apps (direct assignment, not calling their _set_image_layer)
         self._distribute_layers_to_sub_apps()
@@ -245,6 +245,19 @@ class NDAILab(QWidget):
         # This is done AFTER loading to avoid triggering dialog on startup
         if self.boxes_layer and hasattr(self, "_on_boxes_changed"):
             self.boxes_layer.events.data.connect(self._on_boxes_changed)
+
+        # Distribute the 3D boxes layer to label and segment widgets and
+        # wire up their _on_3D_boxes_changed handlers.
+        self.label_widget.boxes_3D_layer = self.boxes_3D_layer
+        self.segment_widget.boxes_3D_layer = self.boxes_3D_layer
+        if hasattr(self.label_widget, "_on_3D_boxes_changed"):
+            self.boxes_3D_layer.events.data.connect(
+                self.label_widget._on_3D_boxes_changed
+            )
+        if hasattr(self.segment_widget, "_on_3D_boxes_changed"):
+            self.boxes_3D_layer.events.data.connect(
+                self.segment_widget._on_3D_boxes_changed
+            )
 
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer

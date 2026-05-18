@@ -351,6 +351,12 @@ class NDEasyLabel(BaseNDApp):
             f"(total boxes: {len(boxes_layer.data)})"
         )
 
+    def _on_3D_boxes_changed(self, event):
+        """Handle changes to the 3D bounding boxes layer."""
+        print(f"3D boxes event action: {event.action}")
+        print(f"3D boxes event source: {event.source}")
+        print()
+
     def _on_add_interactive_label_layer(self):
         """Create a shapes layer used to drive box-based interactive segmentation."""
         if self.annotation_layer is None:
