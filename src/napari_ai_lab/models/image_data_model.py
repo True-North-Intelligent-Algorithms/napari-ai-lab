@@ -1703,9 +1703,15 @@ class ImageDataModel:
     def generate_patches_from_labels(
         self,
         progress_logger=None,
+        use_3D: bool = False,
     ) -> Path:
         """
-        Generate augmented patches from the saved label crops in labels/input0 and labels/truth0.
+        Generate augmented patches from the saved label crops.
+
+        When ``use_3D`` is False (default), reads from ``labels/input0`` and
+        ``labels/truth0`` (2D crops saved from the "Label box" layer).  When
+        True, reads from ``labels3d/input0`` and ``labels3d/truth0`` (3D crops
+        saved from the "3D Bounding Boxes" layer).
 
         Outer loop: every saved label pair (image crop + annotation crop).
         Inner loop: num_patches augmented patches drawn from that crop.
@@ -1726,14 +1732,19 @@ class ImageDataModel:
                 "Number of patches not set. Call set_num_patches() first."
             )
 
-        labels_dir = self.get_labels_directory()
+        labels_dir = (
+            self.get_labels3d_directory()
+            if use_3D
+            else self.get_labels_directory()
+        )
         input_dir = labels_dir / "input0"
         truth_dir = labels_dir / "truth0"
 
         if not input_dir.exists() or not truth_dir.exists():
+            kind = "3D" if use_3D else "2D"
             raise FileNotFoundError(
-                f"Label crops not found. Run 'Save Project' first to generate "
-                f"labels/input0 and labels/truth0 under {labels_dir}"
+                f"{kind} label crops not found. Run 'Save Project' first to generate "
+                f"input0/truth0 under {labels_dir}"
             )
 
         # Collect paired files — sort so input[i] matches truth[i]

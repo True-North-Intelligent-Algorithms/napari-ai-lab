@@ -62,6 +62,15 @@ class NDEasyAugment(BaseNDApp):
         self.patch_mode_combo.addItems(ImageDataModel.get_patch_modes())
         self.layout().addWidget(self.patch_mode_combo)
 
+        # Boxes-layer source for `from_label_boxes` mode.
+        # "Label box"          → read crops from labels/input0 + labels/truth0  (2D)
+        # "3D Bounding Boxes"  → read crops from labels3d/input0 + labels3d/truth0 (3D)
+        self.boxes_layer_label = QLabel("Boxes Layer:")
+        self.layout().addWidget(self.boxes_layer_label)
+        self.boxes_layer_combo = QComboBox()
+        self.boxes_layer_combo.addItems(["Label box", "3D Bounding Boxes"])
+        self.layout().addWidget(self.boxes_layer_combo)
+
         # Add Augmenter selection
         self.augmenter_label = QLabel("Augmenter:")
         self.layout().addWidget(self.augmenter_label)
@@ -283,7 +292,10 @@ class NDEasyAugment(BaseNDApp):
                 patch_size_xy = self.patch_size_xy_spinbox.value()
                 num_patches = self.num_patches_spinbox.value()
                 selected_axis = self.augmentation_form.get_selected_axis()
-                if "Z" in selected_axis:
+                # Route to the right saved-crops directory based on combo.
+                boxes_source = self.boxes_layer_combo.currentText()
+                use_3D = boxes_source == "3D Bounding Boxes"
+                if use_3D or "Z" in selected_axis:
                     patch_size_z = self.patch_size_z_spinbox.value()
                     patch_size = (patch_size_z, patch_size_xy, patch_size_xy)
                 else:
@@ -293,6 +305,7 @@ class NDEasyAugment(BaseNDApp):
                 self.image_data_model.set_num_patches(num_patches)
                 self.image_data_model.generate_patches_from_labels(
                     progress_logger=self.progress_logger,
+                    use_3D=use_3D,
                 )
                 return
 
