@@ -147,9 +147,32 @@ class NDEasySegment(BaseNDApp):
         range_row.addWidget(self.end_slice_spin)
         auto_layout.addLayout(range_row)
 
-        self.train_btn = QPushButton("Train")
-        self.train_btn.clicked.connect(self._on_train)
-        auto_layout.addWidget(self.train_btn)
+        # === ROI segmentation ===
+        # Dedicated ROI layers (created on demand by the buttons below):
+        #   self.segment_roi_2D_layer → Shapes layer (rectangles, YX)
+        #   self.segment_roi_3D_layer → BoundingBoxLayer (ZYX)
+        self.segment_roi_2D_layer = None
+        self.segment_roi_3D_layer = None
+
+        self.add_segment_roi_2D_btn = QPushButton(
+            "Add segmentation 2D ROI layer"
+        )
+        self.add_segment_roi_2D_btn.clicked.connect(
+            self._on_add_segment_roi_2D_layer
+        )
+        auto_layout.addWidget(self.add_segment_roi_2D_btn)
+
+        self.add_segment_roi_3D_btn = QPushButton(
+            "Add segmentation 3D ROI layer"
+        )
+        self.add_segment_roi_3D_btn.clicked.connect(
+            self._on_add_segment_roi_3D_layer
+        )
+        auto_layout.addWidget(self.add_segment_roi_3D_btn)
+
+        self.segment_roi_btn = QPushButton("Segment ROI")
+        self.segment_roi_btn.clicked.connect(self._on_segment_roi)
+        auto_layout.addWidget(self.segment_roi_btn)
 
         # Add progress logger widget for segmentation
         self.segment_progress_logger = QtProgressLogger()
@@ -694,6 +717,243 @@ class NDEasySegment(BaseNDApp):
             print(f"Error during automatic segmentation: {e}")
             QMessageBox.critical(
                 self, "Error", f"Segmentation failed: {str(e)}"
+            )
+
+    # === ROI segmentation ===
+    def _on_add_segment_roi_2D_layer(self):
+        """Create / reuse the dedicated 2D segmentation-ROI shapes layer."""
+        if self.annotation_layer is None and self.image_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image loaded",
+                "Load an image before adding the segmentation 2D ROI layer.",
+            )
+            return
+
+        if (
+            self.segment_roi_2D_layer is not None
+            and self.segment_roi_2D_layer in self.viewer.layers
+        ):
+            self.viewer.layers.selection.active = self.segment_roi_2D_layer
+            return
+
+        ref = self.annotation_layer or self.image_layer
+        ndim = len(ref.data.shape)
+        scale = None
+        if self.image_data_model is not None:
+            with contextlib.suppress(Exception):
+                scale = (
+                    self.image_data_model.get_scale(
+                        axes_to_collapse=self.axes_to_collapse
+                    )
+                    or None
+                )
+
+        self.segment_roi_2D_layer = self.viewer.add_shapes(
+            name="Segment 2D ROI",
+            edge_color="cyan",
+            face_color="transparent",
+            edge_width=3,
+            ndim=ndim,
+            scale=scale,
+        )
+        self.viewer.layers.selection.active = self.segment_roi_2D_layer
+        print("✨ Added Segment 2D ROI layer")
+
+    def _on_add_segment_roi_3D_layer(self):
+        """Create / reuse the dedicated 3D segmentation-ROI bounding-box layer."""
+        if self.annotation_layer is None and self.image_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image loaded",
+                "Load an image before adding the segmentation 3D ROI layer.",
+            )
+            return
+
+        if (
+            self.segment_roi_3D_layer is not None
+            and self.segment_roi_3D_layer in self.viewer.layers
+        ):
+            self.viewer.layers.selection.active = self.segment_roi_3D_layer
+            return
+
+        from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
+
+        ref = self.annotation_layer or self.image_layer
+        ndim = len(ref.data.shape)
+        scale = None
+        if self.image_data_model is not None:
+            with contextlib.suppress(Exception):
+                scale = (
+                    self.image_data_model.get_scale(
+                        axes_to_collapse=self.axes_to_collapse
+                    )
+                    or None
+                )
+
+        self.segment_roi_3D_layer = BoundingBoxLayer(
+            name="Segment 3D ROI",
+            edge_color="cyan",
+            face_color="transparent",
+            edge_width=3,
+            ndim=ndim,
+            scale=scale,
+        )
+        self.viewer.add_layer(self.segment_roi_3D_layer)
+        self.viewer.layers.selection.active = self.segment_roi_3D_layer
+        print("✨ Added Segment 3D ROI layer")
+
+    def _on_segment_roi(self):
+        """Segment a single ROI defined by the most-recent box on either
+        the 3D or 2D segmentation-ROI layer.
+
+        Preference order: 3D layer (if present and has boxes) → 2D layer.
+        """
+        if self.image_layer is None:
+            QMessageBox.warning(self, "Warning", "No image loaded")
+            return
+        if not hasattr(self, "segmenter") or self.segmenter is None:
+            QMessageBox.warning(self, "Warning", "No segmenter selected")
+            return
+
+        roi_layer = None
+        n_spatial = 2
+        roi_source = ""
+        if (
+            self.segment_roi_3D_layer is not None
+            and self.segment_roi_3D_layer in self.viewer.layers
+            and len(self.segment_roi_3D_layer.data) > 0
+        ):
+            roi_layer = self.segment_roi_3D_layer
+            n_spatial = 3
+            roi_source = "Segment 3D ROI"
+        elif (
+            self.segment_roi_2D_layer is not None
+            and self.segment_roi_2D_layer in self.viewer.layers
+            and len(self.segment_roi_2D_layer.data) > 0
+        ):
+            roi_layer = self.segment_roi_2D_layer
+            n_spatial = 2
+            roi_source = "Segment 2D ROI"
+
+        if roi_layer is None:
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "No segmentation ROI found. Add a 2D or 3D ROI layer and "
+                "draw a box first.",
+            )
+            return
+
+        box = np.asarray(roi_layer.data[-1])
+        if box.ndim != 2 or box.shape[1] < n_spatial:
+            QMessageBox.warning(
+                self,
+                "Warning",
+                f"Selected ROI has unexpected shape {box.shape}",
+            )
+            return
+
+        # Last n_spatial coords are the spatial extents (Z,Y,X or Y,X).
+        spatial = box[:, -n_spatial:]
+        mins = np.floor(spatial.min(axis=0)).astype(int)
+        maxs = np.ceil(spatial.max(axis=0)).astype(int)
+
+        image_data = self.image_layer.data
+        image_shape = image_data.shape
+        spatial_shape = image_shape[-n_spatial:]
+        mins = np.clip(mins, 0, np.array(spatial_shape) - 1)
+        maxs = np.clip(maxs, 1, np.array(spatial_shape))
+
+        # Build indexing tuple: non-spatial dims from current_step,
+        # spatial dims sliced by the bbox.
+        current_step = tuple(self.viewer.dims.current_step)
+        n_nonspatial = len(image_shape) - n_spatial
+        non_spatial = tuple(current_step[:n_nonspatial])
+        spatial_slices = tuple(
+            slice(int(mins[i]), int(maxs[i])) for i in range(n_spatial)
+        )
+        idx = non_spatial + spatial_slices
+
+        sub = image_data[idx]
+        print(
+            f"Segment ROI ({roi_source}): "
+            f"non_spatial={non_spatial}, spatial_slices={spatial_slices}, "
+            f"sub.shape={sub.shape}"
+        )
+
+        # Sync params from the form to the segmenter
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+
+        self.segment_progress_logger.clear()
+        self.segment_progress_logger.log_info(
+            f"Segmenting ROI from {roi_source}..."
+        )
+
+        try:
+            mask = self.image_data_model.segment(self.segmenter, sub)
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            IndexError,
+        ) as e:
+            print(f"ROI segmentation failed: {e}")
+            QMessageBox.critical(
+                self, "Error", f"ROI segmentation failed: {e}"
+            )
+            return
+
+        if mask is None:
+            self.segment_progress_logger.log_info("Segmenter returned no mask")
+            return
+
+        # Paste the ROI mask back into the predictions layer at the
+        # current slice position.
+        segmenter_name = self.segmenter.__class__.__name__
+        predictions_layer = self._get_or_create_predictions_layer(
+            segmenter_name, self.annotation_layer.data.shape
+        )
+
+        pred_shape = predictions_layer.data.shape
+        n_pred_spatial = min(n_spatial, len(pred_shape))
+        pred_non_spatial = tuple(
+            current_step[: len(pred_shape) - n_pred_spatial]
+        )
+        pred_spatial_slices = tuple(
+            slice(int(mins[i]), int(maxs[i]))
+            for i in range(n_spatial - n_pred_spatial, n_spatial)
+        )
+        target_idx = pred_non_spatial + pred_spatial_slices
+
+        try:
+            # Squeeze mask to match the target region's dimensionality
+            mask_to_paste = np.asarray(mask)
+            target_region = predictions_layer.data[target_idx]
+            if mask_to_paste.shape != target_region.shape:
+                mask_to_paste = np.squeeze(mask_to_paste)
+            if mask_to_paste.shape != target_region.shape:
+                # Best-effort broadcast / reshape
+                mask_to_paste = mask_to_paste.reshape(target_region.shape)
+            predictions_layer.data[target_idx] = mask_to_paste
+            predictions_layer.refresh()
+            self.segment_progress_logger.log_info(
+                f"\u2705 ROI segmentation written to '{segmenter_name}'"
+            )
+        except (ValueError, TypeError, IndexError) as e:
+            print(
+                f"Failed to paste ROI mask (shape {np.asarray(mask).shape} "
+                f"vs target {predictions_layer.data[target_idx].shape}): {e}"
+            )
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to write ROI mask into predictions layer: {e}",
             )
 
     def _on_train(self):
