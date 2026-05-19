@@ -768,7 +768,8 @@ class BoundingBoxLayer(BoundingBoxLayer):
         edge_color=None,
         face_color=None,
         z_index=None,
-        gui=False
+        # BN change GUI = to true to prevent multiple added events from being fired...
+        gui=True
     ):
         """Add bounding boxes to the current layer.
 
