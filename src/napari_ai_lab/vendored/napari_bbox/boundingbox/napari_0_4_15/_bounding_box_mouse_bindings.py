@@ -8,6 +8,7 @@ import numpy as np
 
 from ._bounding_box_constants import Box, Mode
 from ..._helper_functions import layer_dims_displayed
+from napari.layers.base._base_constants import ActionType
 
 if TYPE_CHECKING:
     from typing import Tuple
@@ -187,6 +188,14 @@ def _add_bounding_box(layer, event, data):
 
     # on release
     layer._finish_drawing()
+
+    # BN trigger added event
+    layer.events.data(
+                    value=layer.data,
+                    action=ActionType.ADDED,
+                    data_indices=(-1,),
+                    vertex_indices=((),),
+                )
 
 
 def _drag_selection_box(layer, coordinates: Tuple[float, ...]) -> None:
