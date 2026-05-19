@@ -24,6 +24,7 @@ _OPTIONAL_SEGMENTERS = {
     "Otsu3D": ".Otsu3D",
     "Square2D": ".Square2D",
     "SAM3D": ".SAM3D",  # This one has heavy dependencies
+    "RegionGrow3D": ".RegionGrow3D",
 }
 
 

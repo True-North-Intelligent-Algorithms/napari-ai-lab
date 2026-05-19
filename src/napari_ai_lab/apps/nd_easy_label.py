@@ -1,3 +1,5 @@
+import contextlib
+
 import napari
 import numpy as np
 from qtpy.QtCore import QTimer
@@ -113,10 +115,33 @@ class NDEasyLabel(BaseNDApp):
         )
         self.layout().addWidget(self.add_interactive_3D_boxes_btn)
 
+        # Live readout of the active 2D / 3D box size (in pixels).
+        self.active_box_size_label = QLabel("Active box size: —")
+        self.layout().addWidget(self.active_box_size_label)
+
+        # Button to open a secondary napari viewer showing just the current
+        # image and labels (useful for side-by-side inspection).
+        self.show_labels_in_second_viewer_btn = QPushButton(
+            "Show labels in 2nd Napari"
+        )
+        self.show_labels_in_second_viewer_btn.clicked.connect(
+            self._on_show_labels_in_second_viewer
+        )
+        self.layout().addWidget(self.show_labels_in_second_viewer_btn)
+
+        # Holder for the secondary viewer (kept alive across button clicks).
+        self._second_viewer = None
+
         # Holder for the interactive-label shapes layer (created on demand)
         self.interactive_labels_layer = None
         # Holder for the interactive 3D bounding-boxes layer (created on demand)
         self.interactive_3D_boxes_layer = None
+
+        # Context of the most recent interactive segmentation, used by
+        # segmenters that opt-in to live parameter updates (e.g. RegionGrow3D).
+        # Populated by _on_points_changed; consumed by
+        # _on_segmenter_parameters_changed -> _rerun_last_interactive_segmentation.
+        self._last_interactive_segmentation = None
 
         # Add stretch to push everything to the top (prevents button stretching)
         self.layout().addStretch()
@@ -192,8 +217,8 @@ class NDEasyLabel(BaseNDApp):
         else:
             nz = mask != 0
             target[nz] = mask[nz] * self.current_label_num
-            clear = (mask == 0) & (target == self.current_label_num)
-            target[clear] = 0
+            # clear = (mask == 0) & (target == self.current_label_num)
+            # target[clear] = 0
 
     def _maybe_increment_label(self):
         """Auto-increment current_label_num and sync the spinbox if enabled."""
@@ -202,6 +227,149 @@ class NDEasyLabel(BaseNDApp):
             self.label_num_spinbox.blockSignals(True)
             self.label_num_spinbox.setValue(self.current_label_num)
             self.label_num_spinbox.blockSignals(False)
+
+    def _on_show_labels_in_second_viewer(self):
+        """Open (or refresh) a second napari viewer with just image + labels.
+
+        Adds only the two layers — image and annotation/labels — so the user
+        can compare against the cluttered primary viewer.  Re-pressing the
+        button refreshes the layers in the existing secondary viewer if it
+        is still open, otherwise a new one is created.
+        """
+        if self.image_layer is None or self.annotation_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image/labels loaded",
+                "Load an image and create labels before opening a second viewer.",
+            )
+            return
+
+        import napari
+
+        # If the previous viewer was closed by the user, drop the stale ref.
+        if self._second_viewer is not None:
+            try:
+                _ = self._second_viewer.window  # touch to detect closed state
+            except (RuntimeError, AttributeError):
+                self._second_viewer = None
+
+        if self._second_viewer is None:
+            self._second_viewer = napari.Viewer(title="Labels Preview")
+        else:
+            # Refresh: clear any existing layers so we only show the two.
+            try:
+                self._second_viewer.layers.clear()
+            except (RuntimeError, AttributeError):
+                self._second_viewer = napari.Viewer(title="Labels Preview")
+
+        scale = None
+        if self.image_data_model is not None:
+            try:
+                scale = (
+                    self.image_data_model.get_scale(
+                        axes_to_collapse=self.axes_to_collapse
+                    )
+                    or None
+                )
+            except (AttributeError, TypeError, ValueError):
+                scale = None
+
+        self._second_viewer.add_image(
+            self.image_layer.data,
+            name=self.image_layer.name,
+            scale=scale,
+        )
+        mirror_labels = self._second_viewer.add_labels(
+            self.annotation_layer.data,
+            name=self.annotation_layer.name,
+            scale=scale,
+        )
+        self._second_labels_layer = mirror_labels
+
+        # Forward refresh events from the primary labels layer to the mirror
+        # so paint / fill / segmenter writes in the first viewer immediately
+        # repaint in the second.  Disconnect any previous forwarder first to
+        # avoid stacking handlers across repeated button presses.
+        if getattr(self, "_mirror_refresh_cb", None) is not None:
+            for evt_name in ("set_data", "paint", "refresh"):
+                with contextlib.suppress(
+                    TypeError, ValueError, RuntimeError, AttributeError
+                ):
+                    getattr(self.annotation_layer.events, evt_name).disconnect(
+                        self._mirror_refresh_cb
+                    )
+
+        def _forward_refresh(_event=None):
+            mirror = getattr(self, "_second_labels_layer", None)
+            if mirror is None:
+                return
+            try:
+                mirror.refresh()
+            except (RuntimeError, AttributeError):
+                # Mirror layer / viewer was destroyed; drop the reference.
+                self._second_labels_layer = None
+
+        self._mirror_refresh_cb = _forward_refresh
+        # paint  -> brush / fill from napari's built-in tools
+        # set_data -> bulk data assignment (mirror update for free)
+        # refresh -> our segmenter-mask code calls annotation_layer.refresh()
+        #            after writing into the underlying numpy buffer directly.
+        for evt_name in ("paint", "set_data", "refresh"):
+            with contextlib.suppress(AttributeError, TypeError):
+                getattr(self.annotation_layer.events, evt_name).connect(
+                    _forward_refresh
+                )
+
+    def _on_segmenter_parameters_changed(self, parameters):
+        """Sync segmenter, then live-rerun the last interactive call if supported."""
+        super()._on_segmenter_parameters_changed(parameters)
+        # Re-run the last interactive segmentation with the current parameter
+        # values so the user can see the effect of each tweak.  Only segmenters
+        # that opt-in via ``supports_live_param_update`` are eligible.
+        if getattr(self.segmenter, "supports_live_param_update", False):
+            self._rerun_last_interactive_segmentation()
+
+    def _rerun_last_interactive_segmentation(self):
+        """Re-run the last interactive segment() call with the current segmenter.
+
+        Used to give live visual feedback while the user tunes segmenter
+        parameters (e.g. RegionGrow3D's tolerance / window_size).  The mask
+        is painted with the same label number that was originally used so
+        ``_apply_segmenter_mask`` cleanly clears stale voxels in the ROI.
+        """
+        ctx = getattr(self, "_last_interactive_segmentation", None)
+        if not ctx:
+            return
+        if type(self.segmenter).__name__ != ctx.get("segmenter_name"):
+            # Segmenter was swapped since the last seed click; don't reuse it.
+            return
+        if self.annotation_layer is None:
+            return
+
+        saved_label = self.current_label_num
+        try:
+            self.current_label_num = ctx["label_num"]
+            mask = self.segmenter.segment(
+                ctx["image_data"],
+                points=ctx.get("points"),
+                shapes=ctx.get("shapes"),
+            )
+            self._apply_segmenter_mask(mask, ctx["segmentation_indices"])
+            self.annotation_layer.refresh()
+            print(
+                f"Live-updated segmentation (label {ctx['label_num']}) "
+                f"with new parameters"
+            )
+        except (
+            AttributeError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            IndexError,
+        ) as e:
+            print(f"Live re-segmentation failed: {e}")
+        finally:
+            self.current_label_num = saved_label
 
     def _initialize_segmenter(self):
         """Initialize predictor if an image is loaded and a segmenter exists."""
@@ -325,6 +493,24 @@ class NDEasyLabel(BaseNDApp):
                 print(
                     f"Added segmentation with label {self.current_label_num}"
                 )
+
+                # Stash the call context so live parameter changes can
+                # re-run the segmenter with the same seeds + label, giving
+                # the user immediate feedback while tuning.
+                if getattr(
+                    self.segmenter, "supports_live_param_update", False
+                ):
+                    self._last_interactive_segmentation = {
+                        "image_data": image_data,
+                        "segmentation_indices": segmentation_indices,
+                        "points": [latest_point],
+                        "shapes": None,
+                        "label_num": self.current_label_num,
+                        "segmenter_name": type(self.segmenter).__name__,
+                    }
+                else:
+                    self._last_interactive_segmentation = None
+
                 self._maybe_increment_label()
 
                 self.annotation_layer.refresh()
@@ -341,6 +527,42 @@ class NDEasyLabel(BaseNDApp):
 
                 traceback.print_exc()
 
+    def _update_active_box_size_label(self, box):
+        """Update the live box-size readout with the size of ``box``.
+
+        ``box`` is a (N, D) numpy array of corner coordinates (napari
+        Shapes rectangle or vendored BoundingBox). The last 3 columns are
+        treated as (Z, Y, X) when present, last 2 as (Y, X) otherwise.
+        Sizes are reported in pixels (rounded to integers).
+        """
+        if not hasattr(self, "active_box_size_label"):
+            return
+        try:
+            arr = np.asarray(box)
+            if arr.ndim != 2 or arr.shape[0] == 0:
+                return
+            ncols = arr.shape[1]
+            if ncols >= 3:
+                z = arr[:, -3]
+                y = arr[:, -2]
+                x = arr[:, -1]
+                dz = int(np.ceil(z.max() - z.min()))
+                dy = int(np.ceil(y.max() - y.min()))
+                dx = int(np.ceil(x.max() - x.min()))
+                if dz > 0:
+                    text = f"Active box size (Z x Y x X): {dz} x {dy} x {dx}"
+                else:
+                    text = f"Active box size (Y x X): {dy} x {dx}"
+            else:
+                y = arr[:, -2]
+                x = arr[:, -1]
+                dy = int(np.ceil(y.max() - y.min()))
+                dx = int(np.ceil(x.max() - x.min()))
+                text = f"Active box size (Y x X): {dy} x {dx}"
+            self.active_box_size_label.setText(text)
+        except (ValueError, TypeError, IndexError, AttributeError):
+            pass
+
     def _on_shapes_changed(self, event):
         """Handle shapes layer data changes - prints shape information."""
         shapes_layer = event.source
@@ -356,6 +578,9 @@ class NDEasyLabel(BaseNDApp):
             print(f"Total shapes: {len(shapes_layer.data)}")
             for i, shape in enumerate(shapes_layer.data):
                 print(f"  Shape {i+1}: {shape.shape} with {len(shape)} points")
+        # Update live box-size readout if there is any data on the layer.
+        if len(shapes_layer.data) > 0:
+            self._update_active_box_size_label(shapes_layer.data[-1])
 
     def _on_boxes_changed(self, event):
         """Handle boxes layer data changes - just logs the new box; saving happens with annotations.
@@ -375,6 +600,11 @@ class NDEasyLabel(BaseNDApp):
                     f"New ROI added: y=[{ystart}, {yend}], x=[{xstart}, {xend}] "
                     f"(total boxes: {len(boxes_layer.data)})"
                 )
+
+        # Live box-size readout for any change on this layer.
+        boxes_layer = event.source
+        if len(boxes_layer.data) > 0:
+            self._update_active_box_size_label(boxes_layer.data[-1])
 
         # Optional: drive interactive 2D segmentation from the active Label box.
         if event.action in (
@@ -397,10 +627,20 @@ class NDEasyLabel(BaseNDApp):
         For the "Interactive 3D Boxes" choice, also enforces one-box-at-a-time
         (the previous box is replaced by the new one).
         """
-        if event.action not in ("added", "changed"):
+        try:
+            if event.action not in ("added", "changed"):
+                return
+        except Exception as e:
+            print(f"Error checking event action: {e}")
             return
 
         layer = event.source
+
+        # Live box-size readout fires for any 3D-box change, regardless of
+        # whether this layer is the chosen interactive driver.
+        if len(layer.data) > 0:
+            self._update_active_box_size_label(layer.data[-1])
+
         if not self._is_chosen_interactive_layer(layer):
             return
 
@@ -692,6 +932,11 @@ class NDEasyLabel(BaseNDApp):
 
     def _on_interactive_roi_change(self, event):
         """Handle a new box on the interactive-labels layer: segment within the box."""
+        # Live box-size readout for any change on this layer.
+        layer = event.source
+        if len(layer.data) > 0:
+            self._update_active_box_size_label(layer.data[-1])
+
         if event.action != "added":
             return
 
