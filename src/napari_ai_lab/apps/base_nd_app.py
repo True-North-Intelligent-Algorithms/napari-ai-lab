@@ -61,6 +61,10 @@ class BaseNDApp(QWidget):
         # Initialize layer references (common to both widgets)
         self.image_layer = None
         self.annotation_layer = None
+        # Scratch labels layer used by interactive segmenters; contents are
+        # promoted to ``annotation_layer`` on Commit.  Created lazily by
+        # widgets that need it (e.g. NDEasyLabel).
+        self.working_layer = None
         self.predictions_layers = (
             {}
         )  # dict: segmenter_name -> napari labels layer
@@ -415,6 +419,7 @@ class BaseNDApp(QWidget):
         # Remove layers one by one with proper error handling
         layers_to_remove = [
             ("label", self.annotation_layer),
+            ("working", self.working_layer),
             ("points", self.points_layer),
             ("shapes", self.shapes_layer),
         ]
@@ -444,6 +449,7 @@ class BaseNDApp(QWidget):
 
         # Reset references
         self.annotation_layer = None
+        self.working_layer = None
         self.predictions_layers = {}
         self.points_layer = None
         self.shapes_layer = None

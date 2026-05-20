@@ -142,6 +142,17 @@ class NDAILab(QWidget):
             scale=annotation_scale,
         )
 
+        # Working / scratch labels layer for interactive segmenter output.
+        # Always uses WORKING_LABEL_INDEX (7) so its colour is consistent.
+        import numpy as _np
+
+        working_data = _np.zeros_like(self.annotations_layer.data)
+        self.working_layer = self.viewer.add_labels(
+            working_data,
+            name="Labels (Working)",
+            scale=annotation_scale,
+        )
+
         # Dictionary to hold prediction layers for different segmenters
         # Key: segmenter name (e.g., "CellposeSegmenter", "StarDist")
         # Value: napari labels layer
@@ -218,6 +229,7 @@ class NDAILab(QWidget):
         # Label widget needs: image, labels, points, boxes
         self.label_widget.image_layer = self.image_layer
         self.label_widget.annotation_layer = self.annotations_layer
+        self.label_widget.working_layer = self.working_layer
         self.label_widget.points_layer = self.points_layer
         self.label_widget.boxes_layer = self.boxes_layer
 

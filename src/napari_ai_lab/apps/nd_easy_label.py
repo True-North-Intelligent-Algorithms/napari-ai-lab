@@ -21,6 +21,11 @@ from .base_nd_app import BaseNDApp
 
 
 class NDEasyLabel(BaseNDApp):
+    # Label index used in the working layer for all interactive segmenter
+    # output.  Chosen because napari's default labels colormap renders 7 as
+    # a bright green, making the "uncommitted" region easy to spot.
+    WORKING_LABEL_INDEX = 7
+
     # your QWidget.__init__ can optionally request the napari viewer instance
     # use a type annotation of 'napari.viewer.Viewer' for any parameter
     def __init__(
@@ -87,6 +92,28 @@ class NDEasyLabel(BaseNDApp):
         self.auto_increment_checkbox = QCheckBox("Auto-increment label")
         self.auto_increment_checkbox.setChecked(True)
         self.layout().addWidget(self.auto_increment_checkbox)
+
+        # Commit / Erase row.  Interactive segmenters paint into the
+        # "Labels (Working)" layer with WORKING_LABEL_INDEX; the user
+        # then either commits (move to Persistent with current_label_num,
+        # auto-incrementing if enabled) or erases (clear working layer).
+        commit_row = QHBoxLayout()
+        self.commit_working_btn = QPushButton("Commit")
+        self.commit_working_btn.setToolTip(
+            "Move Labels (Working) into Labels (Persistent) "
+            "with the current label number"
+        )
+        self.commit_working_btn.clicked.connect(self._on_commit_working)
+        commit_row.addWidget(self.commit_working_btn)
+
+        self.erase_working_btn = QPushButton("Erase")
+        self.erase_working_btn.setToolTip(
+            "Clear the Labels (Working) layer (discard uncommitted "
+            "interactive segmentation)"
+        )
+        self.erase_working_btn.clicked.connect(self._on_erase_working)
+        commit_row.addWidget(self.erase_working_btn)
+        self.layout().addLayout(commit_row)
 
         # Combo: choose which layer drives live interactive segmentation.
         # Populated dynamically ("None" plus whatever box-like layers exist).
@@ -193,32 +220,81 @@ class NDEasyLabel(BaseNDApp):
         self.current_label_num = value
 
     def _apply_segmenter_mask(self, mask, segmentation_indices):
-        """Write a segmenter mask into the annotation layer.
+        """Write a segmenter mask into the **working** labels layer.
+
+        All interactive segmenter output lands in ``self.working_layer`` with
+        :data:`WORKING_LABEL_INDEX` (so the colour is consistent and the
+        result is clearly "uncommitted").  The user later promotes it to
+        ``self.annotation_layer`` with ``current_label_num`` via Commit.
 
         If the segmenter exposes ``last_roi_bbox`` (a tuple of slices marking
         the touched sub-region), the boolean-index write is restricted to
-        that sub-region.  Otherwise the full mask is scanned.  Equivalent
-        result either way — just much faster for ROI-style segmenters
-        (Otsu2D / Otsu3D), especially in 3D.
+        that sub-region.  This also clears stale working-layer voxels inside
+        the ROI that aren't covered by the new mask — important so that
+        re-running a segmenter (e.g. RegionGrow3D live param tuning) shrinks
+        the visible region instead of leaking previous results.
         """
-        target = self.annotation_layer.data[segmentation_indices]
+        if self.working_layer is None:
+            print(
+                "_apply_segmenter_mask: no working layer; "
+                "falling back to annotation layer"
+            )
+            target = self.annotation_layer.data[segmentation_indices]
+            value = self.current_label_num
+        else:
+            target = self.working_layer.data[segmentation_indices]
+            value = self.WORKING_LABEL_INDEX
+
         roi_bbox = getattr(self.segmenter, "last_roi_bbox", None)
 
         if roi_bbox is not None:
             sub_mask = mask[roi_bbox]
             sub_target = target[roi_bbox]
             nz = sub_mask != 0
-            sub_target[nz] = sub_mask[nz] * self.current_label_num
-            # Clear voxels in ROI that previously held the current label but
-            # are now background in the new mask (e.g. tighter interactive
-            # re-segmentation).
-            clear = (sub_mask == 0) & (sub_target == self.current_label_num)
+            sub_target[nz] = value
+            clear = (sub_mask == 0) & (sub_target == value)
             sub_target[clear] = 0
         else:
             nz = mask != 0
-            target[nz] = mask[nz] * self.current_label_num
-            # clear = (mask == 0) & (target == self.current_label_num)
-            # target[clear] = 0
+            target[nz] = value
+
+        if self.working_layer is not None:
+            self.working_layer.refresh()
+
+    def _on_commit_working(self):
+        """Promote the working layer into the persistent annotation layer.
+
+        All voxels in ``working_layer`` equal to :data:`WORKING_LABEL_INDEX`
+        are copied into ``annotation_layer`` with the user's current label
+        number, then the working layer is cleared and the label number is
+        auto-incremented (when the checkbox is on), matching the previous
+        per-segmentation behaviour.
+        """
+        if self.working_layer is None or self.annotation_layer is None:
+            return
+        work = self.working_layer.data
+        nz = work == self.WORKING_LABEL_INDEX
+        if not nz.any():
+            print("Commit: working layer is empty — nothing to commit.")
+            return
+        self.annotation_layer.data[nz] = self.current_label_num
+        work[nz] = 0
+        self.annotation_layer.refresh()
+        self.working_layer.refresh()
+        print(f"Committed working layer with label {self.current_label_num}")
+        self._maybe_increment_label()
+        # Invalidate any stashed live-rerun context: the seed has been
+        # committed, so further parameter tweaks should not repaint it.
+        self._last_interactive_segmentation = None
+
+    def _on_erase_working(self):
+        """Clear the working labels layer (discard uncommitted segmentation)."""
+        if self.working_layer is None:
+            return
+        self.working_layer.data[...] = 0
+        self.working_layer.refresh()
+        print("Erased working layer")
+        self._last_interactive_segmentation = None
 
     def _maybe_increment_label(self):
         """Auto-increment current_label_num and sync the spinbox if enabled."""
@@ -229,12 +305,13 @@ class NDEasyLabel(BaseNDApp):
             self.label_num_spinbox.blockSignals(False)
 
     def _on_show_labels_in_second_viewer(self):
-        """Open (or refresh) a second napari viewer with just image + labels.
+        """Open (or refresh) a second napari viewer with image + both labels.
 
-        Adds only the two layers — image and annotation/labels — so the user
-        can compare against the cluttered primary viewer.  Re-pressing the
-        button refreshes the layers in the existing secondary viewer if it
-        is still open, otherwise a new one is created.
+        Adds three layers — image, persistent labels, and the working labels
+        layer — so the user can compare against the cluttered primary viewer
+        and see live interactive segmentation feedback there too.
+        Re-pressing the button refreshes the layers in the existing
+        secondary viewer if it is still open, otherwise a new one is created.
         """
         if self.image_layer is None or self.annotation_layer is None:
             QMessageBox.warning(
@@ -286,39 +363,66 @@ class NDEasyLabel(BaseNDApp):
         )
         self._second_labels_layer = mirror_labels
 
-        # Forward refresh events from the primary labels layer to the mirror
-        # so paint / fill / segmenter writes in the first viewer immediately
-        # repaint in the second.  Disconnect any previous forwarder first to
+        # Also mirror the working layer (interactive segmenter scratch),
+        # so live RegionGrow3D / SAM3D feedback shows up in the 2nd viewer.
+        mirror_working = None
+        if self.working_layer is not None:
+            mirror_working = self._second_viewer.add_labels(
+                self.working_layer.data,
+                name=self.working_layer.name,
+                scale=scale,
+            )
+        self._second_working_layer = mirror_working
+
+        # Forward refresh events from the primary layers to their mirrors so
+        # paint / fill / segmenter writes in the first viewer immediately
+        # repaint in the second.  Disconnect any previous forwarders first to
         # avoid stacking handlers across repeated button presses.
-        if getattr(self, "_mirror_refresh_cb", None) is not None:
-            for evt_name in ("set_data", "paint", "refresh"):
-                with contextlib.suppress(
-                    TypeError, ValueError, RuntimeError, AttributeError
-                ):
-                    getattr(self.annotation_layer.events, evt_name).disconnect(
-                        self._mirror_refresh_cb
-                    )
+        primary_sources = [
+            (
+                self.annotation_layer,
+                "_mirror_refresh_cb",
+                "_second_labels_layer",
+            ),
+            (
+                self.working_layer,
+                "_mirror_working_refresh_cb",
+                "_second_working_layer",
+            ),
+        ]
 
-        def _forward_refresh(_event=None):
-            mirror = getattr(self, "_second_labels_layer", None)
-            if mirror is None:
-                return
-            try:
-                mirror.refresh()
-            except (RuntimeError, AttributeError):
-                # Mirror layer / viewer was destroyed; drop the reference.
-                self._second_labels_layer = None
+        for primary, cb_attr, mirror_attr in primary_sources:
+            if primary is None:
+                continue
+            old_cb = getattr(self, cb_attr, None)
+            if old_cb is not None:
+                for evt_name in ("set_data", "paint", "refresh"):
+                    with contextlib.suppress(
+                        TypeError, ValueError, RuntimeError, AttributeError
+                    ):
+                        getattr(primary.events, evt_name).disconnect(old_cb)
 
-        self._mirror_refresh_cb = _forward_refresh
-        # paint  -> brush / fill from napari's built-in tools
-        # set_data -> bulk data assignment (mirror update for free)
-        # refresh -> our segmenter-mask code calls annotation_layer.refresh()
-        #            after writing into the underlying numpy buffer directly.
-        for evt_name in ("paint", "set_data", "refresh"):
-            with contextlib.suppress(AttributeError, TypeError):
-                getattr(self.annotation_layer.events, evt_name).connect(
-                    _forward_refresh
-                )
+            def _make_forwarder(mirror_attr_name):
+                def _forward_refresh(_event=None):
+                    mirror = getattr(self, mirror_attr_name, None)
+                    if mirror is None:
+                        return
+                    try:
+                        mirror.refresh()
+                    except (RuntimeError, AttributeError):
+                        setattr(self, mirror_attr_name, None)
+
+                return _forward_refresh
+
+            cb = _make_forwarder(mirror_attr)
+            setattr(self, cb_attr, cb)
+            # paint  -> brush / fill from napari's built-in tools
+            # set_data -> bulk data assignment (mirror update for free)
+            # refresh -> our segmenter-mask code calls .refresh() after
+            #            writing into the underlying numpy buffer directly.
+            for evt_name in ("paint", "set_data", "refresh"):
+                with contextlib.suppress(AttributeError, TypeError):
+                    getattr(primary.events, evt_name).connect(cb)
 
     def _on_segmenter_parameters_changed(self, parameters):
         """Sync segmenter, then live-rerun the last interactive call if supported."""
@@ -333,9 +437,9 @@ class NDEasyLabel(BaseNDApp):
         """Re-run the last interactive segment() call with the current segmenter.
 
         Used to give live visual feedback while the user tunes segmenter
-        parameters (e.g. RegionGrow3D's tolerance / window_size).  The mask
-        is painted with the same label number that was originally used so
-        ``_apply_segmenter_mask`` cleanly clears stale voxels in the ROI.
+        parameters (e.g. RegionGrow3D's tolerance / window_size).  Output
+        always lands in the working layer with ``WORKING_LABEL_INDEX``, so
+        no label-number bookkeeping is needed here.
         """
         ctx = getattr(self, "_last_interactive_segmentation", None)
         if not ctx:
@@ -346,20 +450,14 @@ class NDEasyLabel(BaseNDApp):
         if self.annotation_layer is None:
             return
 
-        saved_label = self.current_label_num
         try:
-            self.current_label_num = ctx["label_num"]
             mask = self.segmenter.segment(
                 ctx["image_data"],
                 points=ctx.get("points"),
                 shapes=ctx.get("shapes"),
             )
             self._apply_segmenter_mask(mask, ctx["segmentation_indices"])
-            self.annotation_layer.refresh()
-            print(
-                f"Live-updated segmentation (label {ctx['label_num']}) "
-                f"with new parameters"
-            )
+            print("Live-updated working segmentation with new parameters")
         except (
             AttributeError,
             ValueError,
@@ -368,8 +466,6 @@ class NDEasyLabel(BaseNDApp):
             IndexError,
         ) as e:
             print(f"Live re-segmentation failed: {e}")
-        finally:
-            self.current_label_num = saved_label
 
     def _initialize_segmenter(self):
         """Initialize predictor if an image is loaded and a segmenter exists."""
@@ -511,10 +607,6 @@ class NDEasyLabel(BaseNDApp):
                 else:
                     self._last_interactive_segmentation = None
 
-                self._maybe_increment_label()
-
-                self.annotation_layer.refresh()
-
             except (
                 AttributeError,
                 ValueError,
@@ -630,7 +722,7 @@ class NDEasyLabel(BaseNDApp):
         try:
             if event.action not in ("added", "changed"):
                 return
-        except Exception as e:
+        except AttributeError as e:
             print(f"Error checking event action: {e}")
             return
 
@@ -705,11 +797,8 @@ class NDEasyLabel(BaseNDApp):
             )
             self._apply_segmenter_mask(mask, segmentation_indices)
             print(
-                f"3D box segmentation applied with label {self.current_label_num}"
+                f"3D box segmentation applied (working layer; commit to assign label {self.current_label_num})"
             )
-            if increment_label:
-                self._maybe_increment_label()
-            self.annotation_layer.refresh()
         except (
             AttributeError,
             ValueError,
@@ -825,11 +914,8 @@ class NDEasyLabel(BaseNDApp):
             )
             self._apply_segmenter_mask(mask, segmentation_indices)
             print(
-                f"2D box segmentation applied with label {self.current_label_num}"
+                f"2D box segmentation applied (working layer; commit to assign label {self.current_label_num})"
             )
-            if increment_label:
-                self._maybe_increment_label()
-            self.annotation_layer.refresh()
         except (
             AttributeError,
             ValueError,
@@ -1023,11 +1109,8 @@ class NDEasyLabel(BaseNDApp):
                 self._apply_segmenter_mask(mask, segmentation_indices)
 
                 print(
-                    f"Added box-segmentation with label {self.current_label_num}"
+                    f"Added box-segmentation (working layer; commit to assign label {self.current_label_num})"
                 )
-                self._maybe_increment_label()
-
-                self.annotation_layer.refresh()
 
             except (
                 AttributeError,
@@ -1251,6 +1334,16 @@ class NDEasyLabel(BaseNDApp):
             self.annotation_layer = self.viewer.add_labels(
                 labels_data,
                 name="Labels (Persistent)",
+                scale=annotation_scale or None,
+            )
+
+            # Working / scratch labels layer for interactive segmenter output.
+            # Always uses WORKING_LABEL_INDEX (7) so its colour is consistent
+            # (napari’s default colormap renders 7 as green-ish, easy to spot).
+            working_data = np.zeros_like(self.annotation_layer.data)
+            self.working_layer = self.viewer.add_labels(
+                working_data,
+                name="Labels (Working)",
                 scale=annotation_scale or None,
             )
 
