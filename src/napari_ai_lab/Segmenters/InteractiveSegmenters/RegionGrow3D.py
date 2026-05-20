@@ -7,8 +7,11 @@ annotation-assistance tool — not a deep-learning model.
 For each positive seed point the segmenter:
   1. Extracts a local cube of size ``window_size`` centred on the seed.
   2. (Optionally) Gaussian-smooths the cube.
-  3. Runs :func:`skimage.segmentation.flood` from the seed voxel with the
-     configured intensity ``tolerance`` and ``connectivity``.
+  3. Builds a candidate binary mask using asymmetric intensity bounds
+     ``[I_seed - tolerance_below, I_seed + tolerance_above]`` and then runs
+     :func:`skimage.segmentation.flood` on that binary mask from the seed
+     voxel with the configured ``connectivity`` to pick the connected
+     component containing the seed.
   4. Pastes the resulting binary mask back into a full-sized output volume.
 
 Results from multiple seeds are combined by union.  Shapes are ignored
@@ -53,7 +56,8 @@ class RegionGrow3D(InteractiveSegmenterBase):
 Instructions for Region Grow 3D:
 1. Click one or more points inside the structure of interest.
 2. A local cube of side `window_size` is taken around each seed.
-3. Voxels are grown while |I - I_seed| < tolerance.
+3. Voxels are grown while (I_seed - tolerance_below) <= I <= (I_seed + tolerance_above).
+   Use asymmetric bounds to grow more toward brighter or dimmer pixels.
 4. `connectivity` chooses 6 / 18 / 26 neighbours.
 5. Optional Gaussian smoothing (`gaussian_sigma`) for noisy data.
 6. Multiple positive points are combined by union.
@@ -74,7 +78,22 @@ Instructions for Region Grow 3D:
         },
     )
 
-    tolerance: float = field(
+    tolerance_below: float = field(
+        default=0.1,
+        metadata={
+            "type": "float",
+            "param_type": "inference",
+            "harvest": True,
+            "advanced": False,
+            "training": False,
+            "min": 0.0,
+            "max": 1e6,
+            "step": 0.01,
+            "default": 0.1,
+        },
+    )
+
+    tolerance_above: float = field(
         default=0.1,
         metadata={
             "type": "float",
@@ -243,12 +262,18 @@ Instructions for Region Grow 3D:
                 )
 
             seed_local = (cz - z0, cy - y0, cx - x0)
+            seed_val = float(cube_f[seed_local])
+            lo = seed_val - float(self.tolerance_below)
+            hi = seed_val + float(self.tolerance_above)
+            candidate = (cube_f >= lo) & (cube_f <= hi)
+            if not candidate[seed_local]:
+                # Numerical edge case — force seed in so flood has a start.
+                candidate[seed_local] = True
             try:
                 grown = flood(
-                    cube_f,
+                    candidate,
                     seed_point=seed_local,
                     connectivity=rank,
-                    tolerance=float(self.tolerance),
                 )
             except (ValueError, IndexError) as e:
                 print(f"RegionGrow3D: flood failed at {seed_local}: {e}")
