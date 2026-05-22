@@ -429,14 +429,23 @@ class NDOperationWidget(QWidget):
 
             widget_layout.addWidget(slider)
 
-            # Connect spinbox and slider
+            # Connect spinbox and slider (visual sync only)
             spinbox.valueChanged.connect(slider.setValue)
             slider.valueChanged.connect(spinbox.setValue)
 
-        # Connect value changes
-        spinbox.valueChanged.connect(
-            lambda value, name=field_name: self._on_parameter_changed(
-                name, value
+            # Slider drag → immediate live update (dragging always produces
+            # a complete valid value so per-tick updates are fine).
+            slider.valueChanged.connect(
+                lambda value, name=field_name: self._on_parameter_changed(
+                    name, value
+                )
+            )
+
+        # Spinbox keyboard: only fire when user commits (Enter/Tab/focus-loss)
+        # to avoid mid-digit partial values triggering segmentation.
+        spinbox.editingFinished.connect(
+            lambda name=field_name: self._on_parameter_changed(
+                name, spinbox.value()
             )
         )
 
@@ -473,10 +482,11 @@ class NDOperationWidget(QWidget):
         else:
             spinbox.setDecimals(1)
 
-        # Connect value changes
-        spinbox.valueChanged.connect(
-            lambda value, name=field_name: self._on_parameter_changed(
-                name, value
+        # Only fire when user commits the value (Enter/Tab/focus-loss),
+        # not on every intermediate keystroke while typing.
+        spinbox.editingFinished.connect(
+            lambda name=field_name: self._on_parameter_changed(
+                name, spinbox.value()
             )
         )
 
