@@ -24,7 +24,7 @@ class NDEasyLabel(BaseNDApp):
     # Label index used in the working layer for all interactive segmenter
     # output.  Chosen because napari's default labels colormap renders 7 as
     # a bright green, making the "uncommitted" region easy to spot.
-    WORKING_LABEL_INDEX = 7
+    WORKING_LABEL_INDEX = 6
 
     # your QWidget.__init__ can optionally request the napari viewer instance
     # use a type annotation of 'napari.viewer.Viewer' for any parameter
@@ -148,6 +148,16 @@ class NDEasyLabel(BaseNDApp):
 
         # Button to open a secondary napari viewer showing just the current
         # image and labels (useful for side-by-side inspection).
+        # Combo controls how the 2nd-viewer view is built: full volume vs
+        # cropped to the active 3D bounding box (sliced views so live updates
+        # in the primary viewer still propagate).
+        preview_row = QHBoxLayout()
+        preview_row.addWidget(QLabel("Label preview layer:"))
+        self.label_preview_combo = QComboBox()
+        self.label_preview_combo.addItems(["None", "3D Bounding Box"])
+        preview_row.addWidget(self.label_preview_combo)
+        self.layout().addLayout(preview_row)
+
         self.show_labels_in_second_viewer_btn = QPushButton(
             "Show labels in 2nd Napari"
         )
@@ -304,12 +314,43 @@ class NDEasyLabel(BaseNDApp):
             self.label_num_spinbox.setValue(self.current_label_num)
             self.label_num_spinbox.blockSignals(False)
 
+    def _compute_preview_crop_slices(self):
+        """Return ``(image_slice, labels_slice)`` for the 2nd-viewer crop.
+
+        Uses the active 3D bounding box on ``boxes_3D_layer`` to crop both
+        the image and the annotation layers, via the shared
+        ``_compute_crop_slice`` helper on :class:`BaseNDApp`.  Returns
+        ``(None, None)`` if no usable box is available so the caller can
+        fall back to the full-volume preview.
+        """
+        box_layer = getattr(self, "boxes_3D_layer", None)
+        if (
+            box_layer is None
+            or self.annotation_layer is None
+            or self.image_layer is None
+        ):
+            return None, None
+        labels_slice = self._compute_crop_slice(
+            box_layer, self.annotation_layer
+        )
+        image_slice = self._compute_crop_slice(box_layer, self.image_layer)
+        if labels_slice is None:
+            return None, None
+        return image_slice, labels_slice
+
     def _on_show_labels_in_second_viewer(self):
         """Open (or refresh) a second napari viewer with image + both labels.
 
         Adds three layers — image, persistent labels, and the working labels
         layer — so the user can compare against the cluttered primary viewer
         and see live interactive segmentation feedback there too.
+
+        The "Label preview layer" combo controls the view:
+          - "None": full volumes, as before.
+          - "3D Bounding Box": crops all three layers to the active 3D
+            bounding box using numpy views, so live writes to the underlying
+            buffers (paint, segmenter masks, commit/erase) still propagate.
+
         Re-pressing the button refreshes the layers in the existing
         secondary viewer if it is still open, otherwise a new one is created.
         """
@@ -351,13 +392,39 @@ class NDEasyLabel(BaseNDApp):
             except (AttributeError, TypeError, ValueError):
                 scale = None
 
+        # Decide crop vs full view based on the combo.
+        preview_mode = (
+            self.label_preview_combo.currentText()
+            if hasattr(self, "label_preview_combo")
+            else "None"
+        )
+        image_slice = labels_slice = None
+        if preview_mode == "3D Bounding Box":
+            image_slice, labels_slice = self._compute_preview_crop_slices()
+            if labels_slice is None:
+                print(
+                    "Label preview: no active 3D bounding box found — "
+                    "falling back to full volume."
+                )
+
+        image_data = (
+            self.image_layer.data[image_slice]
+            if image_slice is not None
+            else self.image_layer.data
+        )
+        labels_data = (
+            self.annotation_layer.data[labels_slice]
+            if labels_slice is not None
+            else self.annotation_layer.data
+        )
+
         self._second_viewer.add_image(
-            self.image_layer.data,
+            image_data,
             name=self.image_layer.name,
             scale=scale,
         )
         mirror_labels = self._second_viewer.add_labels(
-            self.annotation_layer.data,
+            labels_data,
             name=self.annotation_layer.name,
             scale=scale,
         )
@@ -367,8 +434,13 @@ class NDEasyLabel(BaseNDApp):
         # so live RegionGrow3D / SAM3D feedback shows up in the 2nd viewer.
         mirror_working = None
         if self.working_layer is not None:
+            working_data = (
+                self.working_layer.data[labels_slice]
+                if labels_slice is not None
+                else self.working_layer.data
+            )
             mirror_working = self._second_viewer.add_labels(
-                self.working_layer.data,
+                working_data,
                 name=self.working_layer.name,
                 scale=scale,
             )
@@ -853,19 +925,8 @@ class NDEasyLabel(BaseNDApp):
         return self._interactive_layer_map().get(chosen) is layer
 
     def _get_active_box(self, layer):
-        """Return the active (selected) box on `layer`, or the last one if none selected."""
-        if layer is None or len(layer.data) == 0:
-            return None
-        selected = getattr(layer, "selected_data", None)
-        try:
-            sel_indices = list(selected) if selected else []
-        except TypeError:
-            sel_indices = []
-        idx = sel_indices[0] if sel_indices else len(layer.data) - 1
-        try:
-            return np.asarray(layer.data[idx])
-        except (IndexError, TypeError):
-            return None
+        """Backwards-compat shim. Defers to :meth:`BaseNDApp._get_active_box`."""
+        return super()._get_active_box(layer)
 
     def _trim_layer_to_single_box(self, layer, box):
         """Replace `layer.data` with a single box (one-at-a-time interactive layers)."""

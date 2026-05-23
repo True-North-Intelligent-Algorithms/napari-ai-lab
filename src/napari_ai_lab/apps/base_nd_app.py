@@ -8,6 +8,7 @@ NDEasyLabel and NDEasySegment widgets.
 import contextlib
 
 import napari
+import numpy as np
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -210,6 +211,103 @@ class BaseNDApp(QWidget):
         self.image_data_model = image_data_model
         self.segmenter_cache = image_data_model.segmenter_cache
         print(f"{self.__class__.__name__}: Image data model set")
+
+    # === Shared ROI / bounding-box helpers ===========================
+    # Used by NDEasyLabel (preview-crop second viewer) and NDEasySegment
+    # (Segment ROI + optional ROI preview viewer).
+
+    def _get_active_box(self, layer):
+        """Return the active (selected) box on `layer`, or the last box
+        if none is selected. Returns ``None`` if the layer is empty/missing.
+        """
+        if layer is None or len(layer.data) == 0:
+            return None
+        selected = getattr(layer, "selected_data", None)
+        try:
+            sel_indices = list(selected) if selected else []
+        except TypeError:
+            sel_indices = []
+        idx = sel_indices[0] if sel_indices else len(layer.data) - 1
+        try:
+            return np.asarray(layer.data[idx])
+        except (IndexError, TypeError):
+            return None
+
+    def _compute_crop_slice(self, box_layer, target_layer):
+        """Build a numpy indexing tuple that crops ``target_layer.data``
+        to the active box on ``box_layer``.
+
+        The box's last 2 (Shapes) or 3 (BoundingBoxLayer) columns are
+        treated as spatial extents (sliced); preceding columns are taken
+        as non-spatial integer indices (T, P, sequence, ...).  The
+        resulting tuple is aligned to ``target_layer.data.shape``:
+
+          * Trailing channel axis on the target (target ndim ==
+            non_spatial + spatial + 1) → ``slice(None)`` is appended.
+          * Leading non-spatial dims are taken from the trailing end of
+            the box's non-spatial indices; any extra leading dims on the
+            target are padded with ``0``.
+
+        Returns ``None`` if the box is missing, malformed, or yields an
+        empty crop.
+        """
+        if box_layer is None or target_layer is None:
+            return None
+        box = self._get_active_box(box_layer)
+        if box is None or box.ndim != 2:
+            return None
+
+        # Detect spatial dimensionality from the box layer type.
+        try:
+            from ..vendored.napari_bbox import BoundingBoxLayer
+
+            is_3d_bb = isinstance(box_layer, BoundingBoxLayer)
+        except ImportError:
+            is_3d_bb = False
+        n_spatial = 3 if is_3d_bb else 2
+        if box.shape[1] < n_spatial:
+            return None
+
+        spatial = box[:, -n_spatial:]
+        non_spatial_idx = tuple(int(v) for v in box[0, :-n_spatial])
+        mins = np.floor(spatial.min(axis=0)).astype(int)
+        maxs = np.ceil(spatial.max(axis=0)).astype(int)
+
+        target_shape = target_layer.data.shape
+        target_ndim = target_layer.data.ndim
+
+        # Trailing channel axis: target carries exactly 1 extra dim.
+        n_non = len(non_spatial_idx)
+        has_trailing_ch = target_ndim == n_non + n_spatial + 1
+        sp_dim_start = -(n_spatial + 1) if has_trailing_ch else -n_spatial
+        sp_dim_end = -1 if has_trailing_ch else None
+        sp_shape = target_shape[sp_dim_start:sp_dim_end]
+
+        mins = np.clip(mins, 0, np.array(sp_shape) - 1)
+        maxs = np.clip(maxs, 1, np.array(sp_shape))
+        if np.any(maxs <= mins):
+            return None
+
+        spatial_slices = tuple(
+            slice(int(mins[i]), int(maxs[i])) for i in range(n_spatial)
+        )
+
+        # Align leading non-spatial dims to whatever the target has room for.
+        n_leading = target_ndim - n_spatial - (1 if has_trailing_ch else 0)
+        if n_leading > 0:
+            if len(non_spatial_idx) >= n_leading:
+                prefix = non_spatial_idx[-n_leading:]
+            else:
+                prefix = (0,) * (
+                    n_leading - len(non_spatial_idx)
+                ) + non_spatial_idx
+        else:
+            prefix = ()
+
+        idx = prefix + spatial_slices
+        if has_trailing_ch:
+            idx = idx + (slice(None),)
+        return idx
 
     # === COMMON METHODS TO BE IMPLEMENTED ===
     # These methods exist in both NDEasyLabel and NDEasySegment with similar/identical implementations

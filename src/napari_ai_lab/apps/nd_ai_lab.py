@@ -210,7 +210,10 @@ class NDAILab(QWidget):
             edge_width=5,
             ndim=annotation_ndim,
             scale=annotation_scale,
+            text={"string": "{split_set}", "size": 15, "color": "green"},
         )
+
+        self.boxes_3D_layer.feature_defaults["split_set"] = "TESTER363"
 
         self.viewer.add_layer(self.boxes_3D_layer)
 
@@ -265,6 +268,9 @@ class NDAILab(QWidget):
         # this layer's events to _on_3D_boxes_changed here.
         self.label_widget.boxes_3D_layer = self.boxes_3D_layer
         self.segment_widget.boxes_3D_layer = self.boxes_3D_layer
+        # Segment widget also needs the 2D "Label box" layer for its
+        # ROI-source combo ("Label Box" option).
+        self.segment_widget.boxes_layer = self.boxes_layer
 
         # Load any previously saved 3D boxes from labels3d/boxes.csv BEFORE
         # connecting the interactive handler, so populating the layer doesn't

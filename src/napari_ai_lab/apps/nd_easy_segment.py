@@ -148,27 +148,22 @@ class NDEasySegment(BaseNDApp):
         auto_layout.addLayout(range_row)
 
         # === ROI segmentation ===
-        # Dedicated ROI layers (created on demand by the buttons below):
-        #   self.segment_roi_2D_layer → Shapes layer (rectangles, YX)
-        #   self.segment_roi_3D_layer → BoundingBoxLayer (ZYX)
-        self.segment_roi_2D_layer = None
-        self.segment_roi_3D_layer = None
+        # The ROI comes from one of the box layers shared with the rest of
+        # the app (Label box / 3D Bounding Box) — created elsewhere
+        # (NDEasyLabel or the parent NDAILab wires them in).
+        self._segment_roi_viewer = None
 
-        self.add_segment_roi_2D_btn = QPushButton(
-            "Add segmentation 2D ROI layer"
-        )
-        self.add_segment_roi_2D_btn.clicked.connect(
-            self._on_add_segment_roi_2D_layer
-        )
-        auto_layout.addWidget(self.add_segment_roi_2D_btn)
+        roi_source_row = QHBoxLayout()
+        roi_source_row.addWidget(QLabel("ROI source:"))
+        self.roi_source_combo = QComboBox()
+        self.roi_source_combo.addItems(["Label Box", "3D Bounding Box"])
+        roi_source_row.addWidget(self.roi_source_combo)
+        auto_layout.addLayout(roi_source_row)
 
-        self.add_segment_roi_3D_btn = QPushButton(
-            "Add segmentation 3D ROI layer"
+        self.show_roi_in_new_viewer_cb = QCheckBox(
+            "Show ROI segmentation in new napari viewer"
         )
-        self.add_segment_roi_3D_btn.clicked.connect(
-            self._on_add_segment_roi_3D_layer
-        )
-        auto_layout.addWidget(self.add_segment_roi_3D_btn)
+        auto_layout.addWidget(self.show_roi_in_new_viewer_cb)
 
         self.segment_roi_btn = QPushButton("Segment ROI")
         self.segment_roi_btn.clicked.connect(self._on_segment_roi)
@@ -720,94 +715,22 @@ class NDEasySegment(BaseNDApp):
             )
 
     # === ROI segmentation ===
-    def _on_add_segment_roi_2D_layer(self):
-        """Create / reuse the dedicated 2D segmentation-ROI shapes layer."""
-        if self.annotation_layer is None and self.image_layer is None:
-            QMessageBox.warning(
-                self,
-                "No image loaded",
-                "Load an image before adding the segmentation 2D ROI layer.",
-            )
-            return
-
-        if (
-            self.segment_roi_2D_layer is not None
-            and self.segment_roi_2D_layer in self.viewer.layers
-        ):
-            self.viewer.layers.selection.active = self.segment_roi_2D_layer
-            return
-
-        ref = self.annotation_layer or self.image_layer
-        ndim = len(ref.data.shape)
-        scale = None
-        if self.image_data_model is not None:
-            with contextlib.suppress(Exception):
-                scale = (
-                    self.image_data_model.get_scale(
-                        axes_to_collapse=self.axes_to_collapse
-                    )
-                    or None
-                )
-
-        self.segment_roi_2D_layer = self.viewer.add_shapes(
-            name="Segment 2D ROI",
-            edge_color="cyan",
-            face_color="transparent",
-            edge_width=3,
-            ndim=ndim,
-            scale=scale,
-        )
-        self.viewer.layers.selection.active = self.segment_roi_2D_layer
-        print("✨ Added Segment 2D ROI layer")
-
-    def _on_add_segment_roi_3D_layer(self):
-        """Create / reuse the dedicated 3D segmentation-ROI bounding-box layer."""
-        if self.annotation_layer is None and self.image_layer is None:
-            QMessageBox.warning(
-                self,
-                "No image loaded",
-                "Load an image before adding the segmentation 3D ROI layer.",
-            )
-            return
-
-        if (
-            self.segment_roi_3D_layer is not None
-            and self.segment_roi_3D_layer in self.viewer.layers
-        ):
-            self.viewer.layers.selection.active = self.segment_roi_3D_layer
-            return
-
-        from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
-
-        ref = self.annotation_layer or self.image_layer
-        ndim = len(ref.data.shape)
-        scale = None
-        if self.image_data_model is not None:
-            with contextlib.suppress(Exception):
-                scale = (
-                    self.image_data_model.get_scale(
-                        axes_to_collapse=self.axes_to_collapse
-                    )
-                    or None
-                )
-
-        self.segment_roi_3D_layer = BoundingBoxLayer(
-            name="Segment 3D ROI",
-            edge_color="cyan",
-            face_color="transparent",
-            edge_width=3,
-            ndim=ndim,
-            scale=scale,
-        )
-        self.viewer.add_layer(self.segment_roi_3D_layer)
-        self.viewer.layers.selection.active = self.segment_roi_3D_layer
-        print("✨ Added Segment 3D ROI layer")
+    def _get_roi_box_layer(self, roi_source):
+        """Return the shared box layer matching the ``roi_source`` combo entry."""
+        if roi_source == "3D Bounding Box":
+            return getattr(self, "boxes_3D_layer", None)
+        if roi_source == "Label Box":
+            return getattr(self, "boxes_layer", None)
+        return None
 
     def _on_segment_roi(self):
-        """Segment a single ROI defined by the most-recent box on either
-        the 3D or 2D segmentation-ROI layer.
+        """Segment a single ROI selected via the ROI-source combo.
 
-        Preference order: 3D layer (if present and has boxes) → 2D layer.
+        The combo picks between the shared ``Label Box`` (2D Shapes) and
+        ``3D Bounding Box`` layers.  After segmentation, the resulting mask
+        is pasted into the corresponding predictions layer at the same
+        crop; optionally a second napari viewer is opened with the cropped
+        image and prediction for inspection.
         """
         if self.image_layer is None:
             QMessageBox.warning(self, "Warning", "No image loaded")
@@ -816,70 +739,30 @@ class NDEasySegment(BaseNDApp):
             QMessageBox.warning(self, "Warning", "No segmenter selected")
             return
 
-        roi_layer = None
-        n_spatial = 2
-        roi_source = ""
-        if (
-            self.segment_roi_3D_layer is not None
-            and self.segment_roi_3D_layer in self.viewer.layers
-            and len(self.segment_roi_3D_layer.data) > 0
-        ):
-            roi_layer = self.segment_roi_3D_layer
-            n_spatial = 3
-            roi_source = "Segment 3D ROI"
-        elif (
-            self.segment_roi_2D_layer is not None
-            and self.segment_roi_2D_layer in self.viewer.layers
-            and len(self.segment_roi_2D_layer.data) > 0
-        ):
-            roi_layer = self.segment_roi_2D_layer
-            n_spatial = 2
-            roi_source = "Segment 2D ROI"
-
-        if roi_layer is None:
+        roi_source = self.roi_source_combo.currentText()
+        box_layer = self._get_roi_box_layer(roi_source)
+        if box_layer is None or len(getattr(box_layer, "data", [])) == 0:
             QMessageBox.warning(
                 self,
                 "Warning",
-                "No segmentation ROI found. Add a 2D or 3D ROI layer and "
-                "draw a box first.",
+                f"No '{roi_source}' layer with boxes found. "
+                "Draw a box in the corresponding layer first.",
             )
             return
 
-        box = np.asarray(roi_layer.data[-1])
-        if box.ndim != 2 or box.shape[1] < n_spatial:
+        image_slice = self._compute_crop_slice(box_layer, self.image_layer)
+        if image_slice is None:
             QMessageBox.warning(
                 self,
                 "Warning",
-                f"Selected ROI has unexpected shape {box.shape}",
+                f"Could not compute ROI crop from {roi_source}.",
             )
             return
 
-        # Last n_spatial coords are the spatial extents (Z,Y,X or Y,X).
-        spatial = box[:, -n_spatial:]
-        mins = np.floor(spatial.min(axis=0)).astype(int)
-        maxs = np.ceil(spatial.max(axis=0)).astype(int)
-
-        image_data = self.image_layer.data
-        image_shape = image_data.shape
-        spatial_shape = image_shape[-n_spatial:]
-        mins = np.clip(mins, 0, np.array(spatial_shape) - 1)
-        maxs = np.clip(maxs, 1, np.array(spatial_shape))
-
-        # Build indexing tuple: non-spatial dims from current_step,
-        # spatial dims sliced by the bbox.
-        current_step = tuple(self.viewer.dims.current_step)
-        n_nonspatial = len(image_shape) - n_spatial
-        non_spatial = tuple(current_step[:n_nonspatial])
-        spatial_slices = tuple(
-            slice(int(mins[i]), int(maxs[i])) for i in range(n_spatial)
-        )
-        idx = non_spatial + spatial_slices
-
-        sub = image_data[idx]
+        sub = self.image_layer.data[image_slice]
         print(
             f"Segment ROI ({roi_source}): "
-            f"non_spatial={non_spatial}, spatial_slices={spatial_slices}, "
-            f"sub.shape={sub.shape}"
+            f"slice={image_slice}, sub.shape={sub.shape}"
         )
 
         # Sync params from the form to the segmenter
@@ -913,34 +796,28 @@ class NDEasySegment(BaseNDApp):
             self.segment_progress_logger.log_info("Segmenter returned no mask")
             return
 
-        # Paste the ROI mask back into the predictions layer at the
-        # current slice position.
+        # Paste mask into the predictions layer using its own aligned crop.
         segmenter_name = self.segmenter.__class__.__name__
         predictions_layer = self._get_or_create_predictions_layer(
             segmenter_name, self.annotation_layer.data.shape
         )
-
-        pred_shape = predictions_layer.data.shape
-        n_pred_spatial = min(n_spatial, len(pred_shape))
-        pred_non_spatial = tuple(
-            current_step[: len(pred_shape) - n_pred_spatial]
-        )
-        pred_spatial_slices = tuple(
-            slice(int(mins[i]), int(maxs[i]))
-            for i in range(n_spatial - n_pred_spatial, n_spatial)
-        )
-        target_idx = pred_non_spatial + pred_spatial_slices
+        preds_slice = self._compute_crop_slice(box_layer, predictions_layer)
+        if preds_slice is None:
+            QMessageBox.critical(
+                self,
+                "Error",
+                "Could not align mask to predictions layer.",
+            )
+            return
 
         try:
-            # Squeeze mask to match the target region's dimensionality
             mask_to_paste = np.asarray(mask)
-            target_region = predictions_layer.data[target_idx]
+            target_region = predictions_layer.data[preds_slice]
             if mask_to_paste.shape != target_region.shape:
                 mask_to_paste = np.squeeze(mask_to_paste)
             if mask_to_paste.shape != target_region.shape:
-                # Best-effort broadcast / reshape
                 mask_to_paste = mask_to_paste.reshape(target_region.shape)
-            predictions_layer.data[target_idx] = mask_to_paste
+            predictions_layer.data[preds_slice] = mask_to_paste
             predictions_layer.refresh()
             self.segment_progress_logger.log_info(
                 f"\u2705 ROI segmentation written to '{segmenter_name}'"
@@ -948,13 +825,67 @@ class NDEasySegment(BaseNDApp):
         except (ValueError, TypeError, IndexError) as e:
             print(
                 f"Failed to paste ROI mask (shape {np.asarray(mask).shape} "
-                f"vs target {predictions_layer.data[target_idx].shape}): {e}"
+                f"vs target {predictions_layer.data[preds_slice].shape}): {e}"
             )
             QMessageBox.critical(
                 self,
                 "Error",
                 f"Failed to write ROI mask into predictions layer: {e}",
             )
+            return
+
+        # Optional preview viewer with cropped image + cropped prediction.
+        if self.show_roi_in_new_viewer_cb.isChecked():
+            self._show_roi_in_new_viewer(
+                box_layer, predictions_layer, image_slice, preds_slice
+            )
+
+    def _show_roi_in_new_viewer(
+        self, box_layer, predictions_layer, image_slice, preds_slice
+    ):
+        """Open (or refresh) a second napari viewer with the cropped ROI."""
+        if image_slice is None or preds_slice is None:
+            return
+
+        # Drop a stale viewer reference if it has been closed.
+        if self._segment_roi_viewer is not None:
+            try:
+                _ = self._segment_roi_viewer.window  # touch
+            except (RuntimeError, AttributeError):
+                self._segment_roi_viewer = None
+
+        if self._segment_roi_viewer is None:
+            self._segment_roi_viewer = napari.Viewer(
+                title="Segment ROI Preview"
+            )
+        else:
+            try:
+                self._segment_roi_viewer.layers.clear()
+            except (RuntimeError, AttributeError):
+                self._segment_roi_viewer = napari.Viewer(
+                    title="Segment ROI Preview"
+                )
+
+        scale = None
+        if self.image_data_model is not None:
+            with contextlib.suppress(Exception):
+                scale = (
+                    self.image_data_model.get_scale(
+                        axes_to_collapse=self.axes_to_collapse
+                    )
+                    or None
+                )
+
+        self._segment_roi_viewer.add_image(
+            self.image_layer.data[image_slice],
+            name=f"{self.image_layer.name} (ROI)",
+            scale=scale,
+        )
+        self._segment_roi_viewer.add_labels(
+            predictions_layer.data[preds_slice],
+            name=f"{predictions_layer.name} (ROI)",
+            scale=scale,
+        )
 
     def _on_train(self):
         """Handle training - either via dialog or embedded form based on training_widget_mode."""
