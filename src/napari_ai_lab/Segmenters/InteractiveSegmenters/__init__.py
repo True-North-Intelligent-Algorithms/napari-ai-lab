@@ -25,6 +25,7 @@ _OPTIONAL_SEGMENTERS = {
     "Square2D": ".Square2D",
     "SAM3D": ".SAM3D",  # This one has heavy dependencies
     "RegionGrow3D": ".RegionGrow3D",
+    "FeatureRegionGrow3D": ".FeatureRegionGrow3D",
 }
 
 
