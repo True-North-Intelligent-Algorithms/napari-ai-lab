@@ -268,6 +268,10 @@ class NDAILab(QWidget):
         # this layer's events to _on_3D_boxes_changed here.
         self.label_widget.boxes_3D_layer = self.boxes_3D_layer
         self.segment_widget.boxes_3D_layer = self.boxes_3D_layer
+        # Back-reference so child widgets (e.g. label widget's
+        # "Copy predictions to labels" button) can call into NDAILab.
+        self.label_widget.ai_lab = self
+        self.segment_widget.ai_lab = self
         # Segment widget also needs the 2D "Label box" layer for its
         # ROI-source combo ("Label Box" option).
         self.segment_widget.boxes_layer = self.boxes_layer
@@ -518,7 +522,7 @@ class NDAILab(QWidget):
         print("   ✅ Layer cleanup complete")
 
     def _on_boxes_changed(self, event):
-        """Handle boxes layer data changes - show dialog to copy predictions to new ROI."""
+        """Handle 2D boxes layer data changes - show dialog to copy predictions to new ROI."""
 
         # Only respond to 'added' events (same check as in nd_easy_label)
         if event.action != "added":
@@ -528,7 +532,6 @@ class NDAILab(QWidget):
         if len(boxes_layer.data) == 0:
             return
 
-        # Check if we have any predictions layers to copy from
         if (
             not hasattr(self, "predictions_layers")
             or not self.predictions_layers
@@ -536,104 +539,209 @@ class NDAILab(QWidget):
             print("No predictions layers available to copy from")
             return
 
-        # Get the most recently added box
-        box = boxes_layer.data[-1]
-
-        # Extract spatial coordinates (last 2 columns are Y and X)
-        # Use floor for start and ceil for end to ensure end > start
-        ystart = int(np.floor(np.min(box[:, -2])))
-        yend = int(np.ceil(np.max(box[:, -2])))
-        xstart = int(np.floor(np.min(box[:, -1])))
-        xend = int(np.ceil(np.max(box[:, -1])))
-
-        # Extract ND indices (all columns before the last 2)
-        # These are the indices in ND space (e.g., T, Z, S for TSZYX)
-        nd_indices = tuple(int(box[0, i]) for i in range(box.shape[1] - 2))
-
-        # Check each prediction layer for data at this location
-        available_predictions = {}
-        for segmenter_name, pred_layer in self.predictions_layers.items():
-            pred_data = pred_layer.data
-
-            # Build the indexing tuple: nd_indices + (slice(ystart, yend), slice(xstart, xend))
-            roi_slice = nd_indices + (slice(ystart, yend), slice(xstart, xend))
-
-            # Check if predictions exist at this location
-            try:
-                pred_roi = pred_data[roi_slice]
-
-                # Check if there's any non-zero data
-                if np.any(pred_roi):
-                    available_predictions[segmenter_name] = pred_layer
-                    print(f"✓ {segmenter_name}: Predictions found in ROI")
-                else:
-                    print(
-                        f"✗ {segmenter_name}: No non-zero predictions in ROI"
-                    )
-            except (IndexError, ValueError) as e:
-                print(
-                    f"✗ {segmenter_name}: No predictions at this location ({e})"
-                )
-
-        # If no predictions available, inform user and return
-        if not available_predictions:
+        available = self._find_available_predictions(boxes_layer)
+        if not available:
             print("⚠️ No predictions exist at this location")
             return
 
-        # Create dialog with only available predictions
+        self._show_copy_predictions_dialog(
+            box_layer=boxes_layer,
+            available_predictions=available,
+            allow_source_choice=False,
+        )
+
+    # ------------------------------------------------------------------
+    # Shared helpers for "copy predictions to labels" (2D and 3D paths)
+    # ------------------------------------------------------------------
+    def _find_available_predictions(self, box_layer):
+        """Return ``{name: pred_layer}`` for predictions with non-zero data
+        inside the active box on ``box_layer``.
+
+        Uses the shared ``_compute_crop_slice`` helper on
+        :class:`BaseNDApp` (inherited by ``label_widget``) so this works
+        uniformly for 2D Shapes and 3D BoundingBoxLayer sources.
+        """
+        available = {}
+        if box_layer is None:
+            return available
+        if (
+            not hasattr(self, "predictions_layers")
+            or not self.predictions_layers
+        ):
+            return available
+        # _compute_crop_slice lives on BaseNDApp; reuse via label_widget
+        compute = getattr(self.label_widget, "_compute_crop_slice", None)
+        if compute is None:
+            return available
+        for name, pred_layer in self.predictions_layers.items():
+            try:
+                slc = compute(box_layer, pred_layer)
+                if slc is None:
+                    print(f"✗ {name}: no slice for ROI")
+                    continue
+                pred_roi = pred_layer.data[slc]
+                if np.any(pred_roi):
+                    available[name] = pred_layer
+                    print(f"✓ {name}: predictions found in ROI")
+                else:
+                    print(f"✗ {name}: no non-zero predictions in ROI")
+            except (IndexError, ValueError, TypeError) as e:
+                print(f"✗ {name}: no predictions at this location ({e})")
+        return available
+
+    def _copy_predictions_into_labels(self, box_layer, pred_layer):
+        """Copy ``pred_layer`` ROI into ``annotations_layer`` ROI using
+        per-target slices from ``_compute_crop_slice``."""
+        compute = getattr(self.label_widget, "_compute_crop_slice", None)
+        if compute is None or self.annotations_layer is None:
+            print("✗ Cannot copy: missing helper or annotations layer")
+            return False
+        preds_slice = compute(box_layer, pred_layer)
+        labels_slice = compute(box_layer, self.annotations_layer)
+        if preds_slice is None or labels_slice is None:
+            print("✗ Cannot copy: failed to compute crop slice")
+            return False
+        try:
+            self.annotations_layer.data[labels_slice] = pred_layer.data[
+                preds_slice
+            ]
+            self.annotations_layer.refresh()
+            return True
+        except (IndexError, ValueError) as e:
+            print(f"✗ Copy failed: {e}")
+            return False
+
+    def _show_copy_predictions_dialog(
+        self,
+        box_layer=None,
+        available_predictions=None,
+        allow_source_choice=False,
+    ):
+        """Show the copy-predictions dialog.
+
+        - When ``allow_source_choice`` is False (the 2D auto-trigger path):
+          ``box_layer`` and ``available_predictions`` must be supplied and
+          only the predictions combo is shown.
+        - When ``allow_source_choice`` is True (the 3D button path): a
+          Source ROI combo is also shown (Label box / 3D Bounding Boxes),
+          and available predictions are recomputed when the source ROI
+          changes.
+        """
         dialog = QDialog(self)
         dialog.setWindowTitle("Copy Predictions to ROI")
-        dialog.setMinimumWidth(400)
+        dialog.setMinimumWidth(420)
 
         layout = QVBoxLayout(dialog)
-
-        # Message label
-        message_label = QLabel(
-            "Choose predictions layer and press 'copy' to copy predictions to new roi"
+        layout.addWidget(
+            QLabel(
+                "Choose predictions layer and press 'Copy' to copy "
+                "predictions into the labels layer."
+            )
         )
-        layout.addWidget(message_label)
 
-        # Combo box with available predictions only
-        combo_layout = QHBoxLayout()
-        combo_label = QLabel("Predictions Layer:")
-        combo_layout.addWidget(combo_label)
+        # Optional source ROI combo
+        source_combo = None
+        source_layers = {}
+        if allow_source_choice:
+            if (
+                hasattr(self, "boxes_3D_layer")
+                and self.boxes_3D_layer is not None
+            ):
+                source_layers["3D Bounding Boxes"] = self.boxes_3D_layer
+            if hasattr(self, "boxes_layer") and self.boxes_layer is not None:
+                source_layers["Label box"] = self.boxes_layer
+            if not source_layers:
+                print("⚠️ No ROI source layers available")
+                return
+            row = QHBoxLayout()
+            row.addWidget(QLabel("Source ROI:"))
+            source_combo = QComboBox()
+            for name in source_layers:
+                source_combo.addItem(name)
+            row.addWidget(source_combo)
+            layout.addLayout(row)
 
+        # Predictions combo
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Predictions Layer:"))
         predictions_combo = QComboBox()
-        for segmenter_name in available_predictions:
-            predictions_combo.addItem(segmenter_name)
-        combo_layout.addWidget(predictions_combo)
+        row.addWidget(predictions_combo)
+        layout.addLayout(row)
 
-        layout.addLayout(combo_layout)
+        status_label = QLabel("")
+        layout.addWidget(status_label)
 
         # Buttons
-        button_layout = QHBoxLayout()
-
+        button_row = QHBoxLayout()
         copy_button = QPushButton("Copy")
         cancel_button = QPushButton("Cancel")
+        button_row.addWidget(copy_button)
+        button_row.addWidget(cancel_button)
+        layout.addLayout(button_row)
 
-        # Copy functionality
-        def copy_predictions():
-            selected_name = predictions_combo.currentText()
-            selected_pred_layer = available_predictions[selected_name]
-            pred_data = selected_pred_layer.data
+        # Mutable state shared with refresh()
+        state = {
+            "box_layer": box_layer,
+            "available": dict(available_predictions or {}),
+        }
 
-            # Get the prediction ROI
-            roi_slice = nd_indices + (slice(ystart, yend), slice(xstart, xend))
-            pred_roi = pred_data[roi_slice]
+        def refresh_predictions():
+            if allow_source_choice and source_combo is not None:
+                state["box_layer"] = source_layers.get(
+                    source_combo.currentText()
+                )
+                state["available"] = self._find_available_predictions(
+                    state["box_layer"]
+                )
+            predictions_combo.blockSignals(True)
+            predictions_combo.clear()
+            for name in state["available"]:
+                predictions_combo.addItem(name)
+            predictions_combo.blockSignals(False)
+            has_any = bool(state["available"])
+            copy_button.setEnabled(has_any)
+            if not has_any:
+                status_label.setText(
+                    "⚠️ No predictions overlap the selected ROI."
+                )
+            else:
+                status_label.setText("")
 
-            self.annotations_layer.data[roi_slice] = pred_roi
-            self.annotations_layer.refresh()  # Force napari to update the display
-            print(f"✓ Copied {selected_name} predictions to labels layer")
+        def do_copy():
+            name = predictions_combo.currentText()
+            pred_layer = state["available"].get(name)
+            box_layer_now = state["box_layer"]
+            if pred_layer is None or box_layer_now is None:
+                return
+            if self._copy_predictions_into_labels(box_layer_now, pred_layer):
+                print(f"✓ Copied {name} predictions to labels layer")
+                dialog.accept()
 
-            dialog.accept()
-
-        copy_button.clicked.connect(copy_predictions)
+        if source_combo is not None:
+            source_combo.currentTextChanged.connect(
+                lambda _t: refresh_predictions()
+            )
+        copy_button.clicked.connect(do_copy)
         cancel_button.clicked.connect(dialog.reject)
 
-        button_layout.addWidget(copy_button)
-        button_layout.addWidget(cancel_button)
-
-        layout.addLayout(button_layout)
-
-        # Show dialog
+        refresh_predictions()
         dialog.exec_()
+
+    def show_copy_predictions_dialog(self):
+        """Public entry point used by child widgets (e.g. the label widget's
+        'Copy predictions to labels' button) to open the copy-predictions
+        dialog with a Source ROI chooser (2D Label box or 3D Bounding
+        Boxes)."""
+        if (
+            not hasattr(self, "predictions_layers")
+            or not self.predictions_layers
+        ):
+            from qtpy.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self,
+                "Copy Predictions",
+                "No predictions layers available to copy from.",
+            )
+            return
+        self._show_copy_predictions_dialog(allow_source_choice=True)

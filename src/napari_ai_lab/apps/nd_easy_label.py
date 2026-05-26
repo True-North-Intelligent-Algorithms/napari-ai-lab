@@ -166,6 +166,18 @@ class NDEasyLabel(BaseNDApp):
         )
         self.layout().addWidget(self.show_labels_in_second_viewer_btn)
 
+        # Button to open the copy-predictions-to-labels dialog (handles both
+        # 2D "Label box" and 3D "3D Bounding Boxes" source ROIs).  Only
+        # functional when this widget is hosted inside NDAILab (which owns
+        # the predictions layers and wires ``self.ai_lab``).
+        self.copy_predictions_to_labels_btn = QPushButton(
+            "Copy predictions to labels"
+        )
+        self.copy_predictions_to_labels_btn.clicked.connect(
+            self._on_copy_predictions_to_labels
+        )
+        self.layout().addWidget(self.copy_predictions_to_labels_btn)
+
         # Holder for the secondary viewer (kept alive across button clicks).
         self._second_viewer = None
 
@@ -495,6 +507,25 @@ class NDEasyLabel(BaseNDApp):
             for evt_name in ("paint", "set_data", "refresh"):
                 with contextlib.suppress(AttributeError, TypeError):
                     getattr(primary.events, evt_name).connect(cb)
+
+    def _on_copy_predictions_to_labels(self):
+        """Open the copy-predictions-to-labels dialog on the parent NDAILab.
+
+        Only works when this widget is hosted inside NDAILab (which owns
+        the predictions layers and sets ``self.ai_lab``).
+        """
+        ai_lab = getattr(self, "ai_lab", None)
+        if ai_lab is None or not hasattr(
+            ai_lab, "show_copy_predictions_dialog"
+        ):
+            QMessageBox.information(
+                self,
+                "Copy Predictions",
+                "Copy predictions is only available when running inside "
+                "ND AI Lab.",
+            )
+            return
+        ai_lab.show_copy_predictions_dialog()
 
     def _on_segmenter_parameters_changed(self, parameters):
         """Sync segmenter, then live-rerun the last interactive call if supported."""
