@@ -508,6 +508,411 @@ class NDEasyLabel(BaseNDApp):
                 with contextlib.suppress(AttributeError, TypeError):
                     getattr(primary.events, evt_name).connect(cb)
 
+        # Remember the crop slice (or None) so the morphology "Apply" button
+        # knows where in the original annotation_layer.data to write back.
+        self._second_labels_slice = labels_slice
+        self._second_labels_scale = scale
+
+        # Add (or refresh) the label-morphology dock widget on the 2nd viewer.
+        self._ensure_morphology_panel()
+
+    # ------------------------------------------------------------------
+    # Label morphology dock (lives on the 2nd napari viewer)
+    # ------------------------------------------------------------------
+    def _ensure_morphology_panel(self):
+        """Add the morphology side panel to the 2nd viewer if missing.
+
+        Re-uses the same panel widget if it's still attached; otherwise
+        rebuilds it (e.g. when the 2nd viewer was closed and reopened).
+        """
+        if self._second_viewer is None:
+            return
+        panel = getattr(self, "_second_morph_panel", None)
+        # If we have a panel but the viewer was recreated, the old dock is
+        # stale.  A simple sentinel: track the viewer it belongs to.
+        owning = getattr(self, "_second_morph_panel_viewer", None)
+        if panel is not None and owning is self._second_viewer:
+            # Already attached to this viewer; nothing to do.
+            return
+        # Build a fresh panel and dock it.
+        panel = self._build_label_morphology_panel()
+        try:
+            self._second_viewer.window.add_dock_widget(
+                panel, area="right", name="Label Morphology"
+            )
+        except (RuntimeError, AttributeError) as e:
+            print(f"Could not add morphology dock: {e}")
+            return
+        self._second_morph_panel = panel
+        self._second_morph_panel_viewer = self._second_viewer
+        # Reset the preview-layer reference for the new viewer.
+        self._second_morph_preview_layer = None
+
+    def _build_label_morphology_panel(self):
+        """Construct the morphology operations side panel."""
+        from qtpy.QtWidgets import QGroupBox, QWidget
+
+        panel = QWidget()
+        outer = QVBoxLayout(panel)
+
+        group = QGroupBox("Label Morphology")
+        layout = QVBoxLayout(group)
+
+        # Operation
+        op_row = QHBoxLayout()
+        op_row.addWidget(QLabel("Operation:"))
+        self._morph_op_combo = QComboBox()
+        self._morph_op_combo.addItems(
+            [
+                "Dilate",
+                "Erode",
+                "Open",
+                "Close",
+                "Fill holes",
+                "Remove small objects",
+                "Remove small embedded labels",
+            ]
+        )
+        op_row.addWidget(self._morph_op_combo)
+        layout.addLayout(op_row)
+
+        # Element / size
+        size_row = QHBoxLayout()
+        size_row.addWidget(QLabel("Element size:"))
+        self._morph_size_spin = QSpinBox()
+        self._morph_size_spin.setMinimum(1)
+        self._morph_size_spin.setMaximum(99)
+        self._morph_size_spin.setValue(3)
+        size_row.addWidget(self._morph_size_spin)
+        layout.addLayout(size_row)
+
+        # Element shape (only matters for dilate/erode/open/close)
+        shape_row = QHBoxLayout()
+        shape_row.addWidget(QLabel("Element shape:"))
+        self._morph_shape_combo = QComboBox()
+        self._morph_shape_combo.addItems(["Ball / Disk", "Cube / Square"])
+        shape_row.addWidget(self._morph_shape_combo)
+        layout.addLayout(shape_row)
+
+        # Mode: Binary / Per-label / Single label
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode:"))
+        self._morph_mode_combo = QComboBox()
+        self._morph_mode_combo.addItems(
+            [
+                "Binary (all labels)",
+                "Per-label (preserve IDs)",
+                "Single label",
+            ]
+        )
+        self._morph_mode_combo.setCurrentText("Per-label (preserve IDs)")
+        self._morph_mode_combo.setToolTip(
+            "Binary: collapse all labels to one mask; new pixels take the "
+            "'Current Label' value.\n"
+            "Per-label: operate on each label ID independently and merge.\n"
+            "Single label: operate only on the chosen Target label; when "
+            "the region grows or fills, it overwrites neighbouring labels "
+            "(useful for cleaning small islands of label B sitting inside "
+            "label A)."
+        )
+        mode_row.addWidget(self._morph_mode_combo)
+        layout.addLayout(mode_row)
+
+        # Target label (only used when mode == "Single label")
+        target_row = QHBoxLayout()
+        target_row.addWidget(QLabel("Target label:"))
+        self._morph_target_label_spin = QSpinBox()
+        self._morph_target_label_spin.setMinimum(1)
+        self._morph_target_label_spin.setMaximum(65535)
+        self._morph_target_label_spin.setValue(int(self.current_label_num))
+        target_row.addWidget(self._morph_target_label_spin)
+        layout.addLayout(target_row)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        self._morph_preview_btn = QPushButton("Preview")
+        self._morph_preview_btn.clicked.connect(self._on_morph_preview)
+        btn_row.addWidget(self._morph_preview_btn)
+
+        self._morph_clear_btn = QPushButton("Clear preview")
+        self._morph_clear_btn.clicked.connect(self._on_morph_clear_preview)
+        btn_row.addWidget(self._morph_clear_btn)
+        layout.addLayout(btn_row)
+
+        self._morph_apply_btn = QPushButton("Apply to labels")
+        self._morph_apply_btn.clicked.connect(self._on_morph_apply)
+        layout.addWidget(self._morph_apply_btn)
+
+        outer.addWidget(group)
+        outer.addStretch(1)
+        return panel
+
+    # ------------------------------------------------------------------
+    # Morphology core
+    # ------------------------------------------------------------------
+    def _make_structuring_element(self, ndim, size, shape):
+        """Build a (2*size+1)^ndim structuring element of the given shape."""
+        import numpy as np
+
+        radius = int(size)
+        diameter = 2 * radius + 1
+        if shape == "Cube / Square":
+            return np.ones((diameter,) * ndim, dtype=bool)
+        # Ball / Disk
+        coords = np.indices((diameter,) * ndim) - radius
+        dist2 = np.sum(coords * coords, axis=0)
+        return dist2 <= (radius * radius)
+
+    def _apply_morphology_to_array(
+        self, data, op, size, shape, mode, target_label
+    ):
+        """Return a new array with the chosen morphology op applied.
+
+        ``data`` is a labels array (integer dtype).  ``mode`` is one of
+        ``"Binary (all labels)"``, ``"Per-label (preserve IDs)"``, or
+        ``"Single label"``.  ``target_label`` is the label ID used when
+        ``mode == "Single label"``.
+        """
+        import numpy as np
+        from scipy import ndimage as ndi
+
+        data = np.asarray(data)
+        if data.size == 0:
+            return data.copy()
+
+        ndim = data.ndim
+        selem = self._make_structuring_element(ndim, size, shape)
+        single = mode == "Single label"
+        target = int(target_label)
+
+        if op == "Fill holes":
+            if single:
+                # Fill holes inside the chosen label only; new pixels
+                # overwrite whatever was there (including other labels),
+                # so a small embedded label B is replaced by A.
+                mask = data == target
+                filled = ndi.binary_fill_holes(mask)
+                new_pixels = filled & ~mask
+                out = data.copy()
+                out[new_pixels] = target
+                return out
+            mask = data > 0
+            filled = ndi.binary_fill_holes(mask)
+            new_pixels = filled & ~mask
+            out = data.copy()
+            out[new_pixels] = int(self.current_label_num)
+            return out
+
+        if op == "Remove small objects":
+            threshold = int(size) ** ndim
+            if single:
+                # Only drop small components of the chosen label.
+                mask = data == target
+                labeled, _ = ndi.label(mask, structure=np.ones((3,) * ndim))
+                counts = np.bincount(labeled.ravel())
+                too_small = np.zeros_like(counts, dtype=bool)
+                too_small[1:] = counts[1:] < threshold
+                drop_mask = too_small[labeled]
+                out = data.copy()
+                out[drop_mask] = 0
+                return out
+            mask = data > 0
+            labeled, _ = ndi.label(mask, structure=np.ones((3,) * ndim))
+            counts = np.bincount(labeled.ravel())
+            too_small = np.zeros_like(counts, dtype=bool)
+            too_small[1:] = counts[1:] < threshold
+            drop_mask = too_small[labeled]
+            out = data.copy()
+            out[drop_mask] = 0
+            return out
+
+        if op == "Remove small embedded labels":
+            # Per-label: find small connected components and replace them
+            # with the majority non-zero, non-self neighbor label.  Useful
+            # when a small island of label B is embedded inside a large
+            # region of label A: the island gets recoloured as A.
+            # Components with no labeled neighbour (floating in 0) are
+            # left alone.
+            out = data.copy()
+            threshold = int(size) ** ndim
+            structure = np.ones((3,) * ndim)
+            labels = np.unique(data)
+            labels = labels[labels != 0]
+            for value in labels:
+                mask = data == value
+                cc, _ = ndi.label(mask, structure=structure)
+                counts = np.bincount(cc.ravel())
+                small_ids = np.where(
+                    (counts < threshold) & (np.arange(len(counts)) != 0)
+                )[0]
+                for id_ in small_ids:
+                    component = cc == id_
+                    border = ndi.binary_dilation(
+                        component, structure=structure
+                    )
+                    border &= ~component
+                    neighbors = data[border]
+                    neighbors = neighbors[neighbors != value]
+                    neighbors = neighbors[neighbors != 0]
+                    if len(neighbors) == 0:
+                        continue
+                    replacement = np.bincount(neighbors.astype(int)).argmax()
+                    out[component] = replacement
+            return out
+
+        # Dilate / Erode / Open / Close
+        op_map = {
+            "Dilate": ndi.binary_dilation,
+            "Erode": ndi.binary_erosion,
+            "Open": ndi.binary_opening,
+            "Close": ndi.binary_closing,
+        }
+        if op not in op_map:
+            return data.copy()
+        fn = op_map[op]
+
+        if single:
+            # Single-label mode: morph only the chosen label's mask.  When
+            # the region grows (Dilate / Close), new pixels OVERWRITE
+            # whatever was there (other labels included).  When it shrinks
+            # (Erode / Open), removed pixels become background.
+            mask = data == target
+            new_mask = fn(mask, structure=selem)
+            out = data.copy()
+            removed = mask & ~new_mask
+            out[removed] = 0
+            new_pixels = new_mask & ~mask
+            out[new_pixels] = target
+            return out
+
+        if mode == "Per-label (preserve IDs)":
+            out = np.zeros_like(data)
+            for lbl in np.unique(data):
+                if lbl == 0:
+                    continue
+                mask = data == lbl
+                new_mask = fn(mask, structure=selem)
+                # Don't overwrite already-assigned (other-label) pixels.
+                paint = new_mask & (out == 0)
+                out[paint] = lbl
+            return out
+
+        # Binary path: collapse to mask, morph, then fill new pixels with
+        # the current label number; keep existing labels where they were.
+        mask = data > 0
+        new_mask = fn(mask, structure=selem)
+        out = np.where(mask, data, 0)
+        new_pixels = new_mask & ~mask
+        out[new_pixels] = int(self.current_label_num)
+        # Erode/Open may shrink the mask: clear pixels that fell out.
+        removed = mask & ~new_mask
+        out[removed] = 0
+        return out
+
+    def _on_morph_preview(self):
+        """Compute the chosen morphology op on the *displayed* labels and
+        add (or refresh) a preview layer in the 2nd viewer."""
+        if self._second_viewer is None:
+            return
+        mirror = getattr(self, "_second_labels_layer", None)
+        if mirror is None:
+            QMessageBox.warning(
+                self,
+                "No labels",
+                "No labels are shown in the 2nd viewer.",
+            )
+            return
+        op = self._morph_op_combo.currentText()
+        size = self._morph_size_spin.value()
+        shape = self._morph_shape_combo.currentText()
+        mode = self._morph_mode_combo.currentText()
+        target_label = self._morph_target_label_spin.value()
+
+        try:
+            preview = self._apply_morphology_to_array(
+                mirror.data, op, size, shape, mode, target_label
+            )
+        except (ValueError, MemoryError, ImportError) as e:
+            QMessageBox.warning(
+                self, "Morphology failed", f"{type(e).__name__}: {e}"
+            )
+            return
+
+        scale = getattr(self, "_second_labels_scale", None)
+        name = f"Preview: {op} (size={size})"
+        prev = getattr(self, "_second_morph_preview_layer", None)
+        if prev is not None:
+            with contextlib.suppress(KeyError, ValueError, RuntimeError):
+                self._second_viewer.layers.remove(prev)
+            self._second_morph_preview_layer = None
+
+        try:
+            self._second_morph_preview_layer = self._second_viewer.add_labels(
+                preview, name=name, scale=scale
+            )
+        except (RuntimeError, ValueError) as e:
+            print(f"Could not add preview layer: {e}")
+
+    def _on_morph_clear_preview(self):
+        prev = getattr(self, "_second_morph_preview_layer", None)
+        if prev is None or self._second_viewer is None:
+            return
+        with contextlib.suppress(KeyError, ValueError, RuntimeError):
+            self._second_viewer.layers.remove(prev)
+        self._second_morph_preview_layer = None
+
+    def _on_morph_apply(self):
+        """Apply the chosen morphology op to the real annotation_layer
+        data, restricted to the current crop slice (if any)."""
+        if self.annotation_layer is None:
+            QMessageBox.warning(self, "No labels", "No labels loaded.")
+            return
+        op = self._morph_op_combo.currentText()
+        size = self._morph_size_spin.value()
+        shape = self._morph_shape_combo.currentText()
+        mode = self._morph_mode_combo.currentText()
+        target_label = self._morph_target_label_spin.value()
+
+        labels_slice = getattr(self, "_second_labels_slice", None)
+        full = self.annotation_layer.data
+        target_view = full if labels_slice is None else full[labels_slice]
+
+        confirm = QMessageBox.question(
+            self,
+            "Apply morphology",
+            f"Apply '{op}' (size={size}) to the labels"
+            + (" in the current 3D ROI" if labels_slice is not None else "")
+            + "?\n\nThis modifies the real labels layer.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            result = self._apply_morphology_to_array(
+                target_view, op, size, shape, mode, target_label
+            )
+        except (ValueError, MemoryError, ImportError) as e:
+            QMessageBox.warning(
+                self, "Morphology failed", f"{type(e).__name__}: {e}"
+            )
+            return
+
+        # Write back in place so views (and the mirror in the 2nd viewer)
+        # see the change.
+        if labels_slice is None:
+            full[...] = result
+        else:
+            full[labels_slice] = result
+        self.annotation_layer.refresh()
+        # Also clear the preview so the user sees the applied result on the
+        # mirror layer directly.
+        self._on_morph_clear_preview()
+        mirror = getattr(self, "_second_labels_layer", None)
+        if mirror is not None:
+            with contextlib.suppress(RuntimeError, AttributeError):
+                mirror.refresh()
+
     def _on_copy_predictions_to_labels(self):
         """Open the copy-predictions-to-labels dialog on the parent NDAILab.
 
@@ -831,10 +1236,12 @@ class NDEasyLabel(BaseNDApp):
 
         layer = event.source
 
+        selected_index = list(event.source.selected_data)[0]
+
         # Live box-size readout fires for any 3D-box change, regardless of
         # whether this layer is the chosen interactive driver.
         if len(layer.data) > 0:
-            self._update_active_box_size_label(layer.data[-1])
+            self._update_active_box_size_label(layer.data[selected_index])
 
         if not self._is_chosen_interactive_layer(layer):
             return
