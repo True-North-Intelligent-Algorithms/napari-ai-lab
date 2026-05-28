@@ -166,6 +166,16 @@ class NDEasyLabel(BaseNDApp):
         )
         self.layout().addWidget(self.show_labels_in_second_viewer_btn)
 
+        # Launch the interactive local-ML plugin on the active 3D bbox crop.
+        self.local_ml_btn = QPushButton("Local Machine Learning")
+        self.local_ml_btn.setToolTip(
+            "Open a new napari viewer on the active 3D bounding box crop "
+            "with the interactive local machine-learning plugin loaded "
+            "and ready to go."
+        )
+        self.local_ml_btn.clicked.connect(self._on_local_machine_learning)
+        self.layout().addWidget(self.local_ml_btn)
+
         # Button to open the copy-predictions-to-labels dialog (handles both
         # 2D "Label box" and 3D "3D Bounding Boxes" source ROIs).  Only
         # functional when this widget is hosted inside NDAILab (which owns
@@ -912,6 +922,72 @@ class NDEasyLabel(BaseNDApp):
         if mirror is not None:
             with contextlib.suppress(RuntimeError, AttributeError):
                 mirror.refresh()
+
+    def _on_local_machine_learning(self):
+        """Launch the interactive local-ML plugin on the active 3D bbox.
+
+        Crops both the image and the persistent annotation layer to the
+        currently active 3D bounding box, opens a fresh napari viewer with
+        the crop loaded, and wires the plugin's "Commit Prediction" button
+        to write back into ``self.annotation_layer`` at the same slice.
+        """
+        if self.image_layer is None or self.annotation_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image/labels loaded",
+                "Load an image and create labels before launching Local "
+                "Machine Learning.",
+            )
+            return
+
+        image_slice, labels_slice = self._compute_preview_crop_slices()
+        if image_slice is None or labels_slice is None:
+            QMessageBox.warning(
+                self,
+                "No 3D bounding box",
+                "Draw / select a 3D bounding box first.  Use the "
+                "'Add Interactive 3D Boxes Layer' button to create one.",
+            )
+            return
+
+        image_crop = np.asarray(self.image_layer.data[image_slice])
+
+        contrast_limits = None
+        try:
+            contrast_limits = list(self.image_layer.contrast_limits)
+        except (AttributeError, TypeError):
+            contrast_limits = None
+
+        scale = None
+        if self.image_data_model is not None:
+            try:
+                scale = (
+                    self.image_data_model.get_scale(
+                        axes_to_collapse=self.axes_to_collapse
+                    )
+                    or None
+                )
+            except (AttributeError, TypeError, ValueError):
+                scale = None
+
+        # Restrict scale to the spatial dims that survived the crop.
+        if scale is not None:
+            try:
+                scale = tuple(scale)[-image_crop.ndim :]
+            except (TypeError, ValueError):
+                scale = None
+
+        from .interactive_local_machine_learning import (
+            launch_interactive_local_ml,
+        )
+
+        launch_interactive_local_ml(
+            image_crop,
+            scale=scale,
+            contrast_limits=contrast_limits,
+            target_labels_layer=self.annotation_layer,
+            target_slice=labels_slice,
+        )
 
     def _on_copy_predictions_to_labels(self):
         """Open the copy-predictions-to-labels dialog on the parent NDAILab.
