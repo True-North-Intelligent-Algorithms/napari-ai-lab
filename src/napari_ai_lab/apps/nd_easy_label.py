@@ -52,6 +52,20 @@ class NDEasyLabel(BaseNDApp):
             self.dir_btn.clicked.connect(self._on_open_directory)
             self.layout().addWidget(self.dir_btn)
 
+        # "Active Annotation Layer" combo at the top of the widget.  All
+        # downstream actions (segmenters, augmenters, commit/erase,
+        # painting, save, ...) operate against ``self.annotation_layer``
+        # which always points at the currently-selected entry of
+        # :attr:`annotations_layers`.
+        active_annot_row = QHBoxLayout()
+        active_annot_row.addWidget(QLabel("Active Annotation Layer:"))
+        self.active_annotation_combo = QComboBox()
+        self.active_annotation_combo.currentTextChanged.connect(
+            self._on_active_annotation_changed
+        )
+        active_annot_row.addWidget(self.active_annotation_combo)
+        self.layout().addLayout(active_annot_row)
+
         # Add Interactive Segmenter selection
         self.segmenter_label = QLabel("Interactive Segmenter:")
         self.layout().addWidget(self.segmenter_label)
@@ -981,19 +995,40 @@ class NDEasyLabel(BaseNDApp):
             launch_interactive_local_ml,
         )
 
-        # Ensure a "Sparse Labels" layer exists on the main viewer.  It is
-        # initialised from the persistent annotation layer with all non-zero
-        # voxels shifted by +1 (so values 1, 2, ... become 2, 3, ...).  The
-        # +1 reserves label 1 for "background" — the user can paint label 1
-        # into this layer in the new viewer so the ML model learns
+        # Ensure a "Sparse Labels" annotation layer exists.  It is
+        # initialised from the active persistent annotation with all
+        # non-zero voxels shifted by +1 (so values 1, 2, ... become 2, 3,
+        # ...).  The +1 reserves label 1 for "background" — the user can
+        # paint label 1 in the new viewer so the ML model learns
         # background vs. foreground.  Subsequent launches reuse the same
         # layer rather than re-initialising it (preserving prior strokes).
-        sparse_layer = self._get_or_create_sparse_labels_layer()
+        sparse_name = "Sparse Labels"
+        if sparse_name in self.annotations_layers:
+            sparse_layer = self.annotations_layers[sparse_name]
+        else:
+
+            def _init_from_active(annot_data):
+                sparse = np.zeros_like(annot_data)
+                nz = annot_data > 0
+                sparse[nz] = annot_data[nz] + 1
+                return sparse
+
+            sparse_layer = self._create_new_annotations_layer(
+                sparse_name,
+                init_from_active=_init_from_active,
+            )
 
         # Take a *view* (not a copy) of the sparse-labels layer at the same
         # crop slice as the image, so paint strokes in the new viewer write
         # straight back to the layer in the main viewer.
         painting_view = sparse_layer.data[labels_slice]
+
+        # Mirror the main viewer's working layer (interactive segmenter
+        # scratch) into the local-ML viewer so segmenter strokes show up
+        # there too.
+        extra_mirrors = []
+        if self.working_layer is not None:
+            extra_mirrors.append((self.working_layer, labels_slice))
 
         launch_interactive_local_ml(
             image_crop,
@@ -1003,39 +1038,161 @@ class NDEasyLabel(BaseNDApp):
             target_slice=labels_slice,
             painting_data=painting_view,
             painting_name=f"{sparse_layer.name} (crop view)",
+            extra_mirror_layers=extra_mirrors,
             on_commit=lambda _pred: sparse_layer.refresh(),
         )
 
-    def _get_or_create_sparse_labels_layer(self):
-        """Return the "Sparse Labels" layer on the main viewer, creating it.
+    # ------------------------------------------------------------------
+    # Annotation layer collection
+    # ------------------------------------------------------------------
+    def _load_existing_annotation_layers(self, image_shape, annotation_scale):
+        """Populate :attr:`annotations_layers` from disk subdirectories.
 
-        The layer mirrors ``self.annotation_layer.data`` shape/dtype and is
-        initialised with ``data + 1`` wherever the persistent labels are
-        non-zero (zeros stay zero).  This offset-by-one matches the
-        painting-layer convention used by
-        :func:`launch_interactive_local_ml`: label ``1`` represents the
-        background class, ``k`` represents foreground class ``k - 1``.
-
-        Subsequent calls return the existing layer untouched so that any
-        user strokes (e.g. painted background) are preserved across
-        successive Local-ML launches.
+        Mirrors :meth:`NDEasySegment._load_existing_prediction_layers`:
+        each subdirectory under ``annotations/`` becomes a separate napari
+        labels layer named after the subdirectory.  Falls back to creating
+        a single empty ``"Labels (Persistent)"`` layer when no
+        subdirectories exist yet.
         """
-        name = "Sparse Labels"
-        for layer in self.viewer.layers:
-            if layer.name == name:
-                return layer
+        self.annotations_layers = {}
+        names = []
+        with contextlib.suppress(AttributeError, OSError):
+            names = self.image_data_model.list_annotation_subdirectories()
 
-        annot = self.annotation_layer.data
-        sparse = np.zeros_like(annot)
-        nz = annot > 0
-        sparse[nz] = annot[nz] + 1
+        if not names:
+            names = ["Labels (Persistent)"]
+
+        first_layer = None
+        for name in names:
+            try:
+                data = self.image_data_model.load_existing_annotations(
+                    image_shape,
+                    self.current_image_index,
+                    subdirectory=name,
+                    axes_to_collapse=self.axes_to_collapse,
+                )
+            except (OSError, ValueError, RuntimeError) as e:
+                print(f"Failed to load annotations '{name}': {e}")
+                continue
+            layer = self.viewer.add_labels(
+                data, name=name, scale=annotation_scale or None
+            )
+            self.annotations_layers[name] = layer
+            if first_layer is None:
+                first_layer = layer
+
+        self.annotation_layer = first_layer
+        self._refresh_active_annotation_combo()
+
+    def _refresh_active_annotation_combo(self):
+        """Rebuild the active-annotation combo from :attr:`annotations_layers`."""
+        combo = getattr(self, "active_annotation_combo", None)
+        if combo is None:
+            return
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            for name in self.annotations_layers:
+                combo.addItem(name)
+            if self.annotation_layer is not None:
+                idx = combo.findText(self.annotation_layer.name)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+        finally:
+            combo.blockSignals(False)
+
+    def _on_active_annotation_changed(self, name: str):
+        """Switch the active annotation layer based on the combo selection."""
+        if not name or name not in self.annotations_layers:
+            return
+        self.annotation_layer = self.annotations_layers[name]
+        # Broadcast to sibling widgets when hosted inside NDAILab so
+        # interactive segmenters / augmenters target the same active layer.
+        ai_lab = getattr(self, "ai_lab", None)
+        if ai_lab is not None:
+            with contextlib.suppress(AttributeError):
+                ai_lab.annotations_layer = self.annotation_layer
+            for sibling_name in ("augment_widget", "segment_widget"):
+                sibling = getattr(ai_lab, sibling_name, None)
+                if sibling is not None and sibling is not self:
+                    sibling.annotation_layer = self.annotation_layer
+        print(f"Active annotation layer set to: {name}")
+
+    def _create_new_annotations_layer(
+        self,
+        name: str,
+        init_data=None,
+        init_from_active=None,
+    ):
+        """Create (and register) a new annotation layer named ``name``.
+
+        Parameters
+        ----------
+        name:
+            Layer name; doubles as the on-disk subdirectory name when
+            annotations are saved.
+        init_data:
+            Optional ndarray to use as the layer's initial data.  When
+            omitted the layer is initialised by ``init_from_active`` or as
+            zeros shaped like the current active annotation layer.
+        init_from_active:
+            Optional callable ``f(active_data) -> ndarray`` invoked when
+            ``init_data`` is None.  Useful for derived layers (e.g. the
+            "Sparse Labels" layer is built as ``active + 1`` for non-zero
+            voxels).
+
+        Existing layers with the same name are returned unchanged so this
+        helper is safe to call multiple times.
+        """
+        if name in self.annotations_layers:
+            return self.annotations_layers[name]
+
+        if init_data is None:
+            if self.annotation_layer is None:
+                raise RuntimeError(
+                    "Cannot create a new annotation layer without a "
+                    "template — no active annotation layer is loaded."
+                )
+            active = self.annotation_layer.data
+            init_data = (
+                init_from_active(active)
+                if init_from_active is not None
+                else np.zeros_like(active)
+            )
 
         scale = None
-        with contextlib.suppress(AttributeError):
-            scale = self.annotation_layer.scale
+        if self.annotation_layer is not None:
+            with contextlib.suppress(AttributeError):
+                scale = self.annotation_layer.scale
 
-        sparse_layer = self.viewer.add_labels(sparse, name=name, scale=scale)
-        return sparse_layer
+        layer = self.viewer.add_labels(init_data, name=name, scale=scale)
+        self.annotations_layers[name] = layer
+        self._refresh_active_annotation_combo()
+        return layer
+
+    def _find_available_annotations(self, box_layer):
+        """Return ``{name: annotation_layer}`` with non-zero data inside the active box.
+
+        Mirrors :meth:`NDAILab._find_available_predictions` so callers can
+        present the user with a choice of which annotation collection to
+        act on for a given ROI.
+        """
+        available = {}
+        if box_layer is None or not self.annotations_layers:
+            return available
+        for name, layer in self.annotations_layers.items():
+            try:
+                slc = self._compute_crop_slice(box_layer, layer)
+            except (AttributeError, ValueError, TypeError):
+                slc = None
+            if slc is None:
+                continue
+            try:
+                if np.any(layer.data[slc]):
+                    available[name] = layer
+            except (IndexError, TypeError, ValueError):
+                continue
+        return available
 
     def _on_copy_predictions_to_labels(self):
         """Open the copy-predictions-to-labels dialog on the parent NDAILab.
@@ -1943,21 +2100,16 @@ class NDEasyLabel(BaseNDApp):
             # Get image data from the layer
             image_data = image_layer.data
 
-            # Load existing labels or create empty ones (delegated to model)
-            labels_data = self.image_data_model.load_existing_annotations(
-                image_data.shape,
-                self.current_image_index,
-                axes_to_collapse=self.axes_to_collapse,
-            )
-
-            # Add labels layer and store reference
+            # Load existing labels or create empty ones (delegated to model).
+            # Multiple annotation collections are supported: each
+            # subdirectory of ``annotations/`` becomes a separate napari
+            # labels layer named after the subdir.  If no subdirs exist
+            # yet, a default "Labels (Persistent)" layer is created.
             annotation_scale = self.image_data_model.get_scale(
                 axes_to_collapse=self.axes_to_collapse
             )
-            self.annotation_layer = self.viewer.add_labels(
-                labels_data,
-                name="Labels (Persistent)",
-                scale=annotation_scale or None,
+            self._load_existing_annotation_layers(
+                image_data.shape, annotation_scale
             )
 
             # Working / scratch labels layer for interactive segmenter output.

@@ -25,6 +25,7 @@ the plugin can be used as an ROI-preview / commit workflow on top of
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 from collections.abc import Callable
@@ -228,6 +229,7 @@ def launch_interactive_local_ml(
     target_slice: tuple | None = None,
     painting_data: np.ndarray | None = None,
     painting_name: str = "Painting",
+    extra_mirror_layers: list[tuple] | None = None,
     title: str = "Interactive Local Machine Learning",
     on_commit: Callable[[np.ndarray], None] | None = None,
 ):
@@ -242,7 +244,9 @@ def launch_interactive_local_ml(
         Forwarded to ``viewer.add_image``.
     target_labels_layer:
         Labels layer (in the *original* viewer) the prediction should be
-        written into when the user presses "Commit Prediction".
+        written into when the user presses "Commit Prediction".  A sliced
+        *view* of this layer at ``target_slice`` is added to the new
+        viewer and refreshed whenever the source layer changes.
     target_slice:
         Indexing tuple identifying *where in* ``target_labels_layer.data``
         the crop was taken from.  Must match the shape of ``image_crop``.
@@ -253,6 +257,13 @@ def launch_interactive_local_ml(
         zero array of ``image_crop.shape`` is created.
     painting_name:
         Name for the painting layer in the new viewer.
+    extra_mirror_layers:
+        Optional list of ``(source_layer, slice)`` tuples — each
+        ``source_layer.data[slice]`` is added to the new viewer as a
+        sliced view layer and refreshed whenever the source layer
+        changes.  Used e.g. to mirror the main viewer's "Labels (Working)"
+        scratch layer so segmenter strokes in the original viewer
+        propagate live into the crop view.
     on_commit:
         Optional extra callback invoked with the prediction array after a
         successful commit (e.g. to refresh a mirror layer in another viewer).
@@ -312,6 +323,58 @@ def launch_interactive_local_ml(
     prediction_layer = viewer.add_labels(
         prediction_data, name="Prediction", scale=data_layer.scale
     )
+
+    # Add any extra mirror layers (e.g. the main viewer's working layer).
+    # Stored as (source_layer, mirror_layer) pairs so we can refresh
+    # mirrors when the source emits paint/set_data/refresh events.
+    mirror_pairs: list[tuple] = []
+    if persistent_layer is not None:
+        mirror_pairs.append((target_labels_layer, persistent_layer))
+    if extra_mirror_layers:
+        for src_layer, src_slice in extra_mirror_layers:
+            if src_layer is None or src_slice is None:
+                continue
+            try:
+                mirror_view = src_layer.data[src_slice]
+            except (TypeError, ValueError, IndexError) as e:
+                LOGGER.warning(
+                    "Could not slice %s for mirror view: %s",
+                    getattr(src_layer, "name", "?"),
+                    e,
+                )
+                continue
+            if mirror_view.shape != image_crop.shape:
+                LOGGER.warning(
+                    "Mirror layer %s slice shape %s != image shape %s; "
+                    "skipping.",
+                    getattr(src_layer, "name", "?"),
+                    mirror_view.shape,
+                    image_crop.shape,
+                )
+                continue
+            mirror = viewer.add_labels(
+                mirror_view,
+                name=f"{src_layer.name} (crop view)",
+                scale=data_layer.scale,
+            )
+            mirror_pairs.append((src_layer, mirror))
+
+    # Forward refresh events from each source layer to its mirror so any
+    # changes made in the original viewer (paint, fill, segmenter writes,
+    # bulk set_data, .refresh() after a direct buffer write) show up in
+    # the local-ML viewer immediately.
+    def _make_forwarder(mirror_layer):
+        def _forward(_event=None):
+            with contextlib.suppress(RuntimeError, AttributeError):
+                mirror_layer.refresh()
+
+        return _forward
+
+    for src_layer, mirror in mirror_pairs:
+        cb = _make_forwarder(mirror)
+        for evt_name in ("paint", "set_data", "refresh"):
+            with contextlib.suppress(AttributeError, TypeError):
+                getattr(src_layer.events, evt_name).connect(cb)
 
     widget = NapariMLWidget()
     viewer.window.add_dock_widget(widget, name="Local ML")
