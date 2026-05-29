@@ -981,13 +981,61 @@ class NDEasyLabel(BaseNDApp):
             launch_interactive_local_ml,
         )
 
+        # Ensure a "Sparse Labels" layer exists on the main viewer.  It is
+        # initialised from the persistent annotation layer with all non-zero
+        # voxels shifted by +1 (so values 1, 2, ... become 2, 3, ...).  The
+        # +1 reserves label 1 for "background" — the user can paint label 1
+        # into this layer in the new viewer so the ML model learns
+        # background vs. foreground.  Subsequent launches reuse the same
+        # layer rather than re-initialising it (preserving prior strokes).
+        sparse_layer = self._get_or_create_sparse_labels_layer()
+
+        # Take a *view* (not a copy) of the sparse-labels layer at the same
+        # crop slice as the image, so paint strokes in the new viewer write
+        # straight back to the layer in the main viewer.
+        painting_view = sparse_layer.data[labels_slice]
+
         launch_interactive_local_ml(
             image_crop,
             scale=scale,
             contrast_limits=contrast_limits,
             target_labels_layer=self.annotation_layer,
             target_slice=labels_slice,
+            painting_data=painting_view,
+            painting_name=f"{sparse_layer.name} (crop view)",
+            on_commit=lambda _pred: sparse_layer.refresh(),
         )
+
+    def _get_or_create_sparse_labels_layer(self):
+        """Return the "Sparse Labels" layer on the main viewer, creating it.
+
+        The layer mirrors ``self.annotation_layer.data`` shape/dtype and is
+        initialised with ``data + 1`` wherever the persistent labels are
+        non-zero (zeros stay zero).  This offset-by-one matches the
+        painting-layer convention used by
+        :func:`launch_interactive_local_ml`: label ``1`` represents the
+        background class, ``k`` represents foreground class ``k - 1``.
+
+        Subsequent calls return the existing layer untouched so that any
+        user strokes (e.g. painted background) are preserved across
+        successive Local-ML launches.
+        """
+        name = "Sparse Labels"
+        for layer in self.viewer.layers:
+            if layer.name == name:
+                return layer
+
+        annot = self.annotation_layer.data
+        sparse = np.zeros_like(annot)
+        nz = annot > 0
+        sparse[nz] = annot[nz] + 1
+
+        scale = None
+        with contextlib.suppress(AttributeError):
+            scale = self.annotation_layer.scale
+
+        sparse_layer = self.viewer.add_labels(sparse, name=name, scale=scale)
+        return sparse_layer
 
     def _on_copy_predictions_to_labels(self):
         """Open the copy-predictions-to-labels dialog on the parent NDAILab.

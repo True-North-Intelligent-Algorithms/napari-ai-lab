@@ -226,6 +226,8 @@ def launch_interactive_local_ml(
     contrast_limits=None,
     target_labels_layer: napari.layers.Labels | None = None,
     target_slice: tuple | None = None,
+    painting_data: np.ndarray | None = None,
+    painting_name: str = "Painting",
     title: str = "Interactive Local Machine Learning",
     on_commit: Callable[[np.ndarray], None] | None = None,
 ):
@@ -244,6 +246,13 @@ def launch_interactive_local_ml(
     target_slice:
         Indexing tuple identifying *where in* ``target_labels_layer.data``
         the crop was taken from.  Must match the shape of ``image_crop``.
+    painting_data:
+        Optional pre-built array to use as the painting layer's data
+        (typically a numpy *view* into a "sparse labels" layer on the
+        original viewer, so edits propagate back).  If ``None``, a fresh
+        zero array of ``image_crop.shape`` is created.
+    painting_name:
+        Name for the painting layer in the new viewer.
     on_commit:
         Optional extra callback invoked with the prediction array after a
         successful commit (e.g. to refresh a mirror layer in another viewer).
@@ -281,9 +290,21 @@ def launch_interactive_local_ml(
             )
 
     # Painting layer: offset by 1 so 1 is drawable background.
-    painting_data = np.zeros(image_crop.shape, dtype=np.int32)
+    # If the caller passed in a pre-built array (e.g. a numpy view into a
+    # "sparse labels" layer on the original viewer), use that directly so
+    # paint strokes propagate back; otherwise start from zeros.
+    if painting_data is None:
+        painting_data = np.zeros(image_crop.shape, dtype=np.int32)
+    elif painting_data.shape != image_crop.shape:
+        LOGGER.warning(
+            "painting_data shape %s != image_crop shape %s; falling back "
+            "to a fresh zero array.",
+            painting_data.shape,
+            image_crop.shape,
+        )
+        painting_data = np.zeros(image_crop.shape, dtype=np.int32)
     painting_layer = viewer.add_labels(
-        painting_data, name="Painting", scale=data_layer.scale
+        painting_data, name=painting_name, scale=data_layer.scale
     )
 
     # Prediction layer: 0 = background (transparent in napari).
