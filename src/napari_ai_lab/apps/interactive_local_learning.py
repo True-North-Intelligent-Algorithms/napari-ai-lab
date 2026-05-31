@@ -27,9 +27,12 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import shutil
 import sys
+import tempfile
 from collections.abc import Callable
 from functools import partial
+from pathlib import Path
 
 import napari
 import numpy as np
@@ -43,6 +46,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -51,7 +55,23 @@ from skimage.feature import multiscale_basic_features
 from sklearn.ensemble import RandomForestClassifier
 from superqt import ensure_main_thread
 
-LOGGER = logging.getLogger("interactive_local_machine_learning")
+# MONAI / torch are optional — only required for the "MONAI UNet
+# (local overfit)" mode of the widget.
+try:
+    import torch
+    import torch.nn as nn
+    from monai.inferers import sliding_window_inference
+    from monai.networks.nets import UNet
+
+    _IS_MONAI_AVAILABLE = True
+except ImportError:  # pragma: no cover - depends on environment
+    _IS_MONAI_AVAILABLE = False
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
+    sliding_window_inference = None  # type: ignore[assignment]
+    UNet = None  # type: ignore[assignment]
+
+LOGGER = logging.getLogger("interactive_local_learning")
 if not LOGGER.handlers:
     LOGGER.setLevel(logging.INFO)
     _h = logging.StreamHandler(sys.stdout)
@@ -111,6 +131,426 @@ def predict(model, features):
 
 
 # ---------------------------------------------------------------------------
+# MONAI local-overfit helpers
+# ---------------------------------------------------------------------------
+# Number of strided down-sampling stages in the UNet — fixed at 4, so any
+# patch dim must be a multiple of 2**4 = 16.
+_MONAI_DEPTH = 4
+_MONAI_DIVISOR = 2**_MONAI_DEPTH
+
+
+def _normalize_percentile(
+    image: np.ndarray, lo: float = 1.0, hi: float = 99.8
+) -> np.ndarray:
+    img = image.astype(np.float32)
+    a, b = np.percentile(img, [lo, hi])
+    if b - a < 1e-6:
+        return np.zeros_like(img)
+    return np.clip((img - a) / (b - a), 0.0, 1.0)
+
+
+def _pick_patch_size(
+    crop_shape: tuple[int, ...],
+    source_shape: tuple[int, ...] | None,
+    *,
+    lateral: int,
+    depth: int,
+) -> tuple[int, ...]:
+    """Pick a per-axis patch size.
+
+    Convention: for 3D data axis 0 is the depth axis (Z), the rest are
+    lateral (Y, X).  For 2D data both axes are lateral.
+
+    Each axis is rounded *down* to the nearest multiple of
+    :data:`_MONAI_DIVISOR` (so the UNet can downsample 4 times) and
+    capped at the corresponding source dim (or crop dim if no source is
+    available) so a patch always fits inside real image data with no
+    artificial padding.
+    """
+
+    def _round(n: int) -> int:
+        return max(_MONAI_DIVISOR, (n // _MONAI_DIVISOR) * _MONAI_DIVISOR)
+
+    if len(crop_shape) == 2:
+        hints = (lateral, lateral)
+    elif len(crop_shape) == 3:
+        hints = (depth, lateral, lateral)
+    else:
+        raise ValueError(f"Unsupported crop ndim={len(crop_shape)}")
+
+    out = []
+    for ax, hint in enumerate(hints):
+        cap = source_shape[ax] if source_shape is not None else crop_shape[ax]
+        # Patch can be larger than the crop (will read from surrounding
+        # source data) but must fit inside the available source.
+        size = min(_round(hint), _round(cap))
+        out.append(max(_MONAI_DIVISOR, size))
+    return tuple(out)
+
+
+def _compute_starts(
+    crop_dim: int, patch: int, source_dim: int, crop_offset: int
+) -> list[int]:
+    """Per-axis tile start positions in *source* coordinates.
+
+    Patches are sized exactly ``patch`` (no padding).  When the crop is
+    larger than one patch, the n tile starts are evenly distributed
+    across ``[crop_offset, crop_offset + crop_dim - patch]`` so adjacent
+    tiles overlap a bit instead of running off the edge.  When the crop
+    is smaller than one patch, a single patch is centred on the crop and
+    clipped into ``[0, source_dim - patch]`` (so the patch reads
+    surrounding source pixels rather than zeros).
+    """
+    if patch >= source_dim:
+        # Patch larger than source axis: clamp.  Caller should already
+        # have rounded the patch down via _pick_patch_size, so this is a
+        # rare safety net.
+        return [0]
+    if crop_dim <= patch:
+        center = crop_offset + crop_dim // 2
+        start = max(0, min(center - patch // 2, source_dim - patch))
+        return [start]
+    n = (crop_dim + patch - 1) // patch  # ceil(crop / patch)
+    if n == 1:
+        return [max(0, min(crop_offset, source_dim - patch))]
+    span = crop_dim - patch
+    starts = [crop_offset + int(round(i * span / (n - 1))) for i in range(n)]
+    starts = [max(0, min(s, source_dim - patch)) for s in starts]
+    # De-duplicate while preserving order (could happen on tiny spans).
+    seen: list[int] = []
+    for s in starts:
+        if s not in seen:
+            seen.append(s)
+    return seen
+
+
+def _read_source_patch(
+    source: np.ndarray | None,
+    fallback: np.ndarray,
+    fallback_offset: tuple[int, ...],
+    src_slice: tuple[slice, ...],
+) -> np.ndarray:
+    """Read an image patch from ``source`` if available; otherwise fall
+    back to ``fallback`` (the crop) using ``edge`` replication for any
+    out-of-crop region — never zero-fill, so patch normalization stays
+    representative."""
+    if source is not None:
+        return np.asarray(source[src_slice])
+    # Translate src_slice (source coords) into fallback (crop) coords.
+    crop_idx = []
+    pads = []
+    for sl, off, fdim in zip(
+        src_slice, fallback_offset, fallback.shape, strict=False
+    ):
+        lo = sl.start - off
+        hi = sl.stop - off
+        pad_lo = max(0, -lo)
+        pad_hi = max(0, hi - fdim)
+        crop_idx.append(slice(max(0, lo), min(fdim, hi)))
+        pads.append((pad_lo, pad_hi))
+    inner = fallback[tuple(crop_idx)]
+    if any(p != (0, 0) for p in pads):
+        return np.pad(inner, pads, mode="edge")
+    return inner
+
+
+def _extract_patch_set(
+    crop_image: np.ndarray,
+    crop_labels: np.ndarray,
+    *,
+    source_image: np.ndarray | None,
+    crop_offset: tuple[int, ...],
+    source_shape: tuple[int, ...],
+    patch_size: tuple[int, ...],
+    temp_dir: Path,
+    normalize: bool = True,
+) -> tuple[list[tuple[Path, Path]], list[tuple[int, ...]], tuple[int, ...]]:
+    """Build a patch set covering the crop, reading image data from the
+    source image (so patches never contain artificial zero borders).
+
+    Labels are placed only where the patch overlaps the crop region;
+    voxels outside the crop are set to ``-1`` (ignored by the loss).
+
+    Returns ``(saved_paths, patch_starts, union_shape)`` where
+    ``union_shape`` is the bounding-box size of all patch starts taken
+    together (used as the inference-image size).
+    """
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    starts_per_axis = [
+        _compute_starts(
+            crop_image.shape[ax],
+            patch_size[ax],
+            source_shape[ax],
+            crop_offset[ax],
+        )
+        for ax in range(crop_image.ndim)
+    ]
+
+    # Cartesian product of per-axis starts.
+    def _product(axes_idx: int, acc: tuple[int, ...]):
+        if axes_idx == crop_image.ndim:
+            yield acc
+            return
+        for s in starts_per_axis[axes_idx]:
+            yield from _product(axes_idx + 1, acc + (s,))
+
+    saved: list[tuple[Path, Path]] = []
+    starts_list: list[tuple[int, ...]] = []
+
+    for starts in _product(0, ()):
+        src_sl = tuple(
+            slice(starts[ax], starts[ax] + patch_size[ax])
+            for ax in range(crop_image.ndim)
+        )
+        img_patch = _read_source_patch(
+            source_image, crop_image, crop_offset, src_sl
+        ).astype(np.float32)
+        if normalize:
+            img_patch = _normalize_percentile(img_patch)
+
+        # Build the label patch: -1 everywhere except where the patch
+        # overlaps the crop region (where we copy from crop_labels).
+        lab_patch = np.full(patch_size, -1, dtype=np.int64)
+        patch_local: list[slice] = []
+        crop_local: list[slice] = []
+        skip = False
+        for ax in range(crop_image.ndim):
+            ps = starts[ax]
+            pe = ps + patch_size[ax]
+            cs = crop_offset[ax]
+            ce = cs + crop_image.shape[ax]
+            ov_lo = max(ps, cs)
+            ov_hi = min(pe, ce)
+            if ov_hi <= ov_lo:
+                skip = True
+                break
+            patch_local.append(slice(ov_lo - ps, ov_hi - ps))
+            crop_local.append(slice(ov_lo - cs, ov_hi - cs))
+        if not skip:
+            lab_patch[tuple(patch_local)] = crop_labels[tuple(crop_local)]
+
+        n = len(saved)
+        img_p = temp_dir / f"img_{n:04d}.npy"
+        lab_p = temp_dir / f"lab_{n:04d}.npy"
+        np.save(img_p, img_patch)
+        np.save(lab_p, lab_patch)
+        saved.append((img_p, lab_p))
+        starts_list.append(starts)
+
+    # Union bounding box of all patches in source coords.
+    if not starts_list:
+        union_shape = patch_size
+    else:
+        mins = [
+            min(starts[ax] for starts in starts_list)
+            for ax in range(crop_image.ndim)
+        ]
+        maxs = [
+            max(starts[ax] + patch_size[ax] for starts in starts_list)
+            for ax in range(crop_image.ndim)
+        ]
+        union_shape = tuple(
+            maxs[ax] - mins[ax] for ax in range(crop_image.ndim)
+        )
+
+    return saved, starts_list, union_shape
+
+
+def _train_monai_local(
+    image_crop: np.ndarray,
+    painting: np.ndarray,
+    *,
+    epochs: int,
+    patch_lateral: int,
+    patch_depth: int,
+    temp_dir: Path,
+    source_image: np.ndarray | None = None,
+    crop_offset: tuple[int, ...] | None = None,
+    progress_cb: Callable[[str], None] | None = None,
+) -> np.ndarray:
+    """Quickly overfit a tiny MONAI UNet to ``painting`` on ``image_crop``
+    and return a per-voxel argmax prediction the same shape as
+    ``image_crop`` (after squeezing singleton dims).
+
+    Patches are read from ``source_image`` (the un-cropped image the
+    crop was taken from) when supplied, so they never contain artificial
+    zero borders — which matters for normalization.
+
+    ``painting`` follows the local-ML convention:
+        0 = untouched (ignored by the loss)
+        1 = background class (-> 0 in model space)
+        k = class k-1
+    """
+    if not _IS_MONAI_AVAILABLE:
+        raise RuntimeError(
+            "MONAI / torch not available — install monai + torch to use "
+            "the local-overfit mode."
+        )
+
+    def _log(msg: str):
+        LOGGER.info(msg)
+        if progress_cb is not None:
+            with contextlib.suppress(Exception):
+                progress_cb(msg)
+
+    img = np.squeeze(np.asarray(image_crop))
+    paint = np.squeeze(np.asarray(painting))
+    if img.shape != paint.shape:
+        raise ValueError(
+            f"image shape {img.shape} != painting shape {paint.shape}"
+        )
+
+    spatial_dims = img.ndim
+    if spatial_dims not in (2, 3):
+        raise ValueError(
+            "Local MONAI overfit needs 2D or 3D data (after squeeze); "
+            f"got {spatial_dims}D shape={img.shape}"
+        )
+
+    # Map painting -> model labels: untouched=-1, bg=0, class k -> k-1
+    labels = paint.astype(np.int64) - 1  # 0->-1, 1->0, 2->1, ...
+    num_classes = int(max(labels.max(), 0)) + 1
+    if num_classes < 2:
+        raise ValueError(
+            "Need at least two distinct painted classes (e.g. background "
+            "+ one foreground). Paint with the background brush first."
+        )
+
+    # Squeeze the source image to match the spatial dims of ``img``.
+    src = None
+    if source_image is not None:
+        src = np.squeeze(np.asarray(source_image))
+        if src.ndim != spatial_dims:
+            _log(
+                f"MONAI: source ndim {src.ndim} != spatial_dims "
+                f"{spatial_dims}; ignoring source image."
+            )
+            src = None
+
+    source_shape = src.shape if src is not None else img.shape
+
+    # Crop offset (in source coords) for every spatial axis.
+    if crop_offset is None or len(crop_offset) != spatial_dims:
+        offset = (0,) * spatial_dims
+    else:
+        offset = tuple(int(o) for o in crop_offset)
+
+    patch_size = _pick_patch_size(
+        img.shape,
+        source_shape if src is not None else None,
+        lateral=patch_lateral,
+        depth=patch_depth,
+    )
+    _log(
+        f"MONAI: spatial_dims={spatial_dims} crop={img.shape} "
+        f"crop_offset={offset} source={source_shape if src is not None else 'N/A'} "
+        f"patch_size={patch_size} num_classes={num_classes}"
+    )
+
+    patches, starts_list, _union = _extract_patch_set(
+        img,
+        labels,
+        source_image=src,
+        crop_offset=offset,
+        source_shape=source_shape,
+        patch_size=patch_size,
+        temp_dir=temp_dir,
+        normalize=True,
+    )
+    _log(f"MONAI: {len(patches)} patches written to {temp_dir}")
+
+    # Build a tiny UNet (depth 4).
+    channels = (16, 32, 64, 128, 256)
+    strides = (2, 2, 2, 2)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = UNet(
+        spatial_dims=spatial_dims,
+        in_channels=1,
+        out_channels=num_classes,
+        channels=channels,
+        strides=strides,
+        num_res_units=2,
+    ).to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
+
+    # Pre-load patches into tensors (the set is small by design).
+    img_tensors = []
+    lab_tensors = []
+    for img_p, lab_p in patches:
+        ip = np.load(img_p)[None, None, ...]  # (1, 1, *spatial)
+        lp = np.load(lab_p)[None, ...]  # (1, *spatial)
+        img_tensors.append(torch.from_numpy(ip).float().to(device))
+        lab_tensors.append(torch.from_numpy(lp).long().to(device))
+
+    model.train()
+    rng = np.random.default_rng(0)
+    for epoch in range(epochs):
+        order = rng.permutation(len(patches))
+        epoch_loss = 0.0
+        n_steps = 0
+        for i in order:
+            lab_t = lab_tensors[i]
+            # Skip patches with no labelled voxels at all.
+            if (lab_t >= 0).sum().item() == 0:
+                continue
+            optimizer.zero_grad()
+            logits = model(img_tensors[i])
+            loss = loss_fn(logits, lab_t)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += float(loss.item())
+            n_steps += 1
+        if (epoch + 1) % max(1, epochs // 10) == 0 and n_steps > 0:
+            _log(
+                f"MONAI: epoch {epoch + 1}/{epochs}  "
+                f"loss={epoch_loss / n_steps:.4f}"
+            )
+
+    # ---- Inference ----
+    # Build an inference image covering the union of all patch starts
+    # (same source-only reads, edge-replicate fallback if no source).
+    if starts_list:
+        inf_lo = tuple(
+            min(s[ax] for s in starts_list) for ax in range(spatial_dims)
+        )
+        inf_hi = tuple(
+            max(s[ax] + patch_size[ax] for s in starts_list)
+            for ax in range(spatial_dims)
+        )
+    else:
+        inf_lo = offset
+        inf_hi = tuple(
+            offset[ax] + img.shape[ax] for ax in range(spatial_dims)
+        )
+
+    inf_sl = tuple(slice(inf_lo[ax], inf_hi[ax]) for ax in range(spatial_dims))
+    inf_image = _read_source_patch(src, img, offset, inf_sl).astype(np.float32)
+    inf_image = _normalize_percentile(inf_image)
+
+    model.eval()
+    with torch.no_grad():
+        x = torch.from_numpy(inf_image[None, None, ...]).float().to(device)
+        logits = sliding_window_inference(
+            x, roi_size=patch_size, sw_batch_size=1, predictor=model
+        )
+        pred_full = logits.argmax(dim=1).cpu().numpy()[0]
+
+    # Extract the crop region from the inference output.
+    crop_in_inf = tuple(
+        slice(offset[ax] - inf_lo[ax], offset[ax] - inf_lo[ax] + img.shape[ax])
+        for ax in range(spatial_dims)
+    )
+    pred = pred_full[crop_in_inf]
+
+    # Restore singleton dims so the caller can write straight into the
+    # prediction layer (which still has the original ``image_crop`` shape).
+    return pred.reshape(np.asarray(image_crop).shape)
+
+
+# ---------------------------------------------------------------------------
 # Widget
 # ---------------------------------------------------------------------------
 class NapariMLWidget(QWidget):
@@ -123,13 +563,31 @@ class NapariMLWidget(QWidget):
     def _initUI(self):
         layout = QVBoxLayout()
 
-        # Model
+        # Mode selector — switches between feature-based RF and a local
+        # MONAI UNet overfit. The two control groups below are shown /
+        # hidden based on the selection.
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode"))
+        self.mode_dropdown = QComboBox()
+        self.mode_dropdown.addItems(
+            [
+                "Random Forest (features)",
+                "MONAI UNet (local overfit)",
+            ]
+        )
+        mode_row.addWidget(self.mode_dropdown)
+        layout.addLayout(mode_row)
+
+        # ---- Random Forest group ----
+        self.rf_group = QGroupBox("Random Forest")
+        rf_layout = QVBoxLayout()
+
         model_row = QHBoxLayout()
         model_row.addWidget(QLabel("Select Model"))
         self.model_dropdown = QComboBox()
         self.model_dropdown.addItems(["Random Forest"])
         model_row.addWidget(self.model_dropdown)
-        layout.addLayout(model_row)
+        rf_layout.addLayout(model_row)
 
         # Sigma range
         self.sigma_start_spinbox = QDoubleSpinBox()
@@ -143,7 +601,7 @@ class NapariMLWidget(QWidget):
         sigma_row.addWidget(self.sigma_start_spinbox)
         sigma_row.addWidget(QLabel("To"))
         sigma_row.addWidget(self.sigma_end_spinbox)
-        layout.addLayout(sigma_row)
+        rf_layout.addLayout(sigma_row)
 
         # Feature toggles
         self.intensity_checkbox = QCheckBox("Intensity")
@@ -157,7 +615,7 @@ class NapariMLWidget(QWidget):
         feats_layout.addWidget(self.edges_checkbox)
         feats_layout.addWidget(self.texture_checkbox)
         feats_group.setLayout(feats_layout)
-        layout.addWidget(feats_group)
+        rf_layout.addWidget(feats_group)
 
         # Data choice
         data_row = QHBoxLayout()
@@ -168,17 +626,17 @@ class NapariMLWidget(QWidget):
         )
         self.data_dropdown.setCurrentText("Whole Image")
         data_row.addWidget(self.data_dropdown)
-        layout.addLayout(data_row)
+        rf_layout.addLayout(data_row)
 
         # Live toggles (OFF by default — features are cached once and
         # prediction is triggered manually via the Predict button).
         self.live_fit_checkbox = QCheckBox("Live Model Fitting")
         self.live_fit_checkbox.setChecked(False)
-        layout.addWidget(self.live_fit_checkbox)
+        rf_layout.addWidget(self.live_fit_checkbox)
 
         self.live_pred_checkbox = QCheckBox("Live Prediction")
         self.live_pred_checkbox.setChecked(False)
-        layout.addWidget(self.live_pred_checkbox)
+        rf_layout.addWidget(self.live_pred_checkbox)
 
         # Predict button: fit + predict on demand using cached features.
         self.predict_btn = QPushButton("Predict")
@@ -186,7 +644,7 @@ class NapariMLWidget(QWidget):
             "Fit the model on the currently painted voxels and predict "
             "the whole crop using pre-computed features."
         )
-        layout.addWidget(self.predict_btn)
+        rf_layout.addWidget(self.predict_btn)
 
         # Recompute features (e.g. after changing sigma / feature toggles).
         self.recompute_features_btn = QPushButton("Recompute Features")
@@ -194,18 +652,83 @@ class NapariMLWidget(QWidget):
             "Re-extract image features for the whole crop using the "
             "current sigma range and feature toggles."
         )
-        layout.addWidget(self.recompute_features_btn)
+        rf_layout.addWidget(self.recompute_features_btn)
 
-        # Commit
+        self.rf_group.setLayout(rf_layout)
+        layout.addWidget(self.rf_group)
+
+        # ---- MONAI group ----
+        self.monai_group = QGroupBox("MONAI UNet (local overfit)")
+        monai_layout = QVBoxLayout()
+
+        patch_row = QHBoxLayout()
+        patch_row.addWidget(QLabel("Patch lateral (Y/X)"))
+        self.monai_patch_lat_spinbox = QSpinBox()
+        self.monai_patch_lat_spinbox.setRange(_MONAI_DIVISOR, 4096)
+        self.monai_patch_lat_spinbox.setSingleStep(_MONAI_DIVISOR)
+        self.monai_patch_lat_spinbox.setValue(256)
+        patch_row.addWidget(self.monai_patch_lat_spinbox)
+        patch_row.addWidget(QLabel("Depth (Z)"))
+        self.monai_patch_z_spinbox = QSpinBox()
+        self.monai_patch_z_spinbox.setRange(_MONAI_DIVISOR, 4096)
+        self.monai_patch_z_spinbox.setSingleStep(_MONAI_DIVISOR)
+        self.monai_patch_z_spinbox.setValue(64)
+        patch_row.addWidget(self.monai_patch_z_spinbox)
+        monai_layout.addLayout(patch_row)
+
+        epoch_row = QHBoxLayout()
+        epoch_row.addWidget(QLabel("Epochs"))
+        self.monai_epochs_spinbox = QSpinBox()
+        self.monai_epochs_spinbox.setRange(1, 10000)
+        self.monai_epochs_spinbox.setValue(100)
+        epoch_row.addWidget(self.monai_epochs_spinbox)
+        monai_layout.addLayout(epoch_row)
+
+        self.monai_apply_btn = QPushButton("Train + Apply")
+        self.monai_apply_btn.setToolTip(
+            "Build a tiny temporary patch set covering the ROI, train a "
+            "small MONAI UNet on the painted voxels (sparse loss), and "
+            "predict the whole crop."
+        )
+        monai_layout.addWidget(self.monai_apply_btn)
+
+        if not _IS_MONAI_AVAILABLE:
+            warn = QLabel(
+                "MONAI / torch not available — install them to enable "
+                "this mode."
+            )
+            warn.setStyleSheet("color: #c00;")
+            monai_layout.addWidget(warn)
+            self.monai_apply_btn.setEnabled(False)
+
+        self.monai_group.setLayout(monai_layout)
+        layout.addWidget(self.monai_group)
+
+        # ---- Shared commit ----
+        commit_row = QHBoxLayout()
+        commit_row.addWidget(QLabel("Commit to"))
+        self.commit_target_dropdown = QComboBox()
+        commit_row.addWidget(self.commit_target_dropdown)
+        layout.addLayout(commit_row)
+
         self.commit_prediction_btn = QPushButton("Commit Prediction")
         self.commit_prediction_btn.setToolTip(
-            "Write the current prediction back into the source labels "
-            "layer at the location the crop was taken from."
+            "Replace the contents of the selected labels layer at the "
+            "crop location with the current prediction."
         )
         layout.addWidget(self.commit_prediction_btn)
 
         layout.addStretch(1)
         self.setLayout(layout)
+
+        # Hook up mode switch + initial visibility.
+        self.mode_dropdown.currentTextChanged.connect(self._on_mode_changed)
+        self._on_mode_changed(self.mode_dropdown.currentText())
+
+    def _on_mode_changed(self, mode: str):
+        is_rf = mode.startswith("Random Forest")
+        self.rf_group.setVisible(is_rf)
+        self.monai_group.setVisible(not is_rf)
 
     def feature_params(self):
         return {
@@ -227,6 +750,9 @@ def launch_interactive_local_ml(
     contrast_limits=None,
     target_labels_layer: napari.layers.Labels | None = None,
     target_slice: tuple | None = None,
+    commit_targets: dict | None = None,
+    source_image: np.ndarray | None = None,
+    source_slice: tuple | None = None,
     painting_data: np.ndarray | None = None,
     painting_name: str = "Painting",
     extra_mirror_layers: list[tuple] | None = None,
@@ -250,6 +776,18 @@ def launch_interactive_local_ml(
     target_slice:
         Indexing tuple identifying *where in* ``target_labels_layer.data``
         the crop was taken from.  Must match the shape of ``image_crop``.
+    commit_targets:
+        Optional ``dict`` of ``name -> (labels_layer, slice)`` describing
+        every annotation layer the user can commit the prediction into.
+        Populates the "Commit to" dropdown in the widget; the entry whose
+        layer is ``target_labels_layer`` is selected by default.  If
+        omitted, only ``target_labels_layer`` is offered.
+    source_image, source_slice:
+        Optional un-cropped image data the crop was taken from and the
+        indexing tuple identifying the crop location in source coords.
+        Used by the MONAI local-overfit mode so border patches read real
+        surrounding image data instead of zero-filled padding (which
+        would distort percentile normalization).
     painting_data:
         Optional pre-built array to use as the painting layer's data
         (typically a numpy *view* into a "sparse labels" layer on the
@@ -269,6 +807,31 @@ def launch_interactive_local_ml(
         successful commit (e.g. to refresh a mirror layer in another viewer).
     """
     image_crop = np.asarray(image_crop)
+
+    # Compute the crop offset (in source coords) for the MONAI patch
+    # extractor.  Only axes that survive the crop (i.e. indexed by a
+    # ``slice``) are kept; integer indices drop their axis from the crop
+    # and so should be skipped in the offset tuple.
+    source_offset: tuple[int, ...] | None = None
+    reduced_source: np.ndarray | None = None
+    if source_slice is not None:
+        offsets = []
+        for s in source_slice:
+            if isinstance(s, slice):
+                offsets.append(int(s.start) if s.start is not None else 0)
+            # ints / Ellipsis / None: axis is dropped from the crop
+        source_offset = tuple(offsets)
+        # Build a source view aligned with the crop's surviving spatial
+        # axes: replace each slice with a full ``slice(None)`` (so we
+        # span the entire source on cropped axes) but keep int indices
+        # so the same axes get dropped.
+        if source_image is not None:
+            reduced_idx = tuple(
+                slice(None) if isinstance(s, slice) else s
+                for s in source_slice
+            )
+            with contextlib.suppress(TypeError, ValueError, IndexError):
+                reduced_source = np.asarray(source_image)[reduced_idx]
 
     viewer = napari.Viewer(title=title)
 
@@ -379,6 +942,37 @@ def launch_interactive_local_ml(
     widget = NapariMLWidget()
     viewer.window.add_dock_widget(widget, name="Local ML")
 
+    # ------- commit-target dropdown -------
+    # Build the {name: (layer, slice)} map shown in the "Commit to"
+    # combo.  Falls back to the (target_labels_layer, target_slice)
+    # passed in directly if no explicit map was provided.
+    commit_map: dict[str, tuple] = {}
+    if commit_targets:
+        for name, ls in commit_targets.items():
+            if ls is None:
+                continue
+            layer, sl = ls
+            if layer is None or sl is None:
+                continue
+            commit_map[name] = (layer, sl)
+    if (
+        not commit_map
+        and target_labels_layer is not None
+        and target_slice is not None
+    ):
+        commit_map[target_labels_layer.name] = (
+            target_labels_layer,
+            target_slice,
+        )
+
+    for name in commit_map:
+        widget.commit_target_dropdown.addItem(name)
+    if (
+        target_labels_layer is not None
+        and target_labels_layer.name in commit_map
+    ):
+        widget.commit_target_dropdown.setCurrentText(target_labels_layer.name)
+
     # ------- cached features for the whole crop -------
     # Features are *expensive*; compute once up-front and re-use them for
     # every fit/predict.  Recomputed on demand when the user changes the
@@ -441,6 +1035,54 @@ def launch_interactive_local_ml(
     widget.predict_btn.clicked.connect(_fit_and_predict)
     widget.recompute_features_btn.clicked.connect(_compute_features_now)
 
+    # ------- MONAI local-overfit Apply -------
+    # Each launcher session gets its own temp directory for the patch set
+    # and trained model snapshot; cleaned up when the viewer window closes.
+    monai_temp_dir = Path(
+        tempfile.mkdtemp(prefix="napari_ai_lab_local_monai_")
+    )
+    LOGGER.info("MONAI temp dir: %s", monai_temp_dir)
+
+    def _cleanup_temp():
+        with contextlib.suppress(Exception):
+            shutil.rmtree(monai_temp_dir, ignore_errors=True)
+            LOGGER.info("MONAI temp dir cleaned: %s", monai_temp_dir)
+
+    with contextlib.suppress(AttributeError, RuntimeError):
+        viewer.window._qt_window.destroyed.connect(lambda *_: _cleanup_temp())
+
+    def _train_and_apply_monai():
+        if not _IS_MONAI_AVAILABLE:
+            LOGGER.warning("MONAI / torch not available.")
+            return
+        # Use a fresh sub-dir per run so old patches don't accumulate.
+        run_dir = monai_temp_dir / f"run_{np.random.randint(1_000_000):06d}"
+        try:
+            pred = _train_monai_local(
+                image_crop,
+                np.asarray(painting_layer.data),
+                epochs=int(widget.monai_epochs_spinbox.value()),
+                patch_lateral=int(widget.monai_patch_lat_spinbox.value()),
+                patch_depth=int(widget.monai_patch_z_spinbox.value()),
+                temp_dir=run_dir,
+                source_image=reduced_source,
+                crop_offset=source_offset,
+            )
+        except (ValueError, RuntimeError) as e:
+            LOGGER.warning("MONAI train+apply failed: %s", e)
+            return
+        out = prediction_layer.data
+        if pred.shape == out.shape:
+            out[...] = pred
+        else:
+            out[...] = pred.reshape(out.shape)
+        prediction_layer.refresh()
+        LOGGER.info(
+            "MONAI prediction written to layer %s", prediction_layer.name
+        )
+
+    widget.monai_apply_btn.clicked.connect(_train_and_apply_monai)
+
     # Live fit/predict on paint, only if the user opts in.  No camera/dims
     # listeners — those caused expensive refits on every rotate/zoom.
     @tz.curry
@@ -462,34 +1104,45 @@ def launch_interactive_local_ml(
     # ------- commit -------
     def _commit_prediction():
         pred = np.asarray(prediction_layer.data)
-        nz = pred > 0
-        if not nz.any():
+        if pred.size == 0:
             LOGGER.info("Commit: prediction layer is empty.")
             return
-        if target_labels_layer is not None and target_slice is not None:
-            try:
-                target = target_labels_layer.data
-                view = target[target_slice]
-                if view.shape != pred.shape:
-                    LOGGER.warning(
-                        "Commit: target slice shape %s != prediction "
-                        "shape %s; aborting.",
-                        view.shape,
-                        pred.shape,
-                    )
-                    return
-                view[nz] = pred[nz]
-                target_labels_layer.refresh()
-                if persistent_layer is not None:
-                    persistent_layer.refresh()
-                LOGGER.info(
-                    "Committed prediction into %s at %s",
-                    target_labels_layer.name,
-                    target_slice,
+        chosen = widget.commit_target_dropdown.currentText()
+        entry = commit_map.get(chosen)
+        if entry is None:
+            LOGGER.warning(
+                "Commit: no commit target selected (chosen=%r).", chosen
+            )
+            return
+        commit_layer, commit_slice = entry
+        try:
+            target = commit_layer.data
+            view = target[commit_slice]
+            if view.shape != pred.shape:
+                LOGGER.warning(
+                    "Commit: target slice shape %s != prediction shape "
+                    "%s; aborting.",
+                    view.shape,
+                    pred.shape,
                 )
-            except (TypeError, ValueError, IndexError) as e:
-                LOGGER.warning("Commit failed: %s", e)
                 return
+            # Replace the whole crop region (including zeros) so the
+            # committed labels match the prediction exactly.
+            view[...] = pred
+            commit_layer.refresh()
+            # Refresh any mirror views of this layer in the local viewer.
+            for src_layer, mirror in mirror_pairs:
+                if src_layer is commit_layer:
+                    with contextlib.suppress(RuntimeError, AttributeError):
+                        mirror.refresh()
+            LOGGER.info(
+                "Committed prediction into %s at %s",
+                commit_layer.name,
+                commit_slice,
+            )
+        except (TypeError, ValueError, IndexError) as e:
+            LOGGER.warning("Commit failed: %s", e)
+            return
         if on_commit is not None:
             try:
                 on_commit(pred)
