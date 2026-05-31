@@ -61,7 +61,11 @@ class BaseNDApp(QWidget):
 
         # Initialize layer references (common to both widgets)
         self.image_layer = None
-        self.annotation_layer = None
+        self.annotation_layer = None  # The *active* annotation layer.
+        # Collection of all annotation layers, keyed by their layer name.
+        # ``annotation_layer`` is always a pointer into this dict (or None
+        # when no image is loaded).  Mirrors ``predictions_layers``.
+        self.annotations_layers = {}
         # Scratch labels layer used by interactive segmenters; contents are
         # promoted to ``annotation_layer`` on Commit.  Created lazily by
         # widgets that need it (e.g. NDEasyLabel).
@@ -127,21 +131,9 @@ class BaseNDApp(QWidget):
                     event.ignore()
                     return
                 elif reply == QMessageBox.Yes:
-                    # Save annotations
-                    try:
-                        self.image_data_model.save_annotations(
-                            self.annotation_layer.data,
-                            self.current_image_index,
-                            # current_step=self.viewer.dims.current_step,
-                        )
-                        print("Annotations saved before closing")
-                    except (OSError, ValueError, RuntimeError) as e:
-                        print(f"Failed to save annotations: {e}")
-                        QMessageBox.warning(
-                            self,
-                            "Save Error",
-                            f"Failed to save annotations: {e}",
-                        )
+                    # Save every annotation layer in the collection.
+                    self._save_all_annotations()
+                    print("Annotations saved before closing")
 
                     # Save boxes at the same time
                     self._save_boxes()
@@ -163,25 +155,46 @@ class BaseNDApp(QWidget):
         print("Viewer closing detected via destroyed signal")
         QMessageBox.information(None, "Closing", "Closing widget")
 
-    def _on_save_annotations(self):
-        """Save current annotations explicitly."""
-        if self.annotation_layer:
+    def _save_all_annotations(self, current_step=None):
+        """Save every annotation layer in :attr:`annotations_layers`.
+
+        Each layer is saved into ``annotations/<layer_name>/`` so multiple
+        named annotation collections coexist (mirroring the predictions
+        layout).  Falls back to a single-layer save against
+        :attr:`annotation_layer` if the collection is empty (e.g. older
+        widgets that never registered into it).
+        """
+        if self.image_data_model is None:
+            return
+        layers = dict(self.annotations_layers)
+        if not layers and self.annotation_layer is not None:
+            layers = {self.annotation_layer.name: self.annotation_layer}
+        if not layers:
+            print("No annotations to save")
+            return
+        for name, layer in layers.items():
             try:
                 self.image_data_model.save_annotations(
-                    self.annotation_layer.data,
+                    layer.data,
                     self.current_image_index,
+                    subdirectory=name,
+                    current_step=current_step,
                 )
                 print(
-                    f"Saved annotations for image index {self.current_image_index}"
+                    f"Saved annotations '{name}' for image index "
+                    f"{self.current_image_index}"
                 )
             except (OSError, ValueError, RuntimeError) as e:
-                print(f"Failed to save annotations: {e}")
+                print(f"Failed to save annotations '{name}': {e}")
                 QMessageBox.warning(
-                    self, "Save Error", f"Failed to save annotations: {e}"
+                    self,
+                    "Save Error",
+                    f"Failed to save annotations '{name}': {e}",
                 )
-        else:
-            print("No annotations to save")
 
+    def _on_save_annotations(self):
+        """Save current annotations explicitly."""
+        self._save_all_annotations()
         # Save boxes at the same time as annotations
         self._save_boxes()
 
@@ -516,11 +529,21 @@ class BaseNDApp(QWidget):
 
         # Remove layers one by one with proper error handling
         layers_to_remove = [
-            ("label", self.annotation_layer),
             ("working", self.working_layer),
             ("points", self.points_layer),
             ("shapes", self.shapes_layer),
         ]
+
+        # Add all annotation layers from the collection (falling back to
+        # the singular ``annotation_layer`` ref when the dict is empty so
+        # we don't leak the initial labels layer).
+        annot_layers = dict(self.annotations_layers) or (
+            {self.annotation_layer.name: self.annotation_layer}
+            if self.annotation_layer is not None
+            else {}
+        )
+        for annot_name, annot_layer in annot_layers.items():
+            layers_to_remove.append((f"label ({annot_name})", annot_layer))
 
         # Add all prediction layers from the dictionary
         for segmenter_name, pred_layer in self.predictions_layers.items():
@@ -547,6 +570,7 @@ class BaseNDApp(QWidget):
 
         # Reset references
         self.annotation_layer = None
+        self.annotations_layers = {}
         self.working_layer = None
         self.predictions_layers = {}
         self.points_layer = None
@@ -562,19 +586,12 @@ class BaseNDApp(QWidget):
             print(f"Processing image change: index {image_index}")
 
             # Save current labels before switching (if we have a current context)
-            if (
-                self.image_data_model.parent_directory
-                and self.annotation_layer
+            if self.image_data_model.parent_directory and (
+                self.annotations_layers or self.annotation_layer
             ):
-                # Delegate saving to the model; pass explicit image index
-                try:
-                    self.image_data_model.save_annotations(
-                        self.annotation_layer.data,
-                        self.current_image_index,
-                        current_step=self.viewer.dims.current_step,
-                    )
-                except (OSError, ValueError, RuntimeError) as e:
-                    print(f"Failed to save annotations via model: {e}")
+                self._save_all_annotations(
+                    current_step=self.viewer.dims.current_step
+                )
             else:
                 print("No current labels to save (first image or no context)")
 

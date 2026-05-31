@@ -991,7 +991,7 @@ class NDEasyLabel(BaseNDApp):
             except (TypeError, ValueError):
                 scale = None
 
-        from .interactive_local_machine_learning import (
+        from .interactive_local_learning import (
             launch_interactive_local_ml,
         )
 
@@ -1030,12 +1030,25 @@ class NDEasyLabel(BaseNDApp):
         if self.working_layer is not None:
             extra_mirrors.append((self.working_layer, labels_slice))
 
+        # Build the {name: (layer, slice)} map of every annotation layer
+        # the user can commit the prediction into.  All annotation layers
+        # share the image grid, so the same ``labels_slice`` applies to
+        # each one.
+        commit_targets = {
+            name: (layer, labels_slice)
+            for name, layer in self.annotations_layers.items()
+            if layer is not None
+        }
+
         launch_interactive_local_ml(
             image_crop,
             scale=scale,
             contrast_limits=contrast_limits,
             target_labels_layer=self.annotation_layer,
             target_slice=labels_slice,
+            commit_targets=commit_targets,
+            source_image=self.image_layer.data,
+            source_slice=image_slice,
             painting_data=painting_view,
             painting_name=f"{sparse_layer.name} (crop view)",
             extra_mirror_layers=extra_mirrors,

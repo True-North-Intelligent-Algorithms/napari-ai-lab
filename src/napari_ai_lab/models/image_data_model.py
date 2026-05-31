@@ -188,7 +188,7 @@ class ImageDataModel:
         if isinstance(axes_to_collapse, str):
             drop = set(axes_to_collapse)
         else:
-            drop = {ax for ax in axes_to_collapse}
+            drop = set(axes_to_collapse)
 
         return [
             s
@@ -294,6 +294,8 @@ class ImageDataModel:
         else:
             self.scale = [1.0] * self.image_data.ndim
 
+        self.scale = [1.0] * self.image_data.ndim
+
         print(f"Loaded image shape: {self.image_data.shape}")
         print(f"Axis types: {self.axis_types}")
         print(f"Scale (per axis): {self.scale}")
@@ -332,6 +334,20 @@ class ImageDataModel:
         annotation_dir.mkdir(parents=True, exist_ok=True)
 
         return annotation_dir
+
+    def list_annotation_subdirectories(self) -> list[str]:
+        """Return the names of existing subdirectories under ``annotations/``.
+
+        Mirrors how predictions are discovered (each subdirectory is a
+        named annotation collection).  Returns an empty list when the
+        parent directory or the ``annotations/`` folder doesn't yet exist.
+        """
+        if self.parent_directory is None:
+            return []
+        root = self.parent_directory / "annotations"
+        if not root.exists():
+            return []
+        return sorted(d.name for d in root.iterdir() if d.is_dir())
 
     def get_patches_directory(self, axis: int | None = None) -> Path:
         """

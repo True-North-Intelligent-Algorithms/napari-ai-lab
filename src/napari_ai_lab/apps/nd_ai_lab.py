@@ -119,13 +119,6 @@ class NDAILab(QWidget):
         # Store image layer reference
         self.image_layer = image_layer
 
-        # Load existing data or create empty with axis collapsing
-        labels_data = self.image_data_model.load_existing_annotations(
-            image_layer.data.shape,
-            self.current_image_index,
-            axes_to_collapse=self.axes_to_collapse,
-        )
-
         # Per-axis scale for annotation layers (collapsed axes dropped)
         annotation_scale = (
             self.image_data_model.get_scale(
@@ -134,13 +127,29 @@ class NDAILab(QWidget):
             or None
         )
 
-        # Create shared layers ONCE
-
-        self.annotations_layer = self.viewer.add_labels(
-            labels_data,
-            name="Labels (Persistent)",
-            scale=annotation_scale,
+        # Multiple named annotation collections are supported: each
+        # subdirectory under ``annotations/`` becomes a separate labels
+        # layer.  Falls back to a single ``"Labels (Persistent)"`` layer
+        # when no subdirectories exist yet.
+        annotation_names = (
+            self.image_data_model.list_annotation_subdirectories()
+            or ["Labels (Persistent)"]
         )
+        self.annotations_layers = {}
+        for ann_name in annotation_names:
+            data = self.image_data_model.load_existing_annotations(
+                image_layer.data.shape,
+                self.current_image_index,
+                subdirectory=ann_name,
+                axes_to_collapse=self.axes_to_collapse,
+            )
+            self.annotations_layers[ann_name] = self.viewer.add_labels(
+                data,
+                name=ann_name,
+                scale=annotation_scale,
+            )
+        # Pick the first as the active layer (backwards-compatible ref).
+        self.annotations_layer = next(iter(self.annotations_layers.values()))
 
         # Working / scratch labels layer for interactive segmenter output.
         # Always uses WORKING_LABEL_INDEX (7) so its colour is consistent.
@@ -232,9 +241,14 @@ class NDAILab(QWidget):
         # Label widget needs: image, labels, points, boxes
         self.label_widget.image_layer = self.image_layer
         self.label_widget.annotation_layer = self.annotations_layer
+        self.label_widget.annotations_layers = self.annotations_layers
         self.label_widget.working_layer = self.working_layer
         self.label_widget.points_layer = self.points_layer
         self.label_widget.boxes_layer = self.boxes_layer
+        # Sync the label widget's Active Annotation combo with the
+        # centrally-loaded collection.
+        if hasattr(self.label_widget, "_refresh_active_annotation_combo"):
+            self.label_widget._refresh_active_annotation_combo()
 
         # Connect points layer events for label widget
         if self.points_layer and hasattr(
@@ -298,6 +312,7 @@ class NDAILab(QWidget):
         # Augment widget needs: image, labels
         self.augment_widget.image_layer = self.image_layer
         self.augment_widget.annotation_layer = self.annotations_layer
+        self.augment_widget.annotations_layers = self.annotations_layers
         self.augment_widget.boxes_layer = (
             self.boxes_layer
         )  # Provide boxes layer for augmentation if needed
@@ -305,6 +320,7 @@ class NDAILab(QWidget):
         # Segment widget needs: image, labels, predictions, points, shapes
         self.segment_widget.image_layer = self.image_layer
         self.segment_widget.annotation_layer = self.annotations_layer
+        self.segment_widget.annotations_layers = self.annotations_layers
         self.segment_widget.predictions_layers = self.predictions_layers
         self.segment_widget.points_layer = self.points_layer
         self.segment_widget.shapes_layer = self.shapes_layer
