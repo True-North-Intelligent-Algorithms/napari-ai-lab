@@ -222,7 +222,7 @@ class NDAILab(QWidget):
             text={"string": "{split_set}", "size": 15, "color": "green"},
         )
 
-        self.boxes_3D_layer.feature_defaults["split_set"] = "TESTER363"
+        # self.boxes_3D_layer.feature_defaults["split_set"] = ""
 
         self.viewer.add_layer(self.boxes_3D_layer)
 
