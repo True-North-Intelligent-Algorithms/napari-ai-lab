@@ -79,7 +79,7 @@ Instructions for Region Grow 3D:
     )
 
     tolerance_below: float = field(
-        default=0.1,
+        default=100,
         metadata={
             "type": "float",
             "param_type": "inference",
@@ -88,13 +88,13 @@ Instructions for Region Grow 3D:
             "training": False,
             "min": 0.0,
             "max": 1e6,
-            "step": 0.01,
-            "default": 0.1,
+            "step": 10.0,
+            "default": 100,
         },
     )
 
     tolerance_above: float = field(
-        default=0.1,
+        default=100.0,
         metadata={
             "type": "float",
             "param_type": "inference",
@@ -103,8 +103,8 @@ Instructions for Region Grow 3D:
             "training": False,
             "min": 0.0,
             "max": 1e6,
-            "step": 0.01,
-            "default": 0.1,
+            "step": 10.0,
+            "default": 1000,
         },
     )
 
