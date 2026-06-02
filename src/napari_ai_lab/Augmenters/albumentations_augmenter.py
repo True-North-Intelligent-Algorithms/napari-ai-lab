@@ -287,13 +287,52 @@ Albumentations Advanced Augmentation:
             If patch_size dimensions don't match image dimensions or if patch is larger than image
         """
         # Apply Albumentations augmentations
-        # Assume the last two dimensions are spatial (H, W)
+        # Assume the last two dimensions are spatial (H, W).
+        # For 3D images the transform is applied to each slice along axis 0.
 
-        # 2D image
-        transform = self._create_augmentation_pipeline(patch_size)
+        # Use the 2D patch size (last two dims) for the pipeline
+        patch_size_2d = patch_size[-2:] if len(patch_size) >= 2 else patch_size
 
-        augmented = transform(image=im, mask=mask)
-        augmented_im = augmented["image"]
-        augmented_mask = augmented["mask"]
+        transform = self._create_augmentation_pipeline(patch_size_2d)
+
+        if im.ndim == 2:
+            # Single 2D image — apply transform directly
+            augmented = transform(image=im, mask=mask)
+            augmented_im = augmented["image"]
+            augmented_mask = augmented["mask"]
+        else:
+            # 3D image — pick a random start along axis 0 so we extract
+            # exactly patch_size[0] consecutive slices, then apply the 2D
+            # transform independently to each slice.
+            patch_z = patch_size[0]
+            z_size = im.shape[0]
+            if z_size < patch_z:
+                raise ValueError(
+                    f"Image z-size ({z_size}) is smaller than patch z-size ({patch_z})"
+                )
+            z_start = np.random.randint(0, z_size - patch_z + 1)
+            z_end = z_start + patch_z
+
+            aug_im_slices = []
+            aug_mask_slices = []
+
+            replay_transform = A.ReplayCompose(transform.transforms)
+
+            first = replay_transform(image=im[z_start], mask=mask[z_start])
+
+            aug_im_slices.append(first["image"])
+            aug_mask_slices.append(first["mask"])
+
+            replay = first["replay"]
+
+            for i in range(z_start + 1, z_end):
+                augmented = A.ReplayCompose.replay(
+                    replay, image=im[i], mask=mask[i]
+                )
+                aug_im_slices.append(augmented["image"])
+                aug_mask_slices.append(augmented["mask"])
+
+            augmented_im = np.stack(aug_im_slices, axis=0)
+            augmented_mask = np.stack(aug_mask_slices, axis=0)
 
         return augmented_im, augmented_mask
