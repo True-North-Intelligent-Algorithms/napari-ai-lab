@@ -116,11 +116,11 @@ MONAI UNet Automatic Segmentation:
     )
 
     sparse: bool = field(
-        default=True,
+        default=False,
         metadata={
             "type": "bool",
             "param_type": "training",
-            "default": True,
+            "default": False,
         },
     )
 
