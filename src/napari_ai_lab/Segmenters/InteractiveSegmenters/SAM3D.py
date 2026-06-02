@@ -37,6 +37,8 @@ class SAM3D(InteractiveSegmenterBase):
     3D segmentation masks using the SAM architecture.
     """
 
+    supports_live_param_update = True
+
     instructions = """
 Instructions:
 1. Activate Points layer
