@@ -55,6 +55,8 @@ from skimage.feature import multiscale_basic_features
 from sklearn.ensemble import RandomForestClassifier
 from superqt import ensure_main_thread
 
+from napari_ai_lab.utilities import normalize_percentile
+
 # MONAI / torch are optional — only required for the "MONAI UNet
 # (local overfit)" mode of the widget.
 try:
@@ -137,16 +139,6 @@ def predict(model, features):
 # patch dim must be a multiple of 2**4 = 16.
 _MONAI_DEPTH = 4
 _MONAI_DIVISOR = 2**_MONAI_DEPTH
-
-
-def _normalize_percentile(
-    image: np.ndarray, lo: float = 1.0, hi: float = 99.8
-) -> np.ndarray:
-    img = image.astype(np.float32)
-    a, b = np.percentile(img, [lo, hi])
-    if b - a < 1e-6:
-        return np.zeros_like(img)
-    return np.clip((img - a) / (b - a), 0.0, 1.0)
 
 
 def _pick_patch_size(
@@ -307,7 +299,7 @@ def _extract_patch_set(
             source_image, crop_image, crop_offset, src_sl
         ).astype(np.float32)
         if normalize:
-            img_patch = _normalize_percentile(img_patch)
+            img_patch = normalize_percentile(img_patch)
 
         # Build the label patch: -1 everywhere except where the patch
         # overlaps the crop region (where we copy from crop_labels).
@@ -528,7 +520,7 @@ def _train_monai_local(
 
     inf_sl = tuple(slice(inf_lo[ax], inf_hi[ax]) for ax in range(spatial_dims))
     inf_image = _read_source_patch(src, img, offset, inf_sl).astype(np.float32)
-    inf_image = _normalize_percentile(inf_image)
+    inf_image = normalize_percentile(inf_image)
 
     model.eval()
     with torch.no_grad():
