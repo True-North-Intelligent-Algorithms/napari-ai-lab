@@ -335,7 +335,9 @@ MONAI 3D UNet Automatic Segmentation:
         if self.num_classes > 2:
             weights[2] = self.weight_c3
 
-        loss_function = torch.nn.CrossEntropyLoss(ignore_index=-1).to(device)
+        loss_function = torch.nn.CrossEntropyLoss(
+            weight=weights, ignore_index=-1
+        ).to(device)
         dtype = torch.LongTensor
 
         print("\n🔍 Training diagnostics:")
