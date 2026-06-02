@@ -24,6 +24,7 @@ _OPTIONAL_SEGMENTERS = {
     "Otsu3D": ".Otsu3D",
     "Square2D": ".Square2D",
     "SAM3D": ".SAM3D",  # This one has heavy dependencies
+    "SAMSphere3D": ".SAMSphere3D",  # SAM3D + per-plane sphere checks
     "RegionGrow3D": ".RegionGrow3D",
     "FeatureRegionGrow3D": ".FeatureRegionGrow3D",
 }
