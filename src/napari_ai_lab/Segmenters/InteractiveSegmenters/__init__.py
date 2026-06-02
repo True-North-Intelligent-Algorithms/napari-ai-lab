@@ -27,6 +27,8 @@ _OPTIONAL_SEGMENTERS = {
     "SAMSphere3D": ".SAMSphere3D",  # SAM3D + per-plane sphere checks
     "RegionGrow3D": ".RegionGrow3D",
     "FeatureRegionGrow3D": ".FeatureRegionGrow3D",
+    "AnisotropicSphereFit3D": ".AnisotropicSphereFit3D",
+    "HoughSphereFit3D": ".HoughSphereFit3D",
 }
 
 

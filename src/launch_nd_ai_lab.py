@@ -25,13 +25,19 @@ from napari_ai_lab.Segmenters.GlobalSegmenters import (
     MicroSamSegmenter,
     MicroSamYoloSegmenter,
     MonaiUNetSegmenter,
+    MonaiUNetSegmenter3D,
     StardistSegmenter,
     ThresholdSegmenter,
 )
 from napari_ai_lab.Segmenters.InteractiveSegmenters import (
     SAM3D,
+    AnisotropicSphereFit3D,
+    FeatureRegionGrow3D,
+    HoughSphereFit3D,
     Otsu2D,
     Otsu3D,
+    RegionGrow3D,
+    SAMSphere3D,
     Square2D,
 )
 
@@ -51,6 +57,8 @@ if MicroSamSegmenter is not None:
     MicroSamSegmenter.register()
 if MonaiUNetSegmenter is not None:
     MonaiUNetSegmenter.register()
+if MonaiUNetSegmenter3D is not None:
+    MonaiUNetSegmenter3D.register()
 if MicroSamYoloSegmenter is not None:
     MicroSamYoloSegmenter.register()
 
@@ -59,6 +67,11 @@ Square2D.register()
 Otsu2D.register()
 Otsu3D.register()
 SAM3D.register()
+SAMSphere3D.register()
+RegionGrow3D.register()
+FeatureRegionGrow3D.register()
+AnisotropicSphereFit3D.register()
+HoughSphereFit3D.register()
 
 # Register augmenters
 SimpleAugmenter.register()
@@ -87,7 +100,7 @@ test_sets = [
     "spheres",  # 7
     "overlapping",  # 8
 ]
-test_set = test_sets[0]
+test_set = test_sets[7]
 
 annotations_viewer_type = "none"
 
@@ -123,7 +136,7 @@ elif test_set == "nuclei":
     viewer_type = "stacked"
     axes_to_collapse = None
 elif test_set == "spheres":
-    parent_dir = r"D:\deep-learning\labels\For_AI_lab_intensity"
+    parent_dir = r"D:\deep-learning\labels\For_AI_lab"
     viewer_type = "stacked"
     axes_to_collapse = None
 elif test_set == "overlapping":
@@ -172,7 +185,9 @@ if viewer_type in ["stacked", "sequence"]:
 else:
     # Load first image (viewer_type = "none" logic)
     image_data = model.load_image(0)
-    image_layer = viewer.add_image(image_data, name="Image", scale=model.get_scale())
+    image_layer = viewer.add_image(
+        image_data, name="Image", scale=model.get_scale()
+    )
 
     # Phase 3: Central layer setup - call nd_ai_lab's _set_image_layer
     # This creates all layers once and distributes to sub-apps
