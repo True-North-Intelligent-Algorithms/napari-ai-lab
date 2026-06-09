@@ -1253,6 +1253,12 @@ class NDEasyLabel(BaseNDApp):
             return
 
         try:
+            # Clear stale working-layer pixels from the previous run so that
+            # a smaller new result actually shrinks the visible region.
+            if self.working_layer is not None:
+                wd = self.working_layer.data[ctx["segmentation_indices"]]
+                wd[wd == self.WORKING_LABEL_INDEX] = 0
+
             mask = self.segmenter.segment(
                 ctx["image_data"],
                 points=ctx.get("points"),
