@@ -145,6 +145,7 @@ MONAI 3D UNet Automatic Segmentation:
                     image_tensor = F.pad(
                         image_tensor,
                         (0, pad_w, 0, pad_h, 0, pad_d),
+                        # mode="replicate",
                     )
                 y = self.model(image_tensor)
                 if pad_d or pad_h or pad_w:
