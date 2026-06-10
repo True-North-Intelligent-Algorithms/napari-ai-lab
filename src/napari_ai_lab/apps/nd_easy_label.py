@@ -190,6 +190,20 @@ class NDEasyLabel(BaseNDApp):
         self.local_ml_btn.clicked.connect(self._on_local_machine_learning)
         self.layout().addWidget(self.local_ml_btn)
 
+        # Launch the Edit-Masks workflow in a second viewer.  Builds a
+        # stack of (image, mask) pairs from points drawn on the original
+        # viewer — useful for SAM-style fine-tuning where each instance
+        # is a separate small patch.
+        self.edit_masks_btn = QPushButton("Edit Masks")
+        self.edit_masks_btn.setToolTip(
+            "Open a 2nd napari viewer with an Edit-Masks widget. "
+            "Draw points on the original viewer; each press of "
+            "'Add Masks From Points' adds an XY×XY image / label patch "
+            "to a stack you can edit and save under <project>/masks/<name>/."
+        )
+        self.edit_masks_btn.clicked.connect(self._on_edit_masks)
+        self.layout().addWidget(self.edit_masks_btn)
+
         # Button to open the copy-predictions-to-labels dialog (handles both
         # 2D "Label box" and 3D "3D Bounding Boxes" source ROIs).  Only
         # functional when this widget is hosted inside NDAILab (which owns
@@ -1053,6 +1067,31 @@ class NDEasyLabel(BaseNDApp):
             painting_name=f"{sparse_layer.name} (crop view)",
             extra_mirror_layers=extra_mirrors,
             on_commit=lambda _pred: sparse_layer.refresh(),
+        )
+
+    def _on_edit_masks(self):
+        """Launch the Edit-Masks viewer for SAM-style mask/image stacks.
+
+        Opens a second napari viewer with an :class:`EditMasksWidget` that
+        builds up a stack of square ``XY × XY`` patches centred on points
+        drawn in the original viewer.  The user edits the labels in the
+        second viewer and saves them under ``<project>/masks/<name>/``.
+        """
+        if self.image_layer is None:
+            QMessageBox.warning(
+                self,
+                "No image loaded",
+                "Load an image before opening Edit Masks.",
+            )
+            return
+
+        from .edit_masks import launch_edit_masks_viewer
+
+        self._edit_masks_viewer = launch_edit_masks_viewer(
+            source_viewer=self.viewer,
+            image_data_model=self.image_data_model,
+            image_layer=self.image_layer,
+            axes_to_collapse=self.axes_to_collapse,
         )
 
     # ------------------------------------------------------------------

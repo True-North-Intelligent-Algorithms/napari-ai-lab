@@ -349,6 +349,87 @@ class ImageDataModel:
             return []
         return sorted(d.name for d in root.iterdir() if d.is_dir())
 
+    # ------------------------------------------------------------------
+    # Masks (SAM-style point-driven mask/image stacks)
+    # ------------------------------------------------------------------
+    def get_masks_directory(self, name: str) -> Path:
+        """Return ``masks/<name>/`` (created on demand).
+
+        Each named mask collection lives in its own subdirectory and contains
+        ``input0/`` (image patches) and ``ground_truth0/`` (label masks),
+        following the same convention as the augmented-patches directories.
+        """
+        masks_dir = self.parent_directory / "masks" / name
+        masks_dir.mkdir(parents=True, exist_ok=True)
+        return masks_dir
+
+    def list_mask_subdirectories(self) -> list[str]:
+        """Return the names of existing subdirectories under ``masks/``."""
+        if self.parent_directory is None:
+            return []
+        root = self.parent_directory / "masks"
+        if not root.exists():
+            return []
+        return sorted(d.name for d in root.iterdir() if d.is_dir())
+
+    def save_masks(
+        self,
+        name: str,
+        image_stack: np.ndarray,
+        mask_stack: np.ndarray,
+    ) -> Path:
+        """Save a stack of mask/image pairs under ``masks/<name>/``.
+
+        Both stacks are saved as single multi-page TIFFs:
+
+        - ``masks/<name>/input0/<name>.tif``         — image stack
+        - ``masks/<name>/ground_truth0/<name>.tif``  — label stack (uint16)
+
+        Args:
+            name: Collection name (also used as the file stem).
+            image_stack: Array shaped ``(N, Y, X[, C])``.
+            mask_stack:  Array shaped ``(N, Y, X)``.
+
+        Returns:
+            Path to the ``masks/<name>/`` directory.
+        """
+        from skimage.io import imsave
+
+        masks_dir = self.get_masks_directory(name)
+        input_dir = masks_dir / "input0"
+        truth_dir = masks_dir / "ground_truth0"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        truth_dir.mkdir(parents=True, exist_ok=True)
+
+        image_path = input_dir / f"{name}.tif"
+        mask_path = truth_dir / f"{name}.tif"
+
+        imsave(str(image_path), np.asarray(image_stack))
+        imsave(str(mask_path), np.asarray(mask_stack).astype(np.uint16))
+
+        print(
+            f"📦 Saved masks '{name}': image {image_stack.shape} → "
+            f"{image_path}, mask {mask_stack.shape} → {mask_path}"
+        )
+        return masks_dir
+
+    def load_masks(
+        self, name: str
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
+        """Load a previously saved mask/image stack pair, or ``(None, None)``.
+
+        Looks for ``masks/<name>/input0/<name>.tif`` and
+        ``masks/<name>/ground_truth0/<name>.tif``.
+        """
+        masks_dir = self.parent_directory / "masks" / name
+        image_path = masks_dir / "input0" / f"{name}.tif"
+        mask_path = masks_dir / "ground_truth0" / f"{name}.tif"
+        if not image_path.exists() or not mask_path.exists():
+            return None, None
+        image_stack = imread(str(image_path))
+        mask_stack = imread(str(mask_path))
+        return image_stack, mask_stack
+
     def get_patches_directory(self, axis: int | None = None) -> Path:
         """
         Get the base directory for storing patches.
