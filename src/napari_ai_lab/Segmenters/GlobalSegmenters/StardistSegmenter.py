@@ -81,9 +81,15 @@ StarDist Automatic Segmentation:
         },
     )
 
-    # model_path removed — model selection is done via inference model combo
-    # in nd_easy_segment, populated by get_model_axis_map() which includes
-    # both BUILTIN_MODEL_MAP entries and user-trained models from model_save_dir.
+    model_path: str = field(
+        default="",
+        metadata={
+            "type": "file",
+            "param_type": "inference",
+            "file_type": "directory",
+            "default": "",
+        },
+    )
 
     normalize_input: bool = field(
         default=True,
@@ -245,13 +251,14 @@ StarDist Automatic Segmentation:
 
     def get_model_axis_map(self) -> dict:
         """
-        Get the complete model-to-axis mapping (builtins + pretrained).
+        Get the complete model-to-axis mapping (builtins + pretrained + custom path).
 
         Returns:
             dict: Dictionary mapping model names to recommended axes.
         """
         result = BUILTIN_MODEL_MAP.copy()
         result.update(self.build_pretrained_model_map())
+        result.update(self.get_custom_model_from_path())
         return result
 
     def build_pretrained_model_map(self) -> dict:
@@ -289,6 +296,35 @@ StarDist Automatic Segmentation:
                 continue
         return pretrained
 
+    def get_custom_model_from_path(self) -> dict:
+        """
+        Load model info from custom model_path if set.
+
+        Returns:
+            dict: {model_name: axis_string} if valid, else {}
+        """
+        if not self.model_path or not os.path.isdir(self.model_path):
+            return {}
+
+        config_path = os.path.join(self.model_path, "config.json")
+        if not os.path.isfile(config_path):
+            return {}
+
+        try:
+            with open(config_path) as f:
+                cfg = json.load(f)
+            axes = cfg.get("axes", "YX")
+            n_channel_in = cfg.get("n_channel_in", 1)
+            # Drop trailing C when the model expects single-channel input
+            if n_channel_in == 1 and axes.endswith("C"):
+                axes = axes[:-1]
+
+            # Use directory name as model name
+            model_name = os.path.basename(os.path.normpath(self.model_path))
+            return {model_name: axes}
+        except (json.JSONDecodeError, OSError):
+            return {}
+
     def set_model(self, model_name):
         """Load the model for model_name and cache it in self.models dict."""
         self.inference_model_name = model_name
@@ -300,9 +336,29 @@ StarDist Automatic Segmentation:
 
         model_axis = self.get_model_axis_map().get(model_name, "YX")
         is_3d = "Z" in model_axis
+        is_custom_path = model_name in self.get_custom_model_from_path()
         is_user_trained = model_name in self.build_pretrained_model_map()
 
-        if is_user_trained:
+        if is_custom_path:
+            # Load from custom model_path
+            basedir = os.path.dirname(self.model_path)
+            if is_3d:
+                model = StarDist3D(
+                    config=None, name=model_name, basedir=basedir
+                )
+            else:
+                model = StarDist2D(
+                    config=None, name=model_name, basedir=basedir
+                )
+            print(f"Loaded custom model: {model_name} from {self.model_path}")
+
+            # Load downsize_factor from custom_params.json if available
+            custom_params_path = os.path.join(
+                self.model_path, "custom_params.json"
+            )
+            self._load_downsize_factor_from_json(custom_params_path)
+
+        elif is_user_trained:
             if is_3d:
                 model = StarDist3D(
                     config=None, name=model_name, basedir=self.model_save_dir
@@ -331,12 +387,30 @@ StarDist Automatic Segmentation:
         self.models[model_name] = model
 
     def __setattr__(self, name, value):
-        """Override setattr to detect inference_model_name changes."""
+        """Override setattr to detect inference_model_name and model_path changes."""
         # Get old value if it exists
         old_value = getattr(self, name, None) if hasattr(self, name) else None
 
         # Set the new value
         super().__setattr__(name, value)
+
+        # Check if model_path changed and is valid
+        if (
+            name == "model_path"
+            and value
+            and value != old_value
+            and os.path.isdir(value)
+        ):
+            # Extract model name and set as active inference model
+            model_name = os.path.basename(os.path.normpath(value))
+            config_path = os.path.join(value, "config.json")
+            if os.path.isfile(config_path):
+                print(f"📂 Custom model path set: {value}")
+                print(f"   Loading model: {model_name}")
+                # This will trigger the model to load and be added to the registry
+                super().__setattr__("inference_model_name", model_name)
+                if hasattr(self, "set_model"):
+                    self.set_model(model_name)
 
         # Check if inference_model_name changed
         if (
