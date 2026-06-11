@@ -98,6 +98,25 @@ Tips:
         },
     )
 
+    # Ratio of XY radius to maximum allowed Z half-extent.  If > 0, the Z
+    # extent of the mask is capped at  r_xy / ratio  slices from the click
+    # plane.  Example: xy radius=100, ratio=10 → at most 10 Z slices each
+    # side; ratio=20 → at most 5 Z slices each side.  Set to 0 to disable.
+    max_z_xy_ratio: float = field(
+        default=0.0,
+        metadata={
+            "type": "float",
+            "param_type": "inference",
+            "harvest": True,
+            "advanced": False,
+            "training": False,
+            "min": 0.0,
+            "max": 50.0,
+            "step": 1.0,
+            "default": 0.0,
+        },
+    )
+
     fit_sphere: bool = field(
         default=True,
         metadata={
@@ -122,6 +141,22 @@ Tips:
             "max": 10.0,
             "step": 0.5,
             "default": 2.0,
+        },
+    )
+
+    # Prevent 'hat' shapes: the largest cross-section must be at an interior
+    # Z-plane.  When True, planes are trimmed from each end while the
+    # endpoint radius >= its neighbour's radius, so r[0] < r[1] and
+    # r[-1] < r[-2] before the profile is fitted.
+    enforce_no_hat: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "inference",
+            "harvest": True,
+            "advanced": False,
+            "training": False,
+            "default": True,
         },
     )
 
@@ -197,11 +232,25 @@ Tips:
 
         min_circ = float(self.min_circularity)
         max_drift = float(self.max_center_drift_xy)
+        z_xy_ratio = float(self.max_z_xy_ratio)
 
         # Establish reference from click plane.
         ref_circ, ref_cy, ref_cx = self._slice_circularity_and_centroid(
             mask[z_pos] > 0
         )
+
+        # Derive XY radius from click-plane area and compute the max allowed
+        # Z half-extent.  ratio=0 means no constraint.
+        ref_area = float(np.sum(mask[z_pos] > 0))
+        if z_xy_ratio > 0.0 and ref_area > 0.0:
+            r_xy = float(np.sqrt(ref_area / np.pi))
+            max_z_half_extent = r_xy / z_xy_ratio
+            print(
+                f"SAMSphere3D: r_xy={r_xy:.1f}px, ratio={z_xy_ratio}, "
+                f"max Z half-extent={max_z_half_extent:.1f} slices"
+            )
+        else:
+            max_z_half_extent = None  # disabled
 
         if ref_cy is None:
             print(
@@ -236,14 +285,19 @@ Tips:
             drift = float(np.sqrt((cy - ref_cy) ** 2 + (cx - ref_cx) ** 2))
             fail_circ = circ < min_circ
             fail_drift = drift > max_drift
+            fail_z = (
+                max_z_half_extent is not None
+                and abs(z - z_pos) > max_z_half_extent
+            )
 
-            if fail_circ or fail_drift:
+            if fail_circ or fail_drift or fail_z:
                 filtered[z] = 0
                 n_removed += 1
                 print(
                     f"SAMSphere3D: z={z} removed "
                     f"(circ={circ:.3f} {'FAIL' if fail_circ else 'ok'}, "
-                    f"drift={drift:.1f}px {'FAIL' if fail_drift else 'ok'})"
+                    f"drift={drift:.1f}px {'FAIL' if fail_drift else 'ok'}, "
+                    f"z_extent={'FAIL' if fail_z else 'ok'})"
                 )
             else:
                 n_kept += 1
@@ -286,6 +340,7 @@ Tips:
             filtered = fit_sphere_to_mask(
                 filtered,
                 profile_outlier_sigma=float(self.profile_outlier_sigma),
+                enforce_no_hat=bool(self.enforce_no_hat),
                 debug=True,
             )
 
