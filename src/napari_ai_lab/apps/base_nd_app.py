@@ -641,6 +641,32 @@ class BaseNDApp(QWidget):
 
         # Sync the current segmenter instance with new parameter values
         if hasattr(self, "segmenter") and self.segmenter is not None:
+            # If model_path changed, refresh model combo to include the new custom model
+            if "model_path" in parameters and hasattr(
+                self.segmenter, "get_model_axis_map"
+            ):
+                # Sync the model_path first
+                self.segmenter = (
+                    self.segmenter_parameter_form.sync_nd_operation_instance(
+                        self.segmenter
+                    )
+                )
+                # Get the model name from the path that was just set
+                custom_model_name = self.segmenter.inference_model_name
+                if custom_model_name:
+                    print(
+                        f"📂 Custom model loaded: {custom_model_name}, refreshing model combo..."
+                    )
+                    # Refresh model combo in both forms to include the custom model
+                    self.segmenter_parameter_form.refresh_model_combo(
+                        select_name=custom_model_name
+                    )
+                    if hasattr(self, "training_parameter_form"):
+                        self.training_parameter_form.refresh_model_combo(
+                            select_name=custom_model_name
+                        )
+                return
+
             # If inference_model_name changed for StardistSegmenter, validate before syncing
             if "inference_model_name" in parameters and hasattr(
                 self.segmenter, "get_recommended_axis"
