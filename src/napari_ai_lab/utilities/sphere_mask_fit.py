@@ -86,6 +86,54 @@ def _weighted_median(values, weights):
     return float(vals_sorted[min(idx, len(vals_sorted) - 1)])
 
 
+def _trim_hat_planes(planes, debug=False):
+    """Remove endpoint planes that form a 'hat' (largest circle at either end).
+
+    A hat occurs when the first or last plane has a radius >= its neighbour,
+    making that endpoint the apparent maximum.  We trim from each end
+    iteratively until r[0] < r[1] and r[-1] < r[-2], guaranteeing the
+    profile maximum lies at an interior index.
+
+    Parameters
+    ----------
+    planes : list of (z, cy, cx, r)
+    debug  : bool
+
+    Returns
+    -------
+    list — trimmed planes (may be shorter than input).
+    """
+    planes = list(planes)
+
+    removed_start = 0
+    while len(planes) >= 2 and planes[0][3] >= planes[1][3]:
+        if debug:
+            print(
+                f"_trim_hat_planes: removing leading hat plane "
+                f"z={planes[0][0]} r={planes[0][3]:.1f} >= next r={planes[1][3]:.1f}"
+            )
+        planes = planes[1:]
+        removed_start += 1
+
+    removed_end = 0
+    while len(planes) >= 2 and planes[-1][3] >= planes[-2][3]:
+        if debug:
+            print(
+                f"_trim_hat_planes: removing trailing hat plane "
+                f"z={planes[-1][0]} r={planes[-1][3]:.1f} >= prev r={planes[-2][3]:.1f}"
+            )
+        planes = planes[:-1]
+        removed_end += 1
+
+    if debug and (removed_start or removed_end):
+        print(
+            f"_trim_hat_planes: trimmed {removed_start} leading + "
+            f"{removed_end} trailing plane(s), {len(planes)} remain."
+        )
+
+    return planes
+
+
 def _enforce_monotonic(zs, rs, z_peak_idx):
     """Return radii enforced to be non-increasing away from the peak.
 
@@ -191,6 +239,7 @@ def fit_sphere_to_mask(
     mask,
     profile_outlier_sigma: float = 2.0,
     min_planes: int = 3,
+    enforce_no_hat: bool = True,
     debug: bool = False,
 ) -> np.ndarray:
     """Fit a smooth star-convex sphere-like shape to a 3D binary mask.
@@ -204,6 +253,12 @@ def fit_sphere_to_mask(
     min_planes : int
         Minimum number of non-empty Z-planes required to attempt fitting.
         If fewer planes are found the input mask is returned unchanged.
+    enforce_no_hat : bool
+        If True (default), trim endpoint planes whose radius is >= their
+        neighbour's radius before building the profile.  This prevents a
+        'hat' shape where the largest cross-section is the first or last
+        plane.  Planes are trimmed iteratively from each end until
+        r[0] < r[1] and r[-1] < r[-2].
     debug : bool
         If True, print diagnostic information.
 
@@ -224,6 +279,21 @@ def fit_sphere_to_mask(
         return mask
 
     planes = _measure_planes(mask)
+
+    # Remove hat planes (endpoint radius >= neighbour) before profile fitting.
+    # If trimming leaves too few planes, keep the original planes and rely on
+    # post-fit endpoint clamping to suppress the hat instead of falling back
+    # to the original hat mask.
+    if enforce_no_hat and len(planes) >= 2:
+        planes_trimmed = _trim_hat_planes(planes, debug=debug)
+        if len(planes_trimmed) >= min_planes:
+            planes = planes_trimmed
+        elif debug:
+            print(
+                f"fit_sphere_to_mask: hat trimming left only {len(planes_trimmed)} "
+                f"plane(s); keeping original {len(planes)} planes, "
+                "will clamp endpoints after fitting."
+            )
 
     if len(planes) < min_planes:
         if debug:
@@ -273,6 +343,28 @@ def fit_sphere_to_mask(
                 "using monotonic profile."
             )
         final_rs = _enforce_monotonic(zs, rs, peak_idx)
+
+    # --- Enforce no-hat on the final profile ------------------------------
+    # The largest radius must be at an interior index.  This catches cases
+    # where hat-trimming was insufficient (monotone profiles, tied maxima at
+    # the boundary) or where the parabola peak fell outside the data range.
+    if enforce_no_hat and len(final_rs) >= 3:
+        interior_max = float(np.max(final_rs[1:-1]))
+        if interior_max > 0.0:
+            if final_rs[0] >= 0.85 * interior_max:
+                if debug:
+                    print(
+                        f"fit_sphere_to_mask: clamping leading hat endpoint "
+                        f"r={final_rs[0]:.1f} (interior max={interior_max:.1f})"
+                    )
+                final_rs[0] = 0.85 * interior_max
+            if final_rs[-1] >= 0.85 * interior_max:
+                if debug:
+                    print(
+                        f"fit_sphere_to_mask: clamping trailing hat endpoint "
+                        f"r={final_rs[-1]:.1f} (interior max={interior_max:.1f})"
+                    )
+                final_rs[-1] = 0.85 * interior_max
 
     # --- Rasterise --------------------------------------------------------
     d, h, w_img = mask.shape
