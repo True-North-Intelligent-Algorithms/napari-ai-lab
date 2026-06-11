@@ -383,7 +383,10 @@ def pad_to_largest(
 
 
 def get_current_slice_indices(
-    current_step: tuple, selected_axis: str, ignore_channel: bool = False
+    current_step: tuple,
+    selected_axis: str,
+    ignore_channel: bool = False,
+    shape: tuple = None,
 ):
     """Compute indices for the current slice based on the selected axis.
 
@@ -391,6 +394,8 @@ def get_current_slice_indices(
         current_step: The napari viewer dims.current_step tuple.
         selected_axis: Axis mode string, e.g. "YX" or "ZYX".
         ignore_channel: If True, remove 'C' from selected_axis before processing.
+        shape: Optional shape tuple for cropped data. If provided, indices will
+               be constrained to paste this shape into the larger array.
 
     Returns:
         tuple: A tuple of indices/slices to extract the current 2D/3D region.
@@ -400,18 +405,34 @@ def get_current_slice_indices(
         selected_axis = selected_axis.replace("C", "")
 
     if selected_axis == "YX":
-        return current_step[:-2] + (slice(None), slice(None))
-    elif selected_axis == "ZYX":
-        return current_step[:-3] + (
-            slice(None),
-            slice(None),
-            slice(None),
+        slices = (
+            (slice(None), slice(None))
+            if shape is None
+            else tuple(slice(0, s) for s in shape)
         )
+        return current_step[:-2] + slices
+    elif selected_axis == "ZYX":
+        slices = (
+            (slice(None), slice(None), slice(None))
+            if shape is None
+            else tuple(slice(0, s) for s in shape)
+        )
+        return current_step[:-3] + slices
     if selected_axis == "YXC":
-        return current_step[:-3] + (slice(None), slice(None), slice(None))
+        slices = (
+            (slice(None), slice(None), slice(None))
+            if shape is None
+            else tuple(slice(0, s) for s in shape)
+        )
+        return current_step[:-3] + slices
     else:
         # Default to 2D YX slice
-        return current_step[:-2] + (slice(None), slice(None))
+        slices = (
+            (slice(None), slice(None))
+            if shape is None
+            else tuple(slice(0, s) for s in shape)
+        )
+        return current_step[:-2] + slices
 
 
 def create_artifact_name(

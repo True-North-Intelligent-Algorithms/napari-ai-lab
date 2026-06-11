@@ -1955,6 +1955,17 @@ class ImageDataModel:
             current_step, selected_axis, ignore_channel
         )
         slice_data = self.image_data[indices]
+
+        # Crop to original shape if using StackedSequenceArtifactIO
+        from ..artifact_io.stacked_sequence_artifact_io import (
+            StackedSequenceArtifactIO,
+        )
+
+        if isinstance(self._input_images_io, StackedSequenceArtifactIO):
+            img_idx = current_step[0]
+            orig_shape = self._input_images_io._original_shapes[img_idx]
+            slice_data = slice_data[tuple(slice(0, s) for s in orig_shape)]
+
         return self.segment(segmenter, slice_data)
 
     def segment_all(

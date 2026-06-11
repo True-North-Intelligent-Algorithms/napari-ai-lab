@@ -679,9 +679,11 @@ class NDEasySegment(BaseNDApp):
                 )
 
             segmentation_indices = get_current_slice_indices(
-                current_step, segmentation_axis, ignore_channel=True
+                current_step,
+                segmentation_axis,
+                ignore_channel=True,
+                shape=mask.shape,
             )
-
             # Get or create the predictions layer for this segmenter
             predictions_layer = self._get_or_create_predictions_layer(
                 segmenter_name, self.annotation_layer.data.shape
@@ -689,6 +691,7 @@ class NDEasySegment(BaseNDApp):
 
             # Update the layer with new predictions
             predictions_layer.data[segmentation_indices] = mask
+
             predictions_layer.refresh()
             print(
                 f"Automatic segmentation completed - updated layer: {segmenter_name}"
