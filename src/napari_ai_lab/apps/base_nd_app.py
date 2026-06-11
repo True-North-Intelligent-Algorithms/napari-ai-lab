@@ -665,6 +665,12 @@ class BaseNDApp(QWidget):
                         self.training_parameter_form.refresh_model_combo(
                             select_name=custom_model_name
                         )
+                recommended_axis = self.segmenter.get_recommended_axis()
+
+                self.segmenter_parameter_form.set_selected_axis(
+                    recommended_axis
+                )
+
                 return
 
             # If inference_model_name changed for StardistSegmenter, validate before syncing
