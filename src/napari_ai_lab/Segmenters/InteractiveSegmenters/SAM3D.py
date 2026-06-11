@@ -60,7 +60,7 @@ Instructions:
             "min": 0.0,
             "max": 1.0,
             "default": 0.7,
-            "step": 0.1,
+            "step": 0.01,
         },
     )
 
