@@ -534,6 +534,18 @@ class ImageDataModel:
             return self.parent_directory / "predictions" / algorithm
         return self.parent_directory / "predictions"
 
+    def get_prediction_subdirectories(self) -> list[Path]:
+        """
+        Get list of prediction subdirectories (segmenter method names).
+
+        Returns:
+            List of Path objects for subdirectories in predictions/, or empty list if none found.
+        """
+        predictions_dir = self.parent_directory / "predictions"
+        if not predictions_dir.exists():
+            return []
+        return [d for d in predictions_dir.iterdir() if d.is_dir()]
+
     def _detect_artifact_io_type(
         self, artifact_dir: Path, default_type: str = "tiff"
     ) -> str:

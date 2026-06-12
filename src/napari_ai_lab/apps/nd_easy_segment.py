@@ -1158,19 +1158,7 @@ class NDEasySegment(BaseNDApp):
     def _load_existing_prediction_layers(self, image_shape):
         """Load predictions from all segmenter subdirectories as separate layers."""
 
-        predictions_dir = (
-            self.image_data_model.parent_directory / "predictions"
-        )
-
-        if not predictions_dir.exists():
-            print(
-                "No predictions directory found - no prediction layers created"
-            )
-            return
-
-        # Find all subdirectories (each is a segmenter method)
-        # Skip individual files in predictions/ - only process subdirectories
-        subdirs = [d for d in predictions_dir.iterdir() if d.is_dir()]
+        subdirs = self.image_data_model.get_prediction_subdirectories()
 
         if not subdirs:
             print(
