@@ -41,6 +41,7 @@ Usage example:
 """
 
 from enum import Enum
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -294,7 +295,13 @@ class ImageDataModel:
         else:
             self.scale = [1.0] * self.image_data.ndim
 
-        self.scale = [1.0] * self.image_data.ndim
+        # If the last dimension is a channel (RGB/RGBA, size ≤ 3), napari treats
+        # it as colour and does not expect a scale entry for that axis — use
+        # only the spatial axes for scale.  Otherwise include all axes.
+        if self.image_data.ndim >= 2 and self.image_data.shape[-1] <= 3:
+            self.scale = [1.0] * (self.image_data.ndim - 1)
+        # else:
+        #    self.scale = [1.0] * self.image_data.ndim
 
         print(f"Loaded image shape: {self.image_data.shape}")
         print(f"Axis types: {self.axis_types}")
@@ -1979,6 +1986,26 @@ class ImageDataModel:
             slice_data = slice_data[tuple(slice(0, s) for s in orig_shape)]
 
         return self.segment(segmenter, slice_data)
+
+    def process_slice(
+        self, segmenter, current_step, selected_axis, axes_to_collapse, on_done
+    ):
+        """Process a single slice with SliceProcessor.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            current_step: Tuple of indices identifying the slice position.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX", "YXC".
+            axes_to_collapse: Axis names to collapse (for documentation).
+            on_done: Callback function(current_step, mask) called when done.
+        """
+        processor = SliceProcessor(
+            self.image_data.shape, selected_axis, axes_to_collapse
+        )
+        process_fn = partial(
+            self.segment_slice, segmenter, selected_axis=selected_axis
+        )
+        processor.process_slice(current_step, process_fn, on_done)
 
     def segment_all(
         self,

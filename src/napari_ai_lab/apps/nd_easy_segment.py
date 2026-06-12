@@ -500,16 +500,12 @@ class NDEasySegment(BaseNDApp):
         selected_axis = self.segmenter_parameter_form.get_selected_axis()
         self._setup_segment_context()
 
-        processor = SliceProcessor(
-            self.image_layer.data.shape,
+        self.segment_progress_logger.update_progress(1, 2, "Processing...")
+        self.image_data_model.process_slice(
+            self.segmenter,
+            self.viewer.dims.current_step,
             selected_axis,
             self.axes_to_collapse,
-        )
-
-        self.segment_progress_logger.update_progress(1, 2, "Processing...")
-        processor.process_slice(
-            self.viewer.dims.current_step,
-            self._do_segment_slice,
             self._on_segment_slice_done,
         )
 
