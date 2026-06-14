@@ -496,7 +496,6 @@ class NDEasySegment(BaseNDApp):
             )
         )
 
-        # Use SliceProcessor for single-slice processing
         selected_axis = self.segmenter_parameter_form.get_selected_axis()
         self._setup_segment_context()
 
