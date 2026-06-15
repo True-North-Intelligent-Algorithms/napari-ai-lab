@@ -27,8 +27,8 @@ from ..utilities import QtProgressLogger
 from ..utilities.slice_processor import (
     SliceProcessor,
     SliceProcessorThread,
-    TrainingThread,
 )
+from ..utilities.training_thread import TrainingThread
 from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog

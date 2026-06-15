@@ -30,6 +30,7 @@ from .progress_logger import (
 )
 from .qt_progress_logger import QtProgressLogger
 from .slice_processor import SliceProcessor, SliceProcessorThread
+from .training_thread import TrainingThread
 
 __all__ = [
     # image_util
@@ -59,4 +60,6 @@ __all__ = [
     # slice_processor
     "SliceProcessor",
     "SliceProcessorThread",
+    # training_thread
+    "TrainingThread",
 ]
