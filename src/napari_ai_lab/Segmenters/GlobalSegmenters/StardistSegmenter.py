@@ -865,7 +865,7 @@ task.outputs["mask"] = ndarr_mask
         )
         self._save_downsize_factor_to_json(custom_params_path)
 
-        model.train(
+        history = model.train(
             X_train,
             Y_train,
             validation_data=(X_train, Y_train),
@@ -882,7 +882,7 @@ task.outputs["mask"] = ndarr_mask
         if updater is not None:
             updater(self.num_epochs, self.num_epochs, msg)
 
-        return {"success": True, "message": done_msg}
+        return {"success": True, "message": done_msg, "history": history}
 
     @classmethod
     def register(cls):
