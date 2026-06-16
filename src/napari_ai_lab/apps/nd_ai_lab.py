@@ -138,8 +138,8 @@ class NDAILab(QWidget):
         self.annotations_layers = {}
         for ann_name in annotation_names:
             data = self.image_data_model.load_existing_annotations(
-                image_layer.data.shape,
                 self.current_image_index,
+                image_layer.data.shape,
                 subdirectory=ann_name,
                 axes_to_collapse=self.axes_to_collapse,
             )

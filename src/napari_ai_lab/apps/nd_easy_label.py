@@ -1118,8 +1118,8 @@ class NDEasyLabel(BaseNDApp):
         for name in names:
             try:
                 data = self.image_data_model.load_existing_annotations(
-                    image_shape,
                     self.current_image_index,
+                    image_shape,
                     subdirectory=name,
                     axes_to_collapse=self.axes_to_collapse,
                 )

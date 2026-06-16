@@ -67,8 +67,8 @@ def main():
     try:
         # Try to load existing annotations
         annotations = model.load_existing_annotations(
-            image_shape=image.shape,
             image_index=image_index,
+            image_shape=image.shape,
             subdirectory="class_0",
         )
 

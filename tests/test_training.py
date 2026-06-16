@@ -40,8 +40,8 @@ def create_patches_if_needed(image_data_model, patches_dir, num_patches=40):
     # Load image and annotations
     image = image_data_model.load_image(0)
     annotations = image_data_model.load_existing_annotations(
-        image_shape=image.shape,
         image_index=0,
+        image_shape=image.shape,
         subdirectory="class_0",
     )
 

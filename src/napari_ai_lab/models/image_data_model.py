@@ -17,24 +17,27 @@ different dimensionality than the source image. For example:
 Usage example:
     # For ZYXC image, get ZYX annotations (collapse channels)
     labels = model.load_existing_annotations(
-        image_shape=(10, 512, 512, 3),
         image_index=0,
+        image_shape=(10, 512, 512, 3),
         axes_to_collapse="C"
     )
     # Returns shape (10, 512, 512)
 
     # Same for predictions
     predictions = model.load_existing_predictions(
-        image_shape=(10, 512, 512, 3),
         image_index=0,
+        image_shape=(10, 512, 512, 3),
         axes_to_collapse="C"
     )
     # Returns shape (10, 512, 512)
 
+    # Load without providing shape (if file exists)
+    labels = model.load_existing_annotations(image_index=0)
+
     # For future: collapse multiple axes
     labels = model.load_existing_annotations(
-        image_shape=(5, 10, 512, 512, 3),
         image_index=0,
+        image_shape=(5, 10, 512, 512, 3),
         axes_to_collapse=["T", "C"]  # Collapse time and channels
     )
     # Returns shape (10, 512, 512)
@@ -677,8 +680,8 @@ class ImageDataModel:
 
     def load_existing_annotations(
         self,
-        image_shape,
-        image_index: int = 0,
+        image_index: int,
+        image_shape=None,
         subdirectory: str = "class_0",
         axes_to_collapse: str | list[str] | None = None,
     ):
@@ -687,8 +690,9 @@ class ImageDataModel:
         empty array matching annotation shape if no saved data exists.
 
         Args:
-            image_shape: Shape of the image to match for empty array creation.
             image_index: Index of the image in the model's image list.
+            image_shape: Shape of the image to match for empty array creation.
+                        Optional if loading existing file, required if file doesn't exist.
             subdirectory: Subdirectory under 'annotations' to look in (default: class_0).
             axes_to_collapse: Axis names to collapse from image shape (e.g., "C" for channels).
                             Pass "C" to get ZYX annotations from ZYXC image.
@@ -697,6 +701,9 @@ class ImageDataModel:
 
         Returns:
             numpy ndarray containing annotation labels (dtype preserved by io or uint16 zeros).
+
+        Raises:
+            ValueError: If file doesn't exist and image_shape is None.
         """
         # Defer imports to here to avoid bringing numpy/io into top-level module load
         import numpy as np
@@ -712,20 +719,25 @@ class ImageDataModel:
         io = self.get_annotations_io()
         data = io.load(str(annotation_dir), dataset_name)
 
+        # If data exists, return it
+        if data is not None and getattr(data, "size", 0) > 0:
+            return data
+
+        # If no data and no shape provided, can't create empty array
+        if image_shape is None:
+            raise ValueError(
+                f"No annotation file found for image {image_index} ('{dataset_name}') "
+                f"and image_shape not provided. Cannot create empty array without shape."
+            )
+
         # Compute target annotation shape (may be smaller than image if axes collapsed)
         annotation_shape = compute_collapsed_shape(
             image_shape, self.axis_types, axes_to_collapse
         )
 
-        # If nothing saved, return zeros with appropriate shape
-        if data is None or getattr(data, "size", 0) == 0:
-            # Create an empty instance image using centralized helper so
-            # annotations and predictions share the same shape rules.
-            return create_empty_instance_image(
-                annotation_shape, dtype=np.uint16
-            )
-
-        return data
+        # Create an empty instance image using centralized helper so
+        # annotations and predictions share the same shape rules.
+        return create_empty_instance_image(annotation_shape, dtype=np.uint16)
 
     def get_predictions_io(self):
         """Get prediction artifact io, auto-detecting type if not set."""
@@ -835,8 +847,8 @@ class ImageDataModel:
 
     def load_existing_predictions(
         self,
-        image_shape,
-        image_index: int = 0,
+        image_index: int,
+        image_shape=None,
         subdirectory: str | None = None,
         axes_to_collapse: str | list[str] | None = None,
     ):
@@ -845,8 +857,9 @@ class ImageDataModel:
         empty array matching prediction shape if no saved data exists.
 
         Args:
-            image_shape: Shape of the image to match for empty array creation.
             image_index: Index of the image in the model's image list.
+            image_shape: Shape of the image to match for empty array creation.
+                        Optional if loading existing file, required if file doesn't exist.
             subdirectory: Subdirectory under 'predictions' to look in.
                          If None, uses the current segmenter name.
             axes_to_collapse: Axis names to collapse from image shape (e.g., "C" for channels).
@@ -856,6 +869,9 @@ class ImageDataModel:
 
         Returns:
             numpy ndarray containing prediction labels (dtype preserved by io or uint16 zeros).
+
+        Raises:
+            ValueError: If file doesn't exist and image_shape is None.
         """
         import numpy as np
 
@@ -877,17 +893,24 @@ class ImageDataModel:
 
         data = io.load(str(preds_dir), dataset_name)
 
+        # If data exists, return it
+        if data is not None and getattr(data, "size", 0) > 0:
+            return data
+
+        # If no data and no shape provided, can't create empty array
+        if image_shape is None:
+            raise ValueError(
+                f"No prediction file found for image {image_index} ('{dataset_name}') "
+                f"in subdirectory '{subdirectory}' and image_shape not provided. "
+                f"Cannot create empty array without shape."
+            )
+
         # Compute target prediction shape (may be smaller than image if axes collapsed)
         prediction_shape = compute_collapsed_shape(
             image_shape, self.axis_types, axes_to_collapse
         )
 
-        if data is None or getattr(data, "size", 0) == 0:
-            return create_empty_instance_image(
-                prediction_shape, dtype=np.uint16
-            )
-
-        return data
+        return create_empty_instance_image(prediction_shape, dtype=np.uint16)
 
     # ------------------------------------------------------------------
     # Boxes / bounding-box ROI  (saved as CSV in labels/ directory)
@@ -2007,42 +2030,86 @@ class ImageDataModel:
         )
         processor.process_slice(current_step, process_fn, on_done)
 
-    def segment_all(
+    def segment_image_file(
         self,
         segmenter,
-        selected_axis,
-        axes_to_collapse=None,
-        on_slice_done=None,
-        on_progress=None,
+        image_index: int,
+        save_prediction: bool = True,
     ):
-        """Segment all non-spatial slices of image_data.
+        """Segment a single image file by index.
 
-        Creates a SliceProcessor and iterates. The caller controls what
-        happens after each slice via on_slice_done.
+        Simple file-based segmentation: load image, segment, optionally save.
 
         Args:
             segmenter: The segmenter instance to use.
-            selected_axis: Spatial axis string, e.g. "YX", "ZYX".
-            axes_to_collapse: Optional list of axis names that are collapsed.
-            on_slice_done: Optional callable(current_step, mask) called
-                after each slice is segmented.
-            on_progress: Optional callable(current_index, total_slices)
-                called before each slice for progress reporting.
+            image_index: Index of the image file to segment.
+            save_prediction: If True, save the prediction to disk.
 
         Returns:
-            SliceProcessor: The processor used (for access to total_slices etc.).
+            numpy.ndarray: The segmentation mask for this image.
         """
         self.set_current_segmenter_name(segmenter.__class__.__name__)
 
-        processor = SliceProcessor(
-            self.image_data.shape, selected_axis, axes_to_collapse
-        )
+        # Load the image file
+        image = self.load_image(image_index)
 
-        def operation(step):
-            return self.segment_slice(segmenter, step, selected_axis)
+        # Segment it
+        mask = self.segment(segmenter, image)
 
-        processor.process_all(operation, on_slice_done, on_progress)
-        return processor
+        # Save if requested
+        if save_prediction:
+            self.save_predictions(
+                mask,
+                image_index=image_index,
+                current_step=None,
+                selected_axis=None,
+                axes_to_collapse=None,
+            )
+
+        return mask
+
+    def segment_all(
+        self,
+        segmenter,
+        save_predictions: bool = True,
+        on_image_done=None,
+        on_progress=None,
+    ):
+        """Segment all image files in the directory.
+
+        Simple file-based segmentation that loops through all image files.
+        For stacked/sliced segmentation, use segment_range() instead.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            save_predictions: If True, save predictions to disk (default: True).
+            on_image_done: Optional callable(image_index, mask) called
+                after each image is segmented.
+            on_progress: Optional callable(current_index, total_images)
+                called before each image for progress reporting.
+
+        Returns:
+            dict: {image_index: mask} for all segmented images.
+        """
+        self.set_current_segmenter_name(segmenter.__class__.__name__)
+
+        image_paths = self.get_image_paths()
+        total_images = len(image_paths)
+        results = {}
+
+        for idx in range(total_images):
+            if on_progress:
+                on_progress(idx + 1, total_images)
+
+            mask = self.segment_image_file(
+                segmenter, idx, save_prediction=save_predictions
+            )
+            results[idx] = mask
+
+            if on_image_done:
+                on_image_done(idx, mask)
+
+        return results
 
     def segment_range(
         self,

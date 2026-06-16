@@ -241,8 +241,8 @@ class NDEasyAugment(BaseNDApp):
 
         # Load existing labels or create empty ones
         labels_data = self.image_data_model.load_existing_annotations(
-            image_data.shape,
             self.current_image_index,
+            image_data.shape,
             axes_to_collapse=self.axes_to_collapse,
         )
 

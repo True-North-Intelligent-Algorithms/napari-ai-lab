@@ -206,7 +206,7 @@ class NDStackedSequenceViewer(QWidget):
                 try:
                     # Load predictions for this method
                     predictions = model.load_existing_predictions(
-                        image_shape=image_shape, image_index=0
+                        image_index=0, image_shape=image_shape
                     )
 
                     if predictions is not None and predictions.size > 0:
