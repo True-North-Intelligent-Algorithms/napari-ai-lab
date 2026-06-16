@@ -2044,6 +2044,80 @@ class ImageDataModel:
         processor.process_all(operation, on_slice_done, on_progress)
         return processor
 
+    def segment_range(
+        self,
+        segmenter,
+        selected_axis,
+        start_index=None,
+        end_index=None,
+        axes_to_collapse=None,
+        on_slice_done=None,
+        on_progress=None,
+        use_threading=False,
+    ):
+        """Segment a range of non-spatial slices of image_data.
+
+        Reusable method for both GUI and notebook workflows. Can optionally
+        use threading for non-blocking execution.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX".
+            start_index: Optional inclusive flat index of the first slice
+                to process. Defaults to 0.
+            end_index: Optional inclusive flat index of the last slice to
+                process. Defaults to ``total_slices - 1``.
+            axes_to_collapse: Optional list of axis names that are collapsed.
+            on_slice_done: Optional callable(current_step, mask) called
+                after each slice is segmented.
+            on_progress: Optional callable(current_index, total_slices)
+                called before each slice for progress reporting.
+            use_threading: If True, returns a SliceProcessorThread that must
+                be started by the caller. If False, executes synchronously.
+
+        Returns:
+            If use_threading=False: SliceProcessor (for access to total_slices etc.)
+            If use_threading=True: (SliceProcessor, SliceProcessorThread)
+                The thread must be started by the caller with .start()
+        """
+        from ..utilities.slice_processor import SliceProcessorThread
+
+        self.set_current_segmenter_name(segmenter.__class__.__name__)
+
+        processor = SliceProcessor(
+            self.image_data.shape, selected_axis, axes_to_collapse
+        )
+
+        def operation(step):
+            return self.segment_slice(segmenter, step, selected_axis)
+
+        if use_threading:
+            # Return thread for caller to start and manage
+            thread = SliceProcessorThread(
+                processor,
+                operation,
+                start_index=start_index,
+                end_index=end_index,
+            )
+            # Connect callbacks if provided
+            if on_slice_done:
+                thread.slice_done.connect(
+                    lambda step, result: on_slice_done(step, result)
+                )
+            if on_progress:
+                thread.progress.connect(lambda cur, tot: on_progress(cur, tot))
+            return processor, thread
+        else:
+            # Synchronous execution
+            processor.process_all(
+                operation,
+                on_slice_done,
+                on_progress,
+                start_index=start_index,
+                end_index=end_index,
+            )
+            return processor
+
     def augment_slice(
         self,
         annotations,

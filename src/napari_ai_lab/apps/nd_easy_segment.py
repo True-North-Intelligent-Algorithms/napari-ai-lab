@@ -26,7 +26,6 @@ from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
 from ..utilities.slice_processor import (
     SliceProcessor,
-    SliceProcessorThread,
 )
 from ..utilities.training_thread import TrainingThread
 from ..utility import get_current_slice_indices
@@ -557,11 +556,17 @@ class NDEasySegment(BaseNDApp):
         # Setup shared context for the operation and callback
         self._setup_segment_context()
 
-        processor = SliceProcessor(
-            image_shape, selected_axis, self.axes_to_collapse
+        # Use the new segment_range method with threading
+        processor, thread = self.image_data_model.segment_range(
+            segmenter=self.segmenter,
+            selected_axis=selected_axis,
+            start_index=self.start_slice_spin.value(),
+            end_index=self.end_slice_spin.value(),
+            axes_to_collapse=self.axes_to_collapse,
+            use_threading=True,
         )
 
-        # Clamp spinbox bounds to the processor's slice count and read range.
+        # Clamp spinbox bounds to the processor's slice count
         max_idx = max(0, processor.total_slices - 1)
         self.start_slice_spin.setMaximum(max_idx)
         self.end_slice_spin.setMaximum(max_idx)
@@ -584,18 +589,13 @@ class NDEasySegment(BaseNDApp):
         # Disable button while running
         self.segment_all_btn.setEnabled(False)
 
-        # Launch threaded processing
-        self._segment_thread = SliceProcessorThread(
-            processor,
-            self._do_segment_slice,
-            start_index=start_idx,
-            end_index=end_idx,
-        )
-        self._segment_thread.progress.connect(self._on_segment_all_progress)
-        self._segment_thread.slice_done.connect(self._on_segment_slice_done)
-        self._segment_thread.finished.connect(self._on_segment_all_finished)
-        self._segment_thread.error.connect(self._on_segment_all_error)
-        self._segment_thread.start()
+        # Connect thread signals and start
+        self._segment_thread = thread
+        thread.progress.connect(self._on_segment_all_progress)
+        thread.slice_done.connect(self._on_segment_slice_done)
+        thread.finished.connect(self._on_segment_all_finished)
+        thread.error.connect(self._on_segment_all_error)
+        thread.start()
 
     def _on_segment_all_progress(self, current, total):
         """Handle progress updates from the worker thread (runs on main thread)."""
