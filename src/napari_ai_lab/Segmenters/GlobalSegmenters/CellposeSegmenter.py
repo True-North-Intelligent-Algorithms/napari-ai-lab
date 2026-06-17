@@ -5,6 +5,8 @@ This module provides a Cellpose segmenter for automatic cell segmentation
 of entire images without user prompts.
 """
 
+import json
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -115,6 +117,100 @@ Cellpose Automatic Cell Segmentation:
         },
     )
 
+    # Training parameters
+    num_epochs: int = field(
+        default=100,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 1000,
+            "step": 1,
+            "default": 100,
+        },
+    )
+
+    learning_rate: float = field(
+        default=0.0001,
+        metadata={
+            "type": "float",
+            "param_type": "training",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.0001,
+            "default": 0.0001,
+        },
+    )
+
+    weight_decay: float = field(
+        default=0.0001,
+        metadata={
+            "type": "float",
+            "param_type": "training",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.0001,
+            "default": 0.0001,
+        },
+    )
+
+    nimg_per_epoch: int = field(
+        default=50,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 1000,
+            "step": 10,
+            "default": 50,
+        },
+    )
+
+    bsize: int = field(
+        default=8,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 64,
+            "step": 1,
+            "default": 8,
+        },
+    )
+
+    rescale: bool = field(
+        default=True,
+        metadata={
+            "type": "bool",
+            "param_type": "training",
+            "default": True,
+        },
+    )
+
+    chan_segment: int = field(
+        default=0,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 0,
+            "max": 3,
+            "step": 1,
+            "default": 0,
+        },
+    )
+
+    chan2: int = field(
+        default=0,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 0,
+            "max": 3,
+            "step": 1,
+            "default": 0,
+        },
+    )
+
     def __post_init__(self):
         """Initialize the segmenter after dataclass initialization."""
         super().__init__()
@@ -122,6 +218,11 @@ Cellpose Automatic Cell Segmentation:
         # Set supported axes
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC", "TYX", "TYXC"]
+
+        # Training paths (set by nd_easy_segment before calling train())
+        self.patch_path = ""
+        self.model_save_dir = ""
+        self.training_model_name = ""
 
     def are_dependencies_available(self):
         """
@@ -322,6 +423,198 @@ task.outputs["mask"] = ndarr_mask
             "flow_threshold": self.flow_threshold,
             "cellpose_iterations": self.cellpose_iterations,
         }
+
+    def train(self, updater=None):
+        """
+        Train a Cellpose model on pre-generated patches.
+
+        Reads info.json from ``self.patch_path`` to determine axes, collects
+        training data, splits into train/test, and trains a new Cellpose
+        model.  The model is saved under ``self.model_save_dir / self.training_model_name``.
+
+        This signature mirrors StardistSegmenter.train() so that
+        ``_run_training`` can call every segmenter the same way.
+
+        Args:
+            updater: Optional callable ``updater(epoch, total_epochs, message)``
+                     for reporting progress back to the UI.
+
+        Returns:
+            dict with keys ``success`` (bool) and ``message`` (str).
+        """
+        from cellpose import models, train
+
+        from ...utilities.dl_util import (
+            collect_training_data,
+            divide_training_data,
+        )
+
+        # ---- resolve paths from self (set by _run_training) ----
+        patch_path = self.patch_path
+        model_name = self.training_model_name
+        model_base_path = self.model_save_dir
+
+        if not patch_path:
+            return {"success": False, "message": "patch_path is not set."}
+        if not model_base_path:
+            return {"success": False, "message": "model_save_dir is not set."}
+        if not model_name:
+            model_name = "cellpose_model"
+
+        # ---- read axes from info.json ----
+        json_path = os.path.join(patch_path, "info.json")
+        with open(json_path) as f:
+            info = json.load(f)
+        axes = info["axes"]
+
+        # Determine if we need channels
+        if axes == "YXC":
+            n_channel_in = 3
+            add_trivial_channel = False
+        else:
+            n_channel_in = 1
+            add_trivial_channel = True  # Cellpose expects channels dim
+
+        # ---- collect & split data ----
+        X, Y = collect_training_data(
+            patch_path,
+            normalize_input=False,
+            add_trivial_channel=add_trivial_channel,
+        )
+
+        X_train, Y_train, X_test, Y_test = divide_training_data(
+            X, Y, val_size=2
+        )
+
+        # Convert to numpy arrays
+        X_train = np.array(X_train).astype(np.float32)
+        Y_train = np.array(Y_train).astype(np.uint16)
+        X_test = np.array(X_test).astype(np.float32)
+        Y_test = np.array(Y_test).astype(np.uint16)
+
+        # Get cellpose major version
+        major_number = int(_cellpose_major_version)
+
+        msg = (
+            f"🏋️ Training Cellpose v{cellpose.version}: {len(X_train)} train, {len(X_test)} test\n"
+            f"   axes={axes}, n_channel_in={n_channel_in}\n"
+            f"   epochs={self.num_epochs}, batch_size={self.bsize}\n"
+            f"   learning_rate={self.learning_rate}, weight_decay={self.weight_decay}"
+        )
+        print(msg)
+        if updater is not None:
+            updater(0, self.num_epochs, msg)
+
+        # ---- create model ----
+        try:
+            if major_number >= 4:
+                model = models.CellposeModel(
+                    gpu=self.use_gpu, model_type=self.model_type
+                )
+            else:
+                model = models.Cellpose(
+                    gpu=self.use_gpu, model_type=self.model_type
+                )
+        except (AttributeError, ValueError, TypeError) as e:
+            print(f"Error creating model with GPU, falling back to CPU: {e}")
+            if major_number >= 4:
+                model = models.CellposeModel(
+                    gpu=False, model_type=self.model_type
+                )
+            else:
+                model = models.Cellpose(gpu=False, model_type=self.model_type)
+
+        # Create save directory
+        save_path = os.path.join(model_base_path, model_name)
+        os.makedirs(save_path, exist_ok=True)
+
+        print(
+            f"Training Cellpose model (version {major_number}.x) with {len(X_train)} training images..."
+        )
+
+        # ---- create progress updater wrapper ----
+        class _ProgressUpdater:
+            """Wrapper to track training progress."""
+
+            def __init__(self, updater_fn, num_epochs):
+                self.updater_fn = updater_fn
+                self.num_epochs = num_epochs
+                self.current_epoch = 0
+
+            def update(self, epoch, loss, test_loss=None):
+                """Called by train_seg after each epoch."""
+                self.current_epoch = epoch
+                if self.updater_fn is not None:
+                    test_msg = (
+                        f", test_loss: {test_loss:.4f}" if test_loss else ""
+                    )
+                    self.updater_fn(
+                        epoch,
+                        self.num_epochs,
+                        f"Epoch {epoch}/{self.num_epochs} — loss: {loss:.4f}{test_msg}",
+                    )
+
+        # ---- train model with version-specific parameters ----
+        try:
+            if major_number < 4:
+                # Cellpose 3.x - use bsize parameter
+                train.train_seg(
+                    model.net if hasattr(model, "net") else model.cp.net,
+                    X_train,
+                    Y_train,
+                    test_data=X_test,
+                    test_labels=Y_test,
+                    channels=[self.chan_segment, self.chan2],
+                    save_path=save_path,
+                    n_epochs=self.num_epochs,
+                    rescale=self.rescale,
+                    normalize=False,
+                    bsize=self.bsize,
+                    learning_rate=self.learning_rate,
+                    weight_decay=self.weight_decay,
+                    model_name=model_name,
+                    min_train_masks=0,
+                )
+            else:
+                # Cellpose 4.x - use nimg_per_epoch instead of bsize
+                train.train_seg(
+                    model.net if hasattr(model, "net") else model.cp.net,
+                    X_train,
+                    Y_train,
+                    test_data=X_test,
+                    test_labels=Y_test,
+                    save_path=save_path,
+                    n_epochs=self.num_epochs,
+                    rescale=self.rescale,
+                    normalize=False,
+                    learning_rate=self.learning_rate,
+                    weight_decay=self.weight_decay,
+                    nimg_per_epoch=self.nimg_per_epoch,
+                    model_name=model_name,
+                    min_train_masks=0,
+                )
+
+            done_msg = f"✅ Training complete. Model saved to: {save_path}"
+            print(done_msg)
+            if updater is not None:
+                updater(self.num_epochs, self.num_epochs, done_msg)
+
+            return {"success": True, "message": done_msg}
+
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            RuntimeError,
+            TypeError,
+            AttributeError,
+        ) as e:
+            error_msg = f"❌ Training failed: {str(e)}"
+            print(error_msg)
+            import traceback
+
+            traceback.print_exc()
+            return {"success": False, "message": error_msg}
 
     @classmethod
     def register(cls):
