@@ -295,7 +295,16 @@ Albumentations Advanced Augmentation:
 
         transform = self._create_augmentation_pipeline(patch_size_2d)
 
-        if im.ndim == 2:
+        # Determine if this is truly a 3D image or just RGB
+        # If last dimension is 3, it's RGB (not 3D)
+        # If last dimension is > 4, it's probably 3D
+        if im.ndim > 2:
+            last_dim = im.shape[-1]
+            is_3d = last_dim > 4 or last_dim not in [3, 4]
+        else:
+            is_3d = False
+
+        if not is_3d:
             # Single 2D image — apply transform directly
             augmented = transform(image=im, mask=mask)
             augmented_im = augmented["image"]
