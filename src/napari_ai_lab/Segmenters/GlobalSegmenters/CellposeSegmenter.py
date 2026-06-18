@@ -27,6 +27,17 @@ except ImportError:
     _cellpose_major_version = None
 
 
+# Model to axis mapping - defines the expected input axes for each Cellpose v3 model
+BUILTIN_MODEL_MAP_CP3 = {
+    "cyto3": "YX",  # Cellpose 3 cytoplasm model
+}
+
+# Model to axis mapping - defines the expected input axes for CellposeSAM models
+BUILTIN_MODEL_MAP_CPSAM = {
+    "cpsam": "YX",  # CellposeSAM model
+}
+
+
 @dataclass
 class CellposeSegmenter(GlobalSegmenterBase):
     """
@@ -47,17 +58,6 @@ Cellpose Automatic Cell Segmentation:
 • Best for: cells, nuclei, organisms with clear boundaries
 • Works with both brightfield and fluorescence images
     """
-
-    # Parameters for Cellpose segmentation
-    model_type: str = field(
-        default="cyto2",
-        metadata={
-            "type": "str",
-            "param_type": "inference",
-            "choices": ["cyto", "cyto2", "nuclei", "cyto3"],
-            "default": "cyto2",
-        },
-    )
 
     diameter: float = field(
         default=30.0,
@@ -224,6 +224,18 @@ Cellpose Automatic Cell Segmentation:
         self.model_save_dir = ""
         self.training_model_name = ""
 
+        # Set default inference model based on cellpose version
+        if _is_cellpose_available:
+            major_version = int(_cellpose_major_version)
+            if major_version < 4:
+                self.inference_model_name = "cyto3"  # Cellpose 3 default
+            else:
+                self.inference_model_name = (
+                    "cpsam"  # Cellpose 4 default (CellposeSAM)
+                )
+        else:
+            self.inference_model_name = "cyto2"  # Fallback
+
     def are_dependencies_available(self):
         """
         Check if required dependencies are available.
@@ -238,6 +250,71 @@ Cellpose Automatic Cell Segmentation:
         if _is_cellpose_available:
             return "cellpose" + str(cellpose.version)
         return None
+
+    def get_model_axis_map(self) -> dict:
+        """
+        Get the complete model-to-axis mapping (builtins + pretrained).
+
+        Returns:
+            dict: Dictionary mapping model names to recommended axes.
+        """
+        # Check cellpose version to determine which builtin map to use
+        version = self.get_version()
+        if version and _is_cellpose_available:
+            major_version = int(_cellpose_major_version)
+            if major_version < 4:
+                result = BUILTIN_MODEL_MAP_CP3.copy()
+            else:
+                result = BUILTIN_MODEL_MAP_CPSAM.copy()
+        else:
+            result = {}
+
+        # Add pretrained models from project directory
+        result.update(self.build_pretrained_model_map())
+        return result
+
+    def build_pretrained_model_map(self) -> dict:
+        """
+        Scan ``model_save_dir`` for user-trained Cellpose models.
+
+        A subdirectory is recognised as containing a Cellpose model when
+        it contains .pth files (Cellpose model files). The subdirectory
+        name becomes the model name, and we default to "YX" axis since
+        Cellpose doesn't store axis information in a config file.
+
+        Returns:
+            dict: {model_name: axis_string} for every valid model found.
+        """
+        if not self.model_save_dir or not os.path.isdir(self.model_save_dir):
+            return {}
+
+        cellpose_save_dir = os.path.join(self.model_save_dir, "models")
+        if not os.path.isdir(cellpose_save_dir):
+            return {}
+
+        pretrained = {}
+        for entry in os.listdir(cellpose_save_dir):
+            pretrained[entry] = "YX"
+
+        return pretrained
+
+    def set_model(self, model_name):
+        """Set the inference model name when user selects from dropdown.
+
+        Args:
+            model_name: Name of the model to use for inference.
+        """
+        self.inference_model_name = model_name
+
+        # Determine model source for logging
+        if model_name in BUILTIN_MODEL_MAP_CP3:
+            print(f"🔄 Selected Cellpose 3 model: {model_name}")
+        elif model_name in BUILTIN_MODEL_MAP_CPSAM:
+            print(f"🔄 Selected CellposeSAM model: {model_name}")
+        elif model_name in self.build_pretrained_model_map():
+            print(f"🔄 Selected user-trained model: {model_name}")
+        else:
+            print(f"🔄 Selected model: {model_name}")
 
     def segment(self, image, **kwargs):
         """
@@ -262,21 +339,52 @@ Cellpose Automatic Cell Segmentation:
         # Create model using cached major version
         try:
             if _cellpose_major_version == "4":
-                model = models.CellposeModel(
-                    gpu=self.use_gpu, model_type=self.model_type
-                )
+                if self.inference_model_name in BUILTIN_MODEL_MAP_CPSAM:
+                    print(
+                        f"Using CellposeSAM model: {self.inference_model_name}"
+                    )
+                    model = models.CellposeModel(
+                        gpu=self.use_gpu, model_type=self.inference_model_name
+                    )
+                else:
+                    full_model_name = os.path.join(
+                        self.model_save_dir,
+                        "models",
+                        self.inference_model_name,
+                    )
+                    model = models.CellposeModel(
+                        gpu=self.use_gpu,
+                        pretrained_model=full_model_name,
+                    )
+
             else:
-                model = models.Cellpose(
-                    gpu=self.use_gpu, model_type=self.model_type
-                )
+                if self.inference_model_name in BUILTIN_MODEL_MAP_CP3:
+                    print(
+                        f"Using Cellpose v3 model: {self.inference_model_name}"
+                    )
+                    model = models.Cellpose(
+                        gpu=self.use_gpu, model_type=self.inference_model_name
+                    )
+                else:
+                    full_model_name = os.path.join(
+                        self.model_save_dir,
+                        "models",
+                        self.inference_model_name,
+                    )
+                    model = models.Cellpose(
+                        gpu=self.use_gpu,
+                        pretrained_model=full_model_name,
+                    )
         except (AttributeError, ValueError, TypeError) as e:
             print(f"Error creating model with GPU, falling back to CPU: {e}")
             if _cellpose_major_version == "4":
                 model = models.CellposeModel(
-                    gpu=False, model_type=self.model_type
+                    gpu=False, model_type=self.inference_model_name
                 )
             else:
-                model = models.Cellpose(gpu=False, model_type=self.model_type)
+                model = models.Cellpose(
+                    gpu=False, model_type=self.inference_model_name
+                )
 
         # Perform segmentation
         diameter = None if self.diameter == 0 else self.diameter
@@ -525,7 +633,7 @@ task.outputs["mask"] = ndarr_mask
                 model = models.Cellpose(gpu=False, model_type=self.model_type)
 
         # Create save directory
-        save_path = os.path.join(model_base_path, model_name)
+        save_path = model_base_path
         os.makedirs(save_path, exist_ok=True)
 
         print(
@@ -598,6 +706,9 @@ task.outputs["mask"] = ndarr_mask
             print(done_msg)
             if updater is not None:
                 updater(self.num_epochs, self.num_epochs, done_msg)
+
+            # Set inference_model_name so UI can select the trained model
+            self.inference_model_name = model_name
 
             return {"success": True, "message": done_msg}
 
