@@ -40,7 +40,11 @@ class NDOperationWidget(QWidget):
     axis_changed = Signal(str)
 
     def __init__(
-        self, nd_operation=None, parent=None, param_type_to_parse=None
+        self,
+        nd_operation=None,
+        parent=None,
+        param_type_to_parse=None,
+        show_axis_combo=True,
     ):
         """
         Initialize the ND Operation widget.
@@ -52,11 +56,18 @@ class NDOperationWidget(QWidget):
                 with metadata['param_type'] matching this value will have widgets created.
                 If None, all fields will have widgets created. This allows creating specialized
                 widgets for specific parameter categories (e.g., 'training', 'inference', etc.).
+            show_axis_combo: If True (default), automatically add the
+                "Axis to Process" combo when the ND Operation declares
+                ``supported_axes``.  Set to False when the parent app
+                provides an alternate selector — for example the
+                training tab swaps the axis combo for a "Patches to
+                Process" combo populated from the project directory.
         """
         super().__init__(parent)
 
         self.nd_operation = nd_operation
         self.param_type_to_parse = param_type_to_parse
+        self.show_axis_combo = show_axis_combo
 
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
@@ -64,6 +75,10 @@ class NDOperationWidget(QWidget):
         self._instructions_text = None  # Instructions label widget
         self._axis_combo = None  # Axis selection combo box
         self.selected_axis = None  # Currently selected axis
+        # Optional "Patches to Process" combo (training mode only).
+        self._patches_combo = None
+        self._patches_label = None
+        self.selected_patches = None
 
         # Main layout
         self.main_layout = QVBoxLayout(self)
@@ -105,6 +120,14 @@ class NDOperationWidget(QWidget):
             self._axis_combo.deleteLater()
             self._axis_combo = None
 
+        # Clear patches combo if it exists
+        if self._patches_combo is not None:
+            self._patches_combo.deleteLater()
+            self._patches_combo = None
+        if self._patches_label is not None:
+            self._patches_label.deleteLater()
+            self._patches_label = None
+
         # Clear existing widgets
         while self.form_layout.count():
             child = self.form_layout.takeAt(0)
@@ -114,6 +137,7 @@ class NDOperationWidget(QWidget):
         self.parameter_widgets.clear()
         self.parameter_values.clear()
         self.selected_axis = None
+        self.selected_patches = None
 
     def parse_parameters(self):
         """
@@ -207,6 +231,8 @@ class NDOperationWidget(QWidget):
         """
         Add axis selection combo box if the ND Operation supports multiple axes.
         """
+        if not self.show_axis_combo:
+            return
         if hasattr(self.nd_operation, "supported_axes"):
             try:
                 # Get supported axes directly from the ND Operation instance
@@ -709,3 +735,59 @@ class NDOperationWidget(QWidget):
                 self.selected_axis = axis
             else:
                 print(f"Warning: Axis '{axis}' not found in available options")
+
+    # ------------------------------------------------------------------
+    # "Patches to Process" combo (training mode)
+    # ------------------------------------------------------------------
+    def set_patches_options(self, directory_names, current=None):
+        """Populate (or refresh) the "Patches to Process" combo.
+
+        This replaces the per-segmenter axis selection on the training
+        form with a list of patch subdirectories that actually exist on
+        disk (e.g. ``patches_axis_yxc``).  The combo is created on first
+        call and re-populated on subsequent calls.
+
+        Args:
+            directory_names: Iterable of subdirectory names to offer.
+            current: Optional name to preselect.  If omitted (or not in
+                ``directory_names``), the first entry is selected.
+        """
+        from qtpy.QtWidgets import QComboBox
+
+        names = list(directory_names) if directory_names else []
+
+        if self._patches_combo is None:
+            self._patches_combo = QComboBox()
+            self._patches_label = QLabel("Patches to Process:")
+            self._patches_combo.currentTextChanged.connect(
+                self._on_patches_changed
+            )
+            self.form_layout.addRow(self._patches_label, self._patches_combo)
+
+        self._patches_combo.blockSignals(True)
+        self._patches_combo.clear()
+        for name in names:
+            self._patches_combo.addItem(name)
+        if current and current in names:
+            self._patches_combo.setCurrentText(current)
+            self.selected_patches = current
+        elif names:
+            self.selected_patches = names[0]
+            self._patches_combo.setCurrentIndex(0)
+        else:
+            self.selected_patches = None
+        self._patches_combo.blockSignals(False)
+
+    def _on_patches_changed(self, name):
+        """Handle changes to the patches-to-process combo."""
+        self.selected_patches = name or None
+
+    def get_selected_patches(self):
+        """Return the currently selected patches subdirectory name.
+
+        Returns:
+            str or None:  Name of the selected ``patches_axis_*``
+            subdirectory, or ``None`` when the combo is empty / hasn't
+            been populated.
+        """
+        return self.selected_patches

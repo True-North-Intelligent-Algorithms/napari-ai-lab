@@ -463,6 +463,48 @@ class ImageDataModel:
 
         return patches_dir
 
+    def list_patches_directories(self) -> list[str]:
+        """Return the names of existing ``patches_axis_*`` subdirectories.
+
+        Patches are stored under ``patches/patches_axis_<axes>/`` where
+        ``<axes>`` is the lowercase axis string of the source image
+        (e.g. ``patches_axis_yxc`` for a YXC image).  This method
+        enumerates those subdirectories so the training UI can present
+        them to the user as a "Patches to Process" choice rather than
+        relying on a separately-tracked axis selection.
+
+        Returns:
+            Sorted list of subdirectory names under ``patches/`` that
+            start with ``patches_axis_``.  Returns an empty list when
+            ``parent_directory`` is unset or no patches have been
+            generated yet.
+        """
+        if self.parent_directory is None:
+            return []
+        root = self.parent_directory / "patches"
+        if not root.exists():
+            return []
+        return sorted(
+            d.name
+            for d in root.iterdir()
+            if d.is_dir() and d.name.startswith("patches_axis_")
+        )
+
+    def get_patches_directory_by_name(self, name: str) -> Path:
+        """Return the full path to a named patches subdirectory.
+
+        Args:
+            name: Subdirectory name as returned by
+                :meth:`list_patches_directories`, e.g. ``patches_axis_yxc``.
+
+        Returns:
+            Path to ``patches/<name>/``.  The directory is **not**
+            created here — callers should ensure it exists (it normally
+            does, since names come from
+            :meth:`list_patches_directories`).
+        """
+        return self.parent_directory / "patches" / name
+
     def delete_patches(self, axis: int | None = None):
         """
         Delete all patch files in the patches directory.

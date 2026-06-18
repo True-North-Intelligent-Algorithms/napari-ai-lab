@@ -285,14 +285,43 @@ class NDEasySegment(BaseNDApp):
 
     def _create_training_parameter_form(self):
         """Create the training parameter form widget."""
+        # The training form replaces the per-segmenter "Axis to Process"
+        # combo with a "Patches to Process" combo populated from the
+        # project directory (see _refresh_patches_combo).  Pass
+        # show_axis_combo=False so the auto-generated axis combo is
+        # suppressed.
         self.training_parameter_form = NDOperationWidget(
-            param_type_to_parse="training"
+            param_type_to_parse="training",
+            show_axis_combo=False,
         )
         # Connect to the same handler as segmenter params (updates will sync)
         self.training_parameter_form.parameters_changed.connect(
             self._on_segmenter_parameters_changed
         )
         return self.training_parameter_form
+
+    def _refresh_patches_combo(self):
+        """Refresh the training form's "Patches to Process" combo.
+
+        Lists existing ``patches_axis_*`` subdirectories under the
+        project's ``patches/`` folder via the image data model and
+        feeds them to the training parameter form.  The previously
+        selected entry is preserved when possible.
+        """
+        if not hasattr(self, "training_parameter_form"):
+            return
+        if self.image_data_model is None:
+            self.training_parameter_form.set_patches_options([])
+            return
+        try:
+            names = self.image_data_model.list_patches_directories()
+        except (OSError, AttributeError) as e:
+            print(f"Could not list patches directories: {e}")
+            names = []
+        current = self.training_parameter_form.get_selected_patches()
+        self.training_parameter_form.set_patches_options(
+            names, current=current
+        )
 
     def get_training_widget(self):
         """
@@ -321,11 +350,11 @@ class NDEasySegment(BaseNDApp):
         )
         layout.addWidget(self.training_segmenter_combo)
 
-        # Populate it with the same items as the main combo
-        self._populate_segmenter_combo()
-
-        # Training parameters form
+        # Training parameters form (create BEFORE populating combos so it exists when _on_segmenter_changed fires)
         layout.addWidget(self._create_training_parameter_form())
+
+        # Populate it with the same items as the main combo (triggers _on_segmenter_changed)
+        self._populate_segmenter_combo()
 
         # Model name input
         layout.addWidget(QLabel("Model name:"))
@@ -352,6 +381,9 @@ class NDEasySegment(BaseNDApp):
         if hasattr(self, "training_parameter_form"):
             self.training_parameter_form.set_nd_operation(segmenter)
             self._cross_connect_combos()
+            # Repopulate the "Patches to Process" combo whenever the
+            # training form is rebuilt (set_nd_operation clears it).
+            self._refresh_patches_combo()
 
         # Update range bounds and connect axis-change signal (idempotent)
         with contextlib.suppress(TypeError, RuntimeError):
@@ -963,20 +995,19 @@ class NDEasySegment(BaseNDApp):
             training_params: Dictionary of training parameter names and values
             use_progress_logger: If True, pass progress_logger to train method (embedded mode)
         """
-        # Get the selected axis to find the correct patches directory
-        selected_axis = self.segmenter_parameter_form.get_selected_axis()
-        if selected_axis:
-            # Convert axis to lowercase for directory name (e.g., "YX" -> "yx")
-            axis_lower = selected_axis.lower()
-            print(f"Using axis: {axis_lower} for patches directory")
+        # Get the selected "Patches to Process" subdirectory name and
+        # combine it with the base patches directory.
+        selected_patches = self.training_parameter_form.get_selected_patches()
+        patches_base = self.image_data_model.get_patches_directory()
+        if selected_patches:
+            patch_path = patches_base / selected_patches
+            print(f"Using patches: {selected_patches}")
         else:
-            axis_lower = None
-            print("No axis selected, using default patches directory")
+            patch_path = patches_base
+            print("No patches selected, using base patches directory")
 
         # Set patch path, model save dir, and model name directly on segmenter
-        self.segmenter.patch_path = str(
-            self.image_data_model.get_patches_directory(axis=axis_lower)
-        )
+        self.segmenter.patch_path = str(patch_path)
         self.segmenter.model_save_dir = str(
             self.image_data_model.get_models_directory()
         )
@@ -1010,7 +1041,7 @@ class NDEasySegment(BaseNDApp):
 
         # Set to False to run training synchronously on the GUI thread
         # (useful when stepping through the training code in a debugger).
-        thread_training = True
+        thread_training = False
 
         if not thread_training:
             # Synchronous path — blocks the GUI but is debugger-friendly.
