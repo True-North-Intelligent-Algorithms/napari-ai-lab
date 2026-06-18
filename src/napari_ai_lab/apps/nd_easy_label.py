@@ -2090,20 +2090,30 @@ class NDEasyLabel(BaseNDApp):
             middle = list(row.get("middle_positions", []))
 
             """
-            if stacked:
-                frame_idx = row.get("frame_index")
-                if frame_idx is None:
-                    # Image not found in current stack — skip
+            if self.image_data_model._is_stacked_sequence():
+                img_name = row.get("file_name", "unknown")
+
+                # Find the index of img_name in the image_paths list
+                image_paths = self.image_data_model.get_image_paths()
+                img_index = None
+                for idx, path in enumerate(image_paths):
+                    if path.name == img_name or path.stem == Path(img_name).stem:
+                        img_index = idx
+                        break
+
+                if img_index is None:
+                    # Image not found in current image paths — skip
                     print(
-                        f"⚠️  _load_existing_boxes: '{row['file_name']}' "
-                        "not in current stack — skipping"
+                        f"⚠️  _load_existing_boxes: '{img_name}' "
+                        "not found in image paths — skipping"
                     )
                     continue
-                # Stacked: leading axis is the frame index, then any middle axes
-                leading = [float(frame_idx), *middle]
+                # Stacked: leading axis is the image index, then any middle axes
+                leading = [float(img_index), *middle]
             else:
                 # Non-stacked: only the middle axes (e.g., Z, T) prefix YX
             """
+
             leading = [float(p) for p in middle]
 
             # Build a rectangle with the right number of leading dims
