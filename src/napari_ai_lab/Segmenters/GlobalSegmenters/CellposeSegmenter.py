@@ -386,6 +386,9 @@ Cellpose Automatic Cell Segmentation:
                     gpu=False, model_type=self.inference_model_name
                 )
 
+        if image.dtype == np.int32:
+            image = image.astype(np.float32)
+
         # Perform segmentation
         diameter = None if self.diameter == 0 else self.diameter
 
