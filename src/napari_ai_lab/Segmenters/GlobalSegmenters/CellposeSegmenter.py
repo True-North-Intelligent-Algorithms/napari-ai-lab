@@ -614,23 +614,55 @@ task.outputs["mask"] = ndarr_mask
             updater(0, self.num_epochs, msg)
 
         # ---- create model ----
+        # TODO: Training start point will be current inference model but consider
+        # making dropdown to choose training start point model
         try:
             if major_number >= 4:
-                model = models.CellposeModel(
-                    gpu=self.use_gpu, model_type=self.model_type
-                )
+                if self.inference_model_name in BUILTIN_MODEL_MAP_CPSAM:
+                    print(
+                        f"Training from CellposeSAM model: {self.inference_model_name}"
+                    )
+                    model = models.CellposeModel(
+                        gpu=self.use_gpu, model_type=self.inference_model_name
+                    )
+                else:
+                    full_model_name = os.path.join(
+                        self.model_save_dir,
+                        "models",
+                        self.inference_model_name,
+                    )
+                    model = models.CellposeModel(
+                        gpu=self.use_gpu,
+                        pretrained_model=full_model_name,
+                    )
             else:
-                model = models.Cellpose(
-                    gpu=self.use_gpu, model_type=self.model_type
-                )
+                if self.inference_model_name in BUILTIN_MODEL_MAP_CP3:
+                    print(
+                        f"Training from Cellpose v3 model: {self.inference_model_name}"
+                    )
+                    model = models.Cellpose(
+                        gpu=self.use_gpu, model_type=self.inference_model_name
+                    )
+                else:
+                    full_model_name = os.path.join(
+                        self.model_save_dir,
+                        "models",
+                        self.inference_model_name,
+                    )
+                    model = models.Cellpose(
+                        gpu=self.use_gpu,
+                        pretrained_model=full_model_name,
+                    )
         except (AttributeError, ValueError, TypeError) as e:
             print(f"Error creating model with GPU, falling back to CPU: {e}")
             if major_number >= 4:
                 model = models.CellposeModel(
-                    gpu=False, model_type=self.model_type
+                    gpu=False, model_type=self.inference_model_name
                 )
             else:
-                model = models.Cellpose(gpu=False, model_type=self.model_type)
+                model = models.Cellpose(
+                    gpu=False, model_type=self.inference_model_name
+                )
 
         # Create save directory
         save_path = model_base_path
