@@ -86,9 +86,9 @@ Cellpose Automatic Cell Segmentation:
         metadata={
             "type": "float",
             "param_type": "inference",
-            "min": 0.0,
-            "max": 1.0,
-            "step": 0.05,
+            "min": -5,
+            "max": 5,
+            "step": 0.2,
             "default": 0.0,
         },
     )
@@ -98,9 +98,9 @@ Cellpose Automatic Cell Segmentation:
         metadata={
             "type": "float",
             "param_type": "inference",
-            "min": 0.0,
-            "max": 3.0,
-            "step": 0.1,
+            "min": -5,
+            "max": 5,
+            "step": 0.2,
             "default": 0.4,
         },
     )
