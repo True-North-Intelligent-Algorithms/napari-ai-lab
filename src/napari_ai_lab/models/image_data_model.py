@@ -2110,7 +2110,61 @@ class ImageDataModel:
 
         return mask
 
-    def segment_all(
+    def segment_file_range(
+        self,
+        segmenter,
+        start_index: int = None,
+        end_index: int = None,
+        save_predictions: bool = True,
+        on_image_done=None,
+        on_progress=None,
+    ):
+        """Segment a range of image files.
+
+        Simple file-based segmentation that loops through a range of image files.
+        For stacked/sliced segmentation, use segment_range() instead.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            start_index: Index of first file to segment (default: 0).
+            end_index: Index of last file to segment (default: last file).
+            save_predictions: If True, save predictions to disk (default: True).
+            on_image_done: Optional callable(image_index, mask) called
+                after each image is segmented.
+            on_progress: Optional callable(current_index, total_images)
+                called before each image for progress reporting.
+
+        Returns:
+            dict: {image_index: mask} for all segmented images.
+        """
+        self.set_current_segmenter_name(segmenter.__class__.__name__)
+
+        image_paths = self.get_image_paths()
+        total_images = len(image_paths)
+
+        # Set defaults for start and end
+        if start_index is None:
+            start_index = 0
+        if end_index is None:
+            end_index = total_images - 1
+
+        results = {}
+
+        for idx in range(start_index, end_index + 1):
+            if on_progress:
+                on_progress(idx - start_index + 1, end_index - start_index + 1)
+
+            mask = self.segment_image_file(
+                segmenter, idx, save_prediction=save_predictions
+            )
+            results[idx] = mask
+
+            if on_image_done:
+                on_image_done(idx, mask)
+
+        return results
+
+    def segment_all_files(
         self,
         segmenter,
         save_predictions: bool = True,
@@ -2133,25 +2187,14 @@ class ImageDataModel:
         Returns:
             dict: {image_index: mask} for all segmented images.
         """
-        self.set_current_segmenter_name(segmenter.__class__.__name__)
-
-        image_paths = self.get_image_paths()
-        total_images = len(image_paths)
-        results = {}
-
-        for idx in range(total_images):
-            if on_progress:
-                on_progress(idx + 1, total_images)
-
-            mask = self.segment_image_file(
-                segmenter, idx, save_prediction=save_predictions
-            )
-            results[idx] = mask
-
-            if on_image_done:
-                on_image_done(idx, mask)
-
-        return results
+        return self.segment_file_range(
+            segmenter=segmenter,
+            start_index=None,
+            end_index=None,
+            save_predictions=save_predictions,
+            on_image_done=on_image_done,
+            on_progress=on_progress,
+        )
 
     def segment_range(
         self,
