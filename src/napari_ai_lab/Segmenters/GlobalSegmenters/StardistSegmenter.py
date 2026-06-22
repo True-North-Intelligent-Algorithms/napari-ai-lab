@@ -491,8 +491,6 @@ StarDist Automatic Segmentation:
         # Store original shape for later upscaling if needed
         original_shape = x.shape
 
-        self.downsize_factor = 2
-
         # Downsize if needed (must match training downsize)
         if self.downsize_factor != 1:
             x = self._downsize_image(x, self.downsize_factor, is_label=False)
