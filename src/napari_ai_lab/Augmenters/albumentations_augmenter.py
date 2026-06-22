@@ -164,6 +164,8 @@ Albumentations Advanced Augmentation:
     def __post_init__(self):
         """Initialize parent class after dataclass initialization."""
         super().__init__(seed=self.seed)
+        self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
+        self.supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self.normalize = self.normalize
         self.use_global_stats = self.use_global_stats
         self.do_vertical_flip = self.do_vertical_flip
