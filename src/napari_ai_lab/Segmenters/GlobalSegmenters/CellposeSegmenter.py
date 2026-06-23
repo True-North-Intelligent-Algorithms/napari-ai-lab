@@ -81,6 +81,7 @@ Cellpose Automatic Cell Segmentation:
     )
 
     # Probability threshold (cell probability)
+    # lower to find more structure
     prob_threshold: float = field(
         default=0.0,
         metadata={
@@ -93,6 +94,9 @@ Cellpose Automatic Cell Segmentation:
         },
     )
 
+    # flow threshold
+    # Todo: Research effect of this parameter and write better description
+    # higher values lead to more elongated protrusions for complicated cells ??
     flow_threshold: float = field(
         default=0.4,
         metadata={
