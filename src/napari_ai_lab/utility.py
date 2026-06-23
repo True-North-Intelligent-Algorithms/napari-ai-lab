@@ -172,6 +172,10 @@ def get_supported_axes_from_shape(image_shape, supported_axis, image_axis="U"):
         if (not requires_z or has_z) and (not requires_c or has_c):
             compatible_axes.append(axis)
 
+    # Priority order: ZYXC > ZYX > YXC > YX
+    priority = {"ZYXC": 0, "ZYX": 1, "YXC": 2, "YX": 3}
+    compatible_axes.sort(key=lambda x: priority.get(x.upper(), 99))
+
     return compatible_axes
 
 
