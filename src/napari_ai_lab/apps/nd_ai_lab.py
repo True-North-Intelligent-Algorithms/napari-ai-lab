@@ -231,6 +231,19 @@ class NDAILab(QWidget):
 
         print(f"✅ Central layer setup complete for image: {image_layer.name}")
 
+        # sync augmenter parameters with current image shape
+        self.augment_widget.sync_augmenter_parameters()
+
+        # Todo: this logic could fail if the new image is part of a sequence and we want to remember the last selected axis.
+        # For now, just reset to the first supported axis.
+        self.augment_widget.augmenter.selected_axis = (
+            self.augment_widget.augmenter.supported_axes[0]
+        )
+
+        self.augment_widget.augmentation_form.set_axis_combo(
+            self.augment_widget.augmenter.selected_axis
+        )
+
     def _distribute_layers_to_sub_apps(self):
         """
         Distribute the centrally-created layers to each sub-app.

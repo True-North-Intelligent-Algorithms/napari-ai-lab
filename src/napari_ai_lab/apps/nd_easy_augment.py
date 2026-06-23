@@ -206,7 +206,9 @@ class NDEasyAugment(BaseNDApp):
 
         # Store current augmenter
         self.augmenter = augmenter
+        self.sync_augmenter_parameters()
 
+    def sync_augmenter_parameters(self):
         # Filter axes based on current image shape
         if self.image_layer is not None and hasattr(
             self.augmenter, "_potential_axes"
@@ -217,6 +219,8 @@ class NDEasyAugment(BaseNDApp):
                 getattr(self.image_data_model, "axis_types", "U"),
             )
             self.augmenter.supported_axes = filtered
+
+            # if the current selected axis is not in the filtered list, reset it to the first available axis
             if (
                 hasattr(self.augmenter, "selected_axis")
                 and self.augmenter.selected_axis not in filtered
@@ -224,10 +228,8 @@ class NDEasyAugment(BaseNDApp):
             ):
                 self.augmenter.selected_axis = filtered[0]
 
-        print("About to set augmenter in augmentation form...")
         # Set the new augmenter in the form - this rebuilds the UI with new parameters
         self.augmentation_form.set_nd_operation(self.augmenter)
-        print("Augmentation form updated successfully")
 
     def _set_image_layer(self, image_layer):
         """
@@ -443,7 +445,27 @@ class NDEasyAugment(BaseNDApp):
         import numpy as np
         from skimage.io import imread
 
-        patches_dir = self.image_data_model.get_patches_directory(axis="yx")
+        # Get the selected axis from the form (matches what was used during augmentation)
+        selected_axis = self.augmentation_form.get_selected_axis()
+        if selected_axis:
+            patches_dir = self.image_data_model.get_patches_directory(
+                axis=selected_axis.lower()
+            )
+        else:
+            # Fallback: find any existing patches directory
+            patch_dirs = self.image_data_model.list_patches_directories()
+            if not patch_dirs:
+                QMessageBox.warning(
+                    self,
+                    "No Patches",
+                    "No patches found. Run augmentation first.",
+                )
+                return
+            # Use the first available patches directory
+            patches_dir = self.image_data_model.get_patches_directory_by_name(
+                patch_dirs[0]
+            )
+
         input_dir = patches_dir / "input0"
         truth_dir = patches_dir / "ground_truth0"
 
