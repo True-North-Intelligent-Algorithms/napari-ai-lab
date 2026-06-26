@@ -112,8 +112,9 @@ test_sets = [
     "nuclei",  # 6
     "spheres",  # 7
     "overlapping",  # 8
+    "tough cellpose", #9
 ]
-test_set = test_sets[7]
+test_set = test_sets[1]
 
 annotations_viewer_type = "none"
 
@@ -128,6 +129,7 @@ elif test_set == "neurips blood cells":
     parent_dir = test_images_dir / "neurips blood cells"
     viewer_type = "stacked"
     axes_to_collapse = "C"
+    axis_types = "NYXC"
 elif test_set == "fluorescent blobs":
     parent_dir = test_images_dir / "fluorescent blobs"
     viewer_type = "stacked"
@@ -152,16 +154,23 @@ elif test_set == "spheres":
     parent_dir = r"D:\deep-learning\labels\For_AI_lab"
     viewer_type = "stacked"
     axes_to_collapse = None
+    axis_types = "NZYX"  # Manually set axis types for testing purposes
 elif test_set == "overlapping":
     parent_dir = test_images_dir / "overlapping"
     viewer_type = "stacked"
     axes_to_collapse = "C"
+elif test_set == "tough cellpose":
+    parent_dir = test_images_dir / "tough_cellpose"
+    viewer_type = "stacked"
+    axes_to_collapse = "C" 
+    axis_types = "NYX"
 
 # Create model
 model = ImageDataModel(parent_dir)
 
+model.axis_types = axis_types if 'axis_types' in locals() else None
+
 ##### HACK
-model.axis_types = "NZYX"  # Manually set axis types for testing purposes
 
 # Configure annotation and prediction writer types based on viewer_type
 if viewer_type == "stacked" or annotations_viewer_type == "stacked":
