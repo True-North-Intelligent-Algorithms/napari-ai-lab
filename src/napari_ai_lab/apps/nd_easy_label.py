@@ -52,6 +52,17 @@ class NDEasyLabel(BaseNDApp):
             self.dir_btn.clicked.connect(self._on_open_directory)
             self.layout().addWidget(self.dir_btn)
 
+        # Top action row: Open Project + Save Project
+        top_btn_row = QHBoxLayout()
+        self.open_project_btn = QPushButton("Open Project")
+        self.open_project_btn.clicked.connect(self._on_open_project)
+        top_btn_row.addWidget(self.open_project_btn)
+
+        self.save_project_btn = QPushButton("Save Project")
+        self.save_project_btn.clicked.connect(self._on_save_project)
+        top_btn_row.addWidget(self.save_project_btn)
+        self.layout().addLayout(top_btn_row)
+
         # "Active Annotation Layer" combo at the top of the widget.  All
         # downstream actions (segmenters, augmenters, commit/erase,
         # painting, save, ...) operate against ``self.annotation_layer``
@@ -86,11 +97,6 @@ class NDEasyLabel(BaseNDApp):
 
         # Populate segmenter combo with registered frameworks
         self._populate_segmenter_combo()
-
-        # Single button saves annotations, boxes, and label patches
-        self.save_project_btn = QPushButton("Save Project")
-        self.save_project_btn.clicked.connect(self._on_save_project)
-        self.layout().addWidget(self.save_project_btn)
 
         # Current label number spinbox
         label_num_row = QHBoxLayout()
@@ -1963,6 +1969,16 @@ class NDEasyLabel(BaseNDApp):
                 traceback.print_exc()
         finally:
             self._interactive_roi_busy = False
+
+    def _on_open_project(self):
+        """Show the project-open dialog and apply its settings to the AI Lab."""
+        from .project_open_setup import ProjectOpenDialog, apply_project_setup
+
+        dialog = ProjectOpenDialog(self)
+        if dialog.exec_() != ProjectOpenDialog.Accepted:
+            return
+
+        apply_project_setup(self.ai_lab, dialog.get_values())
 
     def _on_save_project(self):
         """Save annotations, boxes, and label patches in one go."""

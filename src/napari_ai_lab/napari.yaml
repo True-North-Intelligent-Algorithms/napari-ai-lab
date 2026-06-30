@@ -15,6 +15,9 @@ contributions:
     - id: napari-ai-lab.nd_easy_segmentation
       python_name: napari_ai_lab.apps.nd_easy_segmentation:NDEasySegmentation
       title: ND Easy Segmentation (Unified)
+    - id: napari-ai-lab.nd_ai_lab
+      python_name: napari_ai_lab.apps.nd_ai_lab_plugin:NDAILabPlugin
+      title: ND AI Lab
   widgets:
     - command: napari-ai-lab.napari_easy_augment_batch_dl
       display_name: Easy Augment Batch DL
@@ -22,3 +25,5 @@ contributions:
       display_name: ND Easy Label
     - command: napari-ai-lab.nd_easy_segmentation
       display_name: ND Easy Segmentation (Unified)
+    - command: napari-ai-lab.nd_ai_lab
+      display_name: ND AI Lab

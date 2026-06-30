@@ -225,6 +225,14 @@ class BaseNDApp(QWidget):
         self.segmenter_cache = image_data_model.segmenter_cache
         print(f"{self.__class__.__name__}: Image data model set")
 
+        # Re-fire segmenter selection now that the model is available
+        # (the combo's initial firing was a no-op before the model existed).
+        if (
+            hasattr(self, "segmenter_combo")
+            and self.segmenter_combo.count() > 0
+        ):
+            self._on_segmenter_changed(self.segmenter_combo.currentText())
+
     # === Shared ROI / bounding-box helpers ===========================
     # Used by NDEasyLabel (preview-crop second viewer) and NDEasySegment
     # (Segment ROI + optional ROI preview viewer).
@@ -344,6 +352,11 @@ class BaseNDApp(QWidget):
         """Handle changes to segmenter selection."""
         if not segmenter_name or segmenter_name == "No segmenters available":
             self.segmenter_parameter_form.clear_form()
+            return
+
+        # No model yet (plugin opened without a project) — nothing to do.
+        # The combo will be re-fired by setup code once a project is loaded.
+        if self.image_data_model is None:
             return
 
         # Use model to get (and cache) segmenter instances

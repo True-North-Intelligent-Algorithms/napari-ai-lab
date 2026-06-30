@@ -83,6 +83,14 @@ class NDAILab(QWidget):
             axes_to_collapse=axes_to_collapse,
         )
 
+        # Back-reference so child widgets can call into NDAILab
+        # (used by "Open Project" button, "Copy predictions to labels", ...).
+        # Set here (not in _distribute_layers_to_sub_apps) so it is available
+        # even before the first image is loaded.
+        self.label_widget.ai_lab = self
+        self.augment_widget.ai_lab = self
+        self.segment_widget.ai_lab = self
+
         # If model provided, set it now
         if image_data_model is not None:
             self.set_image_data_model(image_data_model)
