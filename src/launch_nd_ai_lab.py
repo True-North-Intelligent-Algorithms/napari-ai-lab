@@ -5,19 +5,6 @@ This script launches the combined AI Lab plugin with Label, Augment,
 and Segment tabs in a single interface.
 """
 
-import os
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-print("A")
-
-print("B")
-
-print("C")
-
-print("D")
-
-
 from pathlib import Path
 
 import napari
@@ -112,16 +99,16 @@ test_sets = [
     "nuclei",  # 6
     "spheres",  # 7
     "overlapping",  # 8
-    "tough cellpose", #9
+    "tough cellpose",  # 9
 ]
-test_set = test_sets[1]
+test_set = test_sets[0]
 
 annotations_viewer_type = "none"
 
 if test_set == "vessels":
     # Load test data (vessels_project)
     # parent_dir = test_images_dir / "vessels_project"
-    parent_dir = test_images_dir / "vessels_ds2_fresh"
+    parent_dir = test_images_dir / "vessels_ds2"
     viewer_type = "none"
     annotations_viewer_type = "stacked"
     axes_to_collapse = None
@@ -162,13 +149,13 @@ elif test_set == "overlapping":
 elif test_set == "tough cellpose":
     parent_dir = test_images_dir / "tough_cellpose"
     viewer_type = "stacked"
-    axes_to_collapse = "C" 
+    axes_to_collapse = "C"
     axis_types = "NYX"
 
 # Create model
 model = ImageDataModel(parent_dir)
 
-model.axis_types = axis_types if 'axis_types' in locals() else None
+model.axis_types = axis_types if "axis_types" in locals() else None
 
 ##### HACK
 
