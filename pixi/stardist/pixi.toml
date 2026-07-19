@@ -36,13 +36,10 @@ appose = "*"
 PyQt5 = "*"
 albumentations = "*"
 
-# Use this to install from local folder in editable mode
-#napari-easy-augment-batch-dl = { path = "C:/Users/bnort/work/ImageJ2022/tnia/napari-easy-augment-batch-dl", editable = true }
-
 #napari-ai-lab = { git = "https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab" }
-
 # comment this in if you want to local editable install
 napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
+
 czifile = "*"
 bioio-czi = "*"
 pytest = "*"
