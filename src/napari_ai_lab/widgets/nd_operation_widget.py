@@ -75,6 +75,7 @@ class NDOperationWidget(QWidget):
         self._instructions_text = None  # Instructions label widget
         self._axis_combo = None  # Axis selection combo box
         self.selected_axis = None  # Currently selected axis
+        self._model_combo = None  # Model selection combo box
         # Optional "Patches to Process" combo (training mode only).
         self._patches_combo = None
         self._patches_label = None
@@ -119,6 +120,11 @@ class NDOperationWidget(QWidget):
         if self._axis_combo is not None:
             self._axis_combo.deleteLater()
             self._axis_combo = None
+
+        # Clear model combo if it exists
+        if self._model_combo is not None:
+            self._model_combo.deleteLater()
+            self._model_combo = None
 
         # Clear patches combo if it exists
         if self._patches_combo is not None:
@@ -318,7 +324,7 @@ class NDOperationWidget(QWidget):
 
     def refresh_model_combo(self, select_name=None):
         """Re-populate model combo from nd_operation.get_model_axis_map(), optionally select a model."""
-        if not hasattr(self, "_model_combo"):
+        if not hasattr(self, "_model_combo") or self._model_combo is None:
             return
         model_map = self.nd_operation.get_model_axis_map()
         self._model_combo.blockSignals(True)
@@ -331,7 +337,7 @@ class NDOperationWidget(QWidget):
 
     def set_model_combo(self, name):
         """Set model combo to name without triggering signals."""
-        if hasattr(self, "_model_combo"):
+        if hasattr(self, "_model_combo") and self._model_combo is not None:
             self._model_combo.blockSignals(True)
             self._model_combo.setCurrentText(name)
             self._model_combo.blockSignals(False)

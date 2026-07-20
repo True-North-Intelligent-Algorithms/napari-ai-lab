@@ -438,7 +438,12 @@ class NDEasySegment(BaseNDApp):
         trn = self.training_parameter_form
 
         # Model combo sync
-        if hasattr(seg, "_model_combo") and hasattr(trn, "_model_combo"):
+        if (
+            hasattr(seg, "_model_combo")
+            and seg._model_combo
+            and hasattr(trn, "_model_combo")
+            and trn._model_combo
+        ):
             seg._model_combo.currentTextChanged.connect(trn.set_model_combo)
             trn._model_combo.currentTextChanged.connect(seg.set_model_combo)
 
@@ -1041,9 +1046,9 @@ class NDEasySegment(BaseNDApp):
 
         # Set to False to run training synchronously on the GUI thread
         # (useful when stepping through the training code in a debugger).
-        thread_training = False
+        use_threading = True
 
-        if not thread_training:
+        if not use_threading:
             # Synchronous path — blocks the GUI but is debugger-friendly.
             updater = (
                 self.progress_logger.update_progress
@@ -1123,9 +1128,10 @@ class NDEasySegment(BaseNDApp):
 
         # Refresh model combos in both forms to include the newly trained model
         trained_name = self.segmenter.inference_model_name
-        self.segmenter_parameter_form.refresh_model_combo(
-            select_name=trained_name
-        )
+        if trained_name:
+            self.segmenter_parameter_form.refresh_model_combo(
+                select_name=trained_name
+            )
         if (
             hasattr(self.segmenter, "model_file_path")
             and self.segmenter.model_file_path
@@ -1133,7 +1139,7 @@ class NDEasySegment(BaseNDApp):
             self.segmenter_parameter_form.set_parameter(
                 "model_file_path", self.segmenter.model_file_path
             )
-        if hasattr(self, "training_parameter_form"):
+        if hasattr(self, "training_parameter_form") and trained_name:
             self.training_parameter_form.refresh_model_combo(
                 select_name=trained_name
             )
