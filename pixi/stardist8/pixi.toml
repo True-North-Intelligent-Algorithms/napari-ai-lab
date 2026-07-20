@@ -1,12 +1,9 @@
 [project]
-name = "stardist"
+name = "stardist8"
 authors = ["bnorthan <bnorthan@gmail.com>"]
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64"]
 version = "0.1.0"
-
-[tasks]
-startup = "python launch_model_results_viewer.py"
 
 [dependencies]
 python = "3.10.*"
