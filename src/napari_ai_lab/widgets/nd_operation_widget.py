@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSlider,
     QSpinBox,
     QVBoxLayout,
@@ -72,6 +73,7 @@ class NDOperationWidget(QWidget):
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
         self._dependency_label = None  # Dependency status label widget
+        self._remote_env_row = None  # Container for remote-env picker row
         self._instructions_text = None  # Instructions label widget
         self._axis_combo = None  # Axis selection combo box
         self.selected_axis = None  # Currently selected axis
@@ -110,6 +112,11 @@ class NDOperationWidget(QWidget):
         if self._dependency_label is not None:
             self._dependency_label.deleteLater()
             self._dependency_label = None
+
+        # Clear the remote-env picker row if it exists
+        if self._remote_env_row is not None:
+            self._remote_env_row.deleteLater()
+            self._remote_env_row = None
 
         # Clear instructions widget if it exists
         if self._instructions_text is not None:
@@ -215,6 +222,11 @@ class NDOperationWidget(QWidget):
             self._dependency_label.setWordWrap(True)
             self.main_layout.addWidget(self._dependency_label)
 
+            # When deps are missing, offer a "Choose Environment..." picker
+            # so the segmenter can be run remotely via appose.
+            if not deps_ok:
+                self._add_remote_env_row()
+
         # --- Instructions label ---
         if hasattr(self.nd_operation, "instructions"):
             instructions_text = self.nd_operation.instructions
@@ -232,6 +244,49 @@ class NDOperationWidget(QWidget):
                 print(
                     f"Added instructions for {self.nd_operation.__class__.__name__}"
                 )
+
+    def _add_remote_env_row(self):
+        """Show current remote-env pin + a button to (re)pick one.
+
+        Appears under the red 'Dependencies not available' banner so users
+        can point the segmenter at an external environment via appose.
+        """
+        from ..Segmenters.execute_appose import get_registry
+
+        seg_name = type(self.nd_operation).__name__
+        pinned = get_registry().resolve(seg_name)
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+
+        status = QLabel(
+            f"Remote env: <b>{pinned.name}</b>"
+            if pinned
+            else "Remote env: <i>none selected</i>"
+        )
+        status.setStyleSheet("QLabel { font-size: 12px; color: #444; }")
+        row_layout.addWidget(status, stretch=1)
+
+        btn = QPushButton(
+            "Change Environment..." if pinned else "Choose Environment..."
+        )
+        btn.clicked.connect(lambda: self._on_choose_remote_env(status, btn))
+        row_layout.addWidget(btn)
+
+        self._remote_env_row = row
+        self.main_layout.addWidget(row)
+
+    def _on_choose_remote_env(self, status_label, button):
+        """Open the RemoteEnvDialog and refresh the row on accept."""
+        from ..apps.remote_env_dialog import RemoteEnvDialog
+
+        seg_name = type(self.nd_operation).__name__
+        dlg = RemoteEnvDialog(segmenter_class_name=seg_name, parent=self)
+        if dlg.exec_() and dlg.selected_environment is not None:
+            env = dlg.selected_environment
+            status_label.setText(f"Remote env: <b>{env.name}</b>")
+            button.setText("Change Environment...")
 
     def _add_axis_selection_if_present(self):
         """
