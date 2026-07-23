@@ -442,7 +442,7 @@ import cellpose
 from cellpose import models
 
 # Parameters from segmenter
-model_type = "{self.model_type}"
+model_type = "{self.inference_model_name}"
 use_gpu = {self.use_gpu}
 diameter = {self.diameter if self.diameter != 0 else "None"}
 flow_threshold = {self.flow_threshold}
