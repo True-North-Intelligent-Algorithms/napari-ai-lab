@@ -76,6 +76,37 @@ class GlobalSegmenterBase(SegmenterBase):
             "Derived global segmenter classes must implement the segment method"
         )
 
+    def are_dependencies_available(self) -> bool:
+        """
+        Whether this segmenter can run in the current Python environment.
+
+        Default: True — segmenters with only stdlib/numpy/skimage-style
+        deps don't need to override this.  Segmenters that wrap optional
+        heavy dependencies (cellpose, stardist, monai, micro-sam, ...)
+        override this to guard their imports.
+        """
+        return True
+
+    def get_execution_string(self, image, **kwargs) -> str:
+        """
+        Return a self-contained Python script string that can be run in
+        another environment (via ``execute_appose``).
+
+        The script is expected to:
+
+        * read the input image from the appose scope variable ``image``
+          (an ``appose.NDArray`` — call ``.ndarray()`` for numpy),
+        * write the result as ``task.outputs["mask"] = <appose.NDArray>``.
+
+        Subclasses that want remote execution must override this and
+        inject their current parameters into the script (see
+        ``CellposeSegmenter.get_execution_string`` for the pattern).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement get_execution_string; "
+            "remote execution is not supported for this segmenter."
+        )
+
     # ------------------------------------------------------------------
     # Shared downsize/upsize helpers
     #
