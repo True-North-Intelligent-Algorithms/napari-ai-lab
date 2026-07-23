@@ -232,6 +232,110 @@ scikit-image Watershed Segmentation:
         )
         return labels.astype(np.uint16)
 
+    def get_execution_string(self, image, **kwargs):
+        """
+        Generate a self-contained Python script that reproduces this
+        segmentation on a remote worker (appose-style).
+
+        The current parameter values are baked into the string so the
+        remote process only needs scikit-image + scipy + numpy + appose.
+
+        Args:
+            image (numpy.ndarray): Input image (used only for shape/dtype
+                comments — the actual array is provided at execution time
+                as ``image``).
+
+        Returns:
+            str: Python source ready to run in a target environment.
+        """
+        image_shape = image.shape
+        image_dtype = str(image.dtype)
+
+        execution_code = f'''
+import numpy as np
+from scipy import ndimage as ndi
+from skimage import filters, measure, morphology, segmentation
+from skimage.feature import peak_local_max
+
+# Parameters from segmenter
+sigma = {self.sigma}
+threshold = {self.threshold}
+min_hole_size = {self.min_hole_size}
+min_obj_size = {self.min_obj_size}
+peak_min_distance = {self.peak_min_distance}
+invert = {self.invert}
+
+# Image will be provided as 'image' variable
+# image.shape = {image_shape}
+# image.dtype = {image_dtype}
+
+def _prepare(arr):
+    """Grayscale + [0,1] normalize (+ optional invert)."""
+    if arr.ndim >= 3 and arr.shape[-1] in (3, 4):
+        if arr.shape[-1] == 3:
+            arr = np.dot(arr[..., :3], [0.2989, 0.5870, 0.1140])
+        else:
+            arr = np.mean(arr, axis=-1)
+    arr = arr.astype(np.float32, copy=False)
+    vmin = float(arr.min())
+    vmax = float(arr.max())
+    if vmax > vmin:
+        arr = (arr - vmin) / (vmax - vmin)
+    else:
+        arr = np.zeros_like(arr, dtype=np.float32)
+    if invert:
+        arr = 1.0 - arr
+    return arr
+
+
+def skimage_watershed_segment_remote(image):
+    """Remote scikit-image watershed segmentation function."""
+    norm = _prepare(image)
+
+    blur = filters.gaussian(norm, sigma=sigma)
+    binary = blur >= threshold
+
+    if min_hole_size > 0:
+        binary = morphology.remove_small_holes(binary, area_threshold=min_hole_size)
+    if min_obj_size > 0:
+        binary = morphology.remove_small_objects(binary, min_size=min_obj_size)
+
+    if not binary.any():
+        print("SkImageWatershed: no foreground pixels after cleanup.")
+        return np.zeros(binary.shape, dtype=np.uint16)
+
+    distance = ndi.distance_transform_edt(binary)
+
+    coords = peak_local_max(
+        distance,
+        min_distance=max(1, int(peak_min_distance)),
+        labels=binary,
+    )
+    markers_array = np.zeros(distance.shape, dtype=bool)
+    if coords.size:
+        markers_array[tuple(coords.T)] = True
+    markers, _ = ndi.label(markers_array)
+
+    labels = segmentation.watershed(-distance, markers, mask=binary)
+    print(f"SkImageWatershed: {{int(labels.max())}} objects")
+    return labels.astype(np.uint16)
+
+
+# Execute segmentation
+print("Executing SkImageWatershed...")
+result = skimage_watershed_segment_remote(image.ndarray())
+
+# Convert result to appose format for output
+import appose
+
+ndarr_mask = appose.NDArray(dtype=str(result.dtype), shape=result.shape)
+ndarr_mask.ndarray()[:] = result
+
+task.outputs["mask"] = ndarr_mask
+'''
+
+        return execution_code
+
     def get_parameters_dict(self):
         """Return current inference parameters as a dict."""
         return {
