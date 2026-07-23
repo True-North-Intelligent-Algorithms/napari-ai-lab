@@ -30,6 +30,7 @@ _OPTIONAL_SEGMENTERS = {
     "MonaiUNetSegmenter3D": ".MonaiUNetSegmenter3D",
     "OtsuSegmenter": ".OtsuSegmenter",
     "ThresholdSegmenter": ".ThresholdSegmenter",
+    "SkImageWatershedSegmenter": ".SkImageWatershedSegmenter",
 }
 
 
