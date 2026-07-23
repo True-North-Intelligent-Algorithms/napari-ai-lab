@@ -2005,6 +2005,12 @@ class ImageDataModel:
         This method wraps the segmenter's segment call and automatically
         provides the parent_directory from the model.
 
+        If the segmenter reports its dependencies are not available in the
+        current environment (``are_dependencies_available() == False``),
+        the call is transparently routed to :func:`run_segmenter_remotely`,
+        which resolves an environment from the registry (or raises with a
+        friendly message if none is configured).
+
         Args:
             segmenter: The segmenter instance to use
             image_slice: The image data to segment
@@ -2014,11 +2020,24 @@ class ImageDataModel:
         Returns:
             numpy.ndarray: Segmentation mask
         """
-        return segmenter.segment(
-            image_slice,
-            points=points,
-            shapes=shapes,
-            parent_directory=self.parent_directory,
+        # Local execution when possible.
+        if getattr(segmenter, "are_dependencies_available", lambda: True)():
+            return segmenter.segment(
+                image_slice,
+                points=points,
+                shapes=shapes,
+                parent_directory=self.parent_directory,
+            )
+
+        # Otherwise run in a user-configured remote env.
+        from ..Segmenters.execute_appose import run_segmenter_remotely
+
+        print(
+            f"ℹ️  {type(segmenter).__name__} dependencies missing locally — "
+            "attempting remote execution via appose."
+        )
+        return run_segmenter_remotely(
+            segmenter, image_slice, points=points, shapes=shapes
         )
 
     def segment_slice(self, segmenter, current_step, selected_axis):
