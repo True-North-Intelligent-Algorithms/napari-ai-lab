@@ -18,6 +18,7 @@ from ..Segmenters.GlobalSegmenters import (
     MicroSamYoloSegmenter,
     MonaiUNetSegmenter,
     MonaiUNetSegmenter3D,
+    SkImageWatershedSegmenter,
     StardistSegmenter,
     ThresholdSegmenter,
 )
@@ -46,6 +47,7 @@ def register_all():
         MonaiUNetSegmenter,
         MonaiUNetSegmenter3D,
         MicroSamYoloSegmenter,
+        SkImageWatershedSegmenter,
     ):
         if seg is not None:
             seg.register()
