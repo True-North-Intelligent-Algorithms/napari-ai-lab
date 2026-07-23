@@ -19,6 +19,8 @@ Note:
 Test image:
     ``skimage.data.hubble_deep_field()`` — RGB Hubble Deep Field image.
     We sum the channels to a single-channel grayscale before segmenting.
+
+    ``skimage.data.coins()`` — grayscale coins image (303x384). Small and quick.
 """
 
 from __future__ import annotations
