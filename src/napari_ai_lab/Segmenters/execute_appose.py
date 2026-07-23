@@ -28,7 +28,7 @@ def execute_appose(image, segmenter, environment_path, additional_inputs=None):
 
         execution_string = segmenter.get_execution_string(image)
 
-        env = appose.base(environment_path).build()
+        env = appose.pixi().wrap(environment_path)
         ndarr_img = appose.NDArray(dtype=str(image.dtype), shape=image.shape)
         ndarr_img.ndarray()[:] = image
 
