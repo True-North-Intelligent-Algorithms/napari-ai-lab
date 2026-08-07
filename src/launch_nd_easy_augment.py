@@ -1,14 +1,19 @@
 """
 Launch script for ND Easy Augment app.
 
-Simple launcher to explore the augmentation widget interface.
+Launcher for exploring different augmentation frameworks with dynamic parameter controls.
 """
 
 import napari
 
 from napari_ai_lab.apps.nd_easy_augment import NDEasyAugment
+from napari_ai_lab.Augmenters import AlbumentationsAugmenter, SimpleAugmenter
 from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
+
+# Register all augmenters
+SimpleAugmenter.register()
+AlbumentationsAugmenter.register()
 
 # Flag to control viewer type
 viewer_type = None  # Options: None, "sequence"
