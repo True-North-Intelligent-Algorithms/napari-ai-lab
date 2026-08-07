@@ -1,0 +1,113 @@
+"""
+Visual flowchart showing StarDist model validation logic.
+
+┌─────────────────────────────────────────────────────────────┐
+│  User Changes Model Preset in StarDist Segmenter           │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+        ┌────────────────────────────┐
+        │ Get old model_preset value │
+        └────────────┬───────────────┘
+                     │
+                     ▼
+        ┌────────────────────────────────┐
+        │ Sync parameters to get new      │
+        │ model_preset value              │
+        └────────────┬───────────────────┘
+                     │
+                     ▼
+        ┌────────────────────────────────┐
+        │ Get recommended axis from       │
+        │ MODEL_AXIS_MAP                  │
+        │                                 │
+        │ - 2D_versatile_fluo → YX       │
+        │ - 2D_versatile_he   → YXC      │
+        │ - 3D_demo          → ZYX       │
+        └────────────┬───────────────────┘
+                     │
+                     ▼
+    ┌────────────────────────────────────────────┐
+    │ Is recommended axis in supported_axes?     │
+    │ (filtered based on current image shape)    │
+    └─────┬───────────────────────┬──────────────┘
+          │                       │
+    NO    │                       │    YES
+          ▼                       ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│ Show Warning Dialog  │  │ Set axis combo to    │
+│                      │  │ recommended axis     │
+│ "Model requires X    │  │                      │
+│  but image only has  │  │ - Updates UI combo   │
+│  Y. Load compatible  │  │ - Updates segmenter  │
+│  image."             │  │                      │
+└────────┬─────────────┘  └──────────┬───────────┘
+         │                           │
+         ▼                           ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│ Revert model_preset  │  │ Sync segmenter       │
+│ combo to old value   │  │ with new parameters  │
+│                      │  │                      │
+│ set_parameter(       │  │ Ready to segment!    │
+│   'model_preset',    │  │                      │
+│   old_value)         │  └──────────────────────┘
+└──────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+
+Example Scenarios:
+
+Scenario 1: Grayscale 2D Image (512×512, axis: YX)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Supported axes after filtering: ["YX"]
+
+┌─────────────────────┬──────────────┬─────────────┐
+│ Model Selection     │ Recommended  │ Result      │
+│                     │ Axis         │             │
+├─────────────────────┼──────────────┼─────────────┤
+│ 2D_versatile_fluo   │ YX          │ ✅ Auto-set  │
+│                     │              │    to YX    │
+├─────────────────────┼──────────────┼─────────────┤
+│ 2D_versatile_he     │ YXC         │ ⚠️  Warning  │
+│                     │              │    + Revert │
+├─────────────────────┼──────────────┼─────────────┤
+│ 3D_demo            │ ZYX         │ ⚠️  Warning  │
+│                     │              │    + Revert │
+└─────────────────────┴──────────────┴─────────────┘
+
+Scenario 2: RGB 2D Image (512×512×3, axis: YXC)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Supported axes after filtering: ["YX", "YXC"]
+
+┌─────────────────────┬──────────────┬─────────────┐
+│ Model Selection     │ Recommended  │ Result      │
+│                     │ Axis         │             │
+├─────────────────────┼──────────────┼─────────────┤
+│ 2D_versatile_fluo   │ YX          │ ✅ Auto-set  │
+│                     │              │    to YX    │
+├─────────────────────┼──────────────┼─────────────┤
+│ 2D_versatile_he     │ YXC         │ ✅ Auto-set  │
+│                     │              │    to YXC   │
+├─────────────────────┼──────────────┼─────────────┤
+│ 3D_demo            │ ZYX         │ ⚠️  Warning  │
+│                     │              │    + Revert │
+└─────────────────────┴──────────────┴─────────────┘
+
+Scenario 3: Grayscale 3D Image (32×512×512, axis: ZYX)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Supported axes after filtering: ["ZYX"]
+
+┌─────────────────────┬──────────────┬─────────────┐
+│ Model Selection     │ Recommended  │ Result      │
+│                     │ Axis         │             │
+├─────────────────────┼──────────────┼─────────────┤
+│ 2D_versatile_fluo   │ YX          │ ⚠️  Warning  │
+│                     │              │    + Revert │
+├─────────────────────┼──────────────┼─────────────┤
+│ 2D_versatile_he     │ YXC         │ ⚠️  Warning  │
+│                     │              │    + Revert │
+├─────────────────────┼──────────────┼─────────────┤
+│ 3D_demo            │ ZYX         │ ✅ Auto-set  │
+│                     │              │    to ZYX   │
+└─────────────────────┴──────────────┴─────────────┘
+"""

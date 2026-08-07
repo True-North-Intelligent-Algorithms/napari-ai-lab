@@ -1,0 +1,153 @@
+"""
+Visual comparison: Before and After adding progress logger
+
+═══════════════════════════════════════════════════════════════
+BEFORE: No visual feedback during segmentation
+═══════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│   Automatic Segmentation                    │
+├─────────────────────────────────────────────┤
+│  [Segment Current Image]                    │
+│  [Segment All Images]      ← Click          │
+│  [Train]                                    │
+│                                             │
+│                                             │
+│  (No feedback - user wonders if it's        │
+│   working or frozen...)                     │
+│                                             │
+└─────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+AFTER: Progress logger shows real-time updates
+═══════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│   Automatic Segmentation                    │
+├─────────────────────────────────────────────┤
+│  [Segment Current Image]                    │
+│  [Segment All Images]      ← Click          │
+│  [Train]                                    │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │ 📊 Progress Log                       │  │
+│  ├───────────────────────────────────────┤  │
+│  │ Starting segmentation of all slices...│  │
+│  │ Selected axis: YX                     │  │
+│  │ Image shape: (100, 512, 512)         │  │
+│  │ Total slices to segment: 100          │  │
+│  │                                       │  │
+│  │ ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░ 65%           │  │
+│  │ Processing slice 65/100               │  │
+│  │                                       │  │
+│  │ ✅ User knows it's working!           │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+Progress Flow for "Segment All Images" (10 slices)
+═══════════════════════════════════════════════════════════════
+
+Time: 0s
+┌─────────────────────────────────────────────┐
+│ Starting segmentation of all slices...      │
+│ Selected axis: YX                           │
+│ Image shape: (10, 512, 512)                │
+│ Total slices to segment: 10                 │
+│ ░░░░░░░░░░░░░░░░░░░░ 0%                   │
+│                                             │
+└─────────────────────────────────────────────┘
+
+Time: 1s
+┌─────────────────────────────────────────────┐
+│ Starting segmentation of all slices...      │
+│ Selected axis: YX                           │
+│ Image shape: (10, 512, 512)                │
+│ Total slices to segment: 10                 │
+│ ▓▓░░░░░░░░░░░░░░░░░░ 10%                  │
+│ Processing slice 1/10                       │
+└─────────────────────────────────────────────┘
+
+Time: 2s
+┌─────────────────────────────────────────────┐
+│ Starting segmentation of all slices...      │
+│ Selected axis: YX                           │
+│ Image shape: (10, 512, 512)                │
+│ Total slices to segment: 10                 │
+│ ▓▓▓▓░░░░░░░░░░░░░░░░ 20%                  │
+│ Processing slice 2/10                       │
+└─────────────────────────────────────────────┘
+
+Time: 5s
+┌─────────────────────────────────────────────┐
+│ Starting segmentation of all slices...      │
+│ Selected axis: YX                           │
+│ Image shape: (10, 512, 512)                │
+│ Total slices to segment: 10                 │
+│ ▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░ 50%                  │
+│ Processing slice 5/10                       │
+└─────────────────────────────────────────────┘
+
+Time: 10s (Complete)
+┌─────────────────────────────────────────────┐
+│ Starting segmentation of all slices...      │
+│ Selected axis: YX                           │
+│ Image shape: (10, 512, 512)                │
+│ Total slices to segment: 10                 │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 100%                 │
+│ Processing slice 10/10                      │
+│ ✅ Completed segmentation of all 10 slices  │
+└─────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+Progress Flow for "Segment Current Image"
+═══════════════════════════════════════════════════════════════
+
+Time: 0s
+┌─────────────────────────────────────────────┐
+│ Segmenting current image...                 │
+│ ░░░░░░░░░░░░░░░░░░░░ 0%                   │
+│                                             │
+└─────────────────────────────────────────────┘
+
+Time: 0.5s
+┌─────────────────────────────────────────────┐
+│ Segmenting current image...                 │
+│ ▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░ 50%                  │
+│ Processing...                               │
+└─────────────────────────────────────────────┘
+
+Time: 1s (Complete)
+┌─────────────────────────────────────────────┐
+│ Segmenting current image...                 │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 100%                 │
+│ ✅ Complete                                 │
+│ ✅ Segmentation complete                    │
+└─────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+Code Changes Summary
+═══════════════════════════════════════════════════════════════
+
+1. Created progress logger instance:
+   self.segment_progress_logger = QtProgressLogger()
+
+2. Added widget to UI layout:
+   auto_layout.addWidget(self.segment_progress_logger.get_widget())
+
+3. Update in _on_segment_current():
+   - clear()
+   - log_info("Segmenting current image...")
+   - update_progress(50, "Processing...")
+   - update_progress(100, "✅ Complete")
+
+4. Update in _on_segment_all():
+   - clear()
+   - log_info("Starting...")
+   - log_info configuration info
+   - FOR EACH SLICE:
+       update_progress(percent, "Processing slice X/Y")
+   - log_info("✅ Completed...")
+
+═══════════════════════════════════════════════════════════════
+"""
