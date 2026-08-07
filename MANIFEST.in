@@ -3,3 +3,16 @@ include README.md
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
+
+# setuptools_scm's file finder puts every git-tracked file into the sdist, so
+# anything not pruned here ships. The wheel is unaffected -- it only ever
+# contains the package under src/ -- but the sdist was 23 MB before these,
+# almost all of it notebook output images.
+prune notebooks
+prune experiments
+prune scripts
+prune temp_scripts
+prune pixi
+prune design
+prune docs
+prune .github

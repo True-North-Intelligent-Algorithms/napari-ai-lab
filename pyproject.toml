@@ -35,10 +35,20 @@ dependencies = [
     "scikit-image",
 ]
 
+[project.urls]
+Homepage = "https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab"
+Source = "https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab"
+"Bug Tracker" = "https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab/issues"
+
 [project.optional-dependencies]
 # Allow easily installation with the full, default napari installation
 # (including Qt backend) using napari-ai-lab[all].
 all = ["napari[all]"]
+
+# Running a heavy model stack in a separate environment. Not a hard dependency:
+# napari_ai_lab.Segmenters.execute_appose imports it lazily, so only callers
+# that take the remote-environment path need it.
+appose = ["appose"]
 
 [dependency-groups]
 testing = [

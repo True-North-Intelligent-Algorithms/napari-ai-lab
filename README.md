@@ -1,15 +1,34 @@
 # napari-ai-lab
 
-[![License BSD-3](https://img.shields.io/pypi/l/napari-ai-lab.svg?color=green)](https://github.com/bnorthan/napari-ai-lab/raw/main/LICENSE)
+[![License BSD-3](https://img.shields.io/pypi/l/napari-ai-lab.svg?color=green)](https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/napari-ai-lab.svg?color=green)](https://pypi.org/project/napari-ai-lab)
 [![Python Version](https://img.shields.io/pypi/pyversions/napari-ai-lab.svg?color=green)](https://python.org)
-[![tests](https://github.com/bnorthan/napari-ai-lab/workflows/tests/badge.svg)](https://github.com/bnorthan/napari-ai-lab/actions)
-[![codecov](https://codecov.io/gh/bnorthan/napari-ai-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/bnorthan/napari-ai-lab)
+[![tests](https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab/workflows/tests/badge.svg)](https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab/actions)
+[![codecov](https://codecov.io/gh/True-North-Intelligent-Algorithms/napari-ai-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/True-North-Intelligent-Algorithms/napari-ai-lab)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-ai-lab)](https://napari-hub.org/plugins/napari-ai-lab)
 [![npe2](https://img.shields.io/badge/plugin-npe2-blue?link=https://napari.org/stable/plugins/index.html)](https://napari.org/stable/plugins/index.html)
 [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-purple.json)](https://github.com/copier-org/copier)
 
 A collection of plugins and utilities for ND segmentation with Cellpose, StarDist, SAM and more
+
+## Status: early, and released for a specific reason
+
+This is an alpha release. It exists so that the analysis in a forthcoming
+article can be reproduced against a fixed, installable version, rather than
+against a moving git branch.
+
+That means:
+
+- **The API will change without deprecation.** Pin an exact version.
+- Parts of it are experimental, and some segmenters are more finished than
+  others.
+- The deep-learning ops are expected to migrate to
+  [scikit-ops](https://github.com/apposed/scikit-ops)
+  over subsequent releases, which will change how segmenters are invoked.
+
+If you are here from the article, install the exact version it pins. If you are
+here to use it day to day, it is probably too early — but issues and feedback
+are welcome.
 
 ----------------------------------
 
