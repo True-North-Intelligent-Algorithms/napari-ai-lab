@@ -9,14 +9,11 @@ from pathlib import Path
 
 import napari
 
-from napari_ai_lab.apps.nd_ai_lab import NDAILab
+from napari_ai_lab.apps.nd_ai_lab_launcher import launch_nd_ai_lab
 from napari_ai_lab.Augmenters import (
     AlbumentationsAugmenter,
     SimpleAugmenter,
 )
-from napari_ai_lab.models import ImageDataModel
-from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
-from napari_ai_lab.nd_stacked_sequence_viewer import NDStackedSequenceViewer
 
 # Register all segmenters and augmenters
 from napari_ai_lab.Segmenters.GlobalSegmenters import (
@@ -26,6 +23,7 @@ from napari_ai_lab.Segmenters.GlobalSegmenters import (
     MicroSamYoloSegmenter,
     MonaiUNetSegmenter,
     MonaiUNetSegmenter3D,
+    SkImageWatershedSegmenter,
     StardistSegmenter,
     ThresholdSegmenter,
 )
@@ -61,6 +59,8 @@ if MonaiUNetSegmenter3D is not None:
     MonaiUNetSegmenter3D.register()
 if MicroSamYoloSegmenter is not None:
     MicroSamYoloSegmenter.register()
+if SkImageWatershedSegmenter is not None:
+    SkImageWatershedSegmenter.register()
 
 # Register interactive segmenters
 Square2D.register()
@@ -100,8 +100,10 @@ test_sets = [
     "spheres",  # 7
     "overlapping",  # 8
     "tough cellpose",  # 9
+    "new",  # 10
 ]
-test_set = test_sets[0]
+
+test_set = test_sets[1]
 
 annotations_viewer_type = "none"
 
@@ -114,7 +116,7 @@ if test_set == "vessels":
     axes_to_collapse = None
 elif test_set == "neurips blood cells":
     parent_dir = test_images_dir / "neurips blood cells"
-    viewer_type = "stacked"
+    viewer_type = "sequence"
     axes_to_collapse = "C"
     axis_types = "NYXC"
 elif test_set == "fluorescent blobs":
@@ -151,58 +153,24 @@ elif test_set == "tough cellpose":
     viewer_type = "stacked"
     axes_to_collapse = "C"
     axis_types = "NYX"
+elif test_set == "new":
+    parent_dir = (
+        r"/home/bnorthan/images/tnia-python-images/imagesc/2026_07_07_bubbles"
+    )
+    viewer_type = ("none",)
+    axes_to_collapse = ("C",)
+    axis_types = "YXC"
 
 # Create model
-model = ImageDataModel(parent_dir)
-
-model.axis_types = axis_types if "axis_types" in locals() else None
-
-##### HACK
-
-# Configure annotation and prediction writer types based on viewer_type
-if viewer_type == "stacked" or annotations_viewer_type == "stacked":
-    model.set_annotation_io_type(
-        "stacked_sequence", axes_to_collapse=axes_to_collapse
-    )
-    model.set_prediction_io_type(
-        "stacked_sequence", axes_to_collapse=axes_to_collapse
-    )
-    # Set save granularity for testing
-    model.set_annotation_save_granularity("YX")
-    model.set_prediction_save_granularity("YX")
-
-# Create combined widget WITH model
-nd_ai_lab_widget = NDAILab(viewer, model, axes_to_collapse=axes_to_collapse)
-viewer.window.add_dock_widget(nd_ai_lab_widget, area="right", name="AI Lab")
-
-# Add the appropriate sequence viewer widget based on viewer_type
-if viewer_type == "stacked":
-    nd_sequence_viewer_widget = NDStackedSequenceViewer(viewer)
-elif viewer_type == "sequence":
-    nd_sequence_viewer_widget = NDSequenceViewer(viewer)
-
-if viewer_type in ["stacked", "sequence"]:
-    viewer.window.add_dock_widget(
-        nd_sequence_viewer_widget, name="Sequence Viewer", area="bottom"
-    )
-
-    # Connect sequence viewer to segment widget for automatic layer updates
-    nd_ai_lab_widget.connect_sequence_viewer(nd_sequence_viewer_widget)
-
-    # Automatically load images from the parent directory into sequence viewer
-    nd_sequence_viewer_widget.set_image_data_model(model)
-else:
-    # Load first image (viewer_type = "none" logic)
-    image_data = model.load_image(0)
-    image_layer = viewer.add_image(
-        image_data, name="Image", scale=model.get_scale()
-    )
-
-    # Phase 3: Central layer setup - call nd_ai_lab's _set_image_layer
-    # This creates all layers once and distributes to sub-apps
-    nd_ai_lab_widget._set_image_layer(image_layer)
-
-nd_ai_lab_widget.segment_widget.automatic_mode_btn.setChecked(True)
+# Launch using helper; keep the test-set selection code above unchanged so this
+# script remains a clear example for third-party projects.
+nd_ai_lab_widget, nd_sequence_viewer_widget, model = launch_nd_ai_lab(
+    viewer,
+    parent_dir,
+    viewer_type=viewer_type,
+    axes_to_collapse=axes_to_collapse,
+    axis_types=axis_types if "axis_types" in locals() else None,
+)
 
 print("✨ ND AI Lab launched successfully!")
 print(f"   Loaded: {parent_dir}")
