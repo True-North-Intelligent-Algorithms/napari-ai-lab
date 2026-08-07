@@ -517,9 +517,13 @@ class NDAILab(QWidget):
 
         layers_to_remove = []
 
-        # Collect layers to remove
-        if hasattr(self, "labels_layer") and self.annotations_layer:
-            layers_to_remove.append(("Labels", self.annotations_layer))
+        # Named annotation layers (one per annotations/ subdirectory).
+        if hasattr(self, "annotations_layers") and self.annotations_layers:
+            for ann_name, layer in self.annotations_layers.items():
+                layers_to_remove.append((f"Annotation ({ann_name})", layer))
+        elif hasattr(self, "labels_layer") and self.annotation_layer:
+            # Fallback for the single-layer case.
+            layers_to_remove.append(("Labels", self.annotation_layer))
 
         # Handle predictions_layers dictionary (multiple prediction layers)
         if hasattr(self, "predictions_layers") and self.predictions_layers:
@@ -534,6 +538,10 @@ class NDAILab(QWidget):
             layers_to_remove.append(("Shapes", self.shapes_layer))
         if hasattr(self, "boxes_layer") and self.boxes_layer:
             layers_to_remove.append(("Boxes", self.boxes_layer))
+        if hasattr(self, "working_layer") and self.working_layer:
+            layers_to_remove.append(("Labels (Working)", self.working_layer))
+        if hasattr(self, "boxes_3D_layer") and self.boxes_3D_layer:
+            layers_to_remove.append(("3D Bounding Boxes", self.boxes_3D_layer))
 
         # Remove layers from viewer
         for layer_name, layer in layers_to_remove:
@@ -545,14 +553,22 @@ class NDAILab(QWidget):
                 print(f"      Error removing {layer_name}: {e}")
 
         # Clear references
+        if hasattr(self, "annotations_layers"):
+            self.annotations_layers = {}
         if hasattr(self, "labels_layer"):
-            self.annotations_layer = None
+            self.annotation_layer = None
         if hasattr(self, "predictions_layers"):
             self.predictions_layers = {}
         if hasattr(self, "points_layer"):
             self.points_layer = None
         if hasattr(self, "shapes_layer"):
             self.shapes_layer = None
+        if hasattr(self, "boxes_layer"):
+            self.boxes_layer = None
+        if hasattr(self, "working_layer"):
+            self.working_layer = None
+        if hasattr(self, "boxes_3D_layer"):
+            self.boxes_3D_layer = None
         if hasattr(self, "boxes_layer"):
             self.boxes_layer = None
 
