@@ -432,7 +432,6 @@ Cellpose Automatic Cell Segmentation:
         # Create the execution string
         execution_code = """
 import numpy as np
-task.outputs["hello"] = "Hello from CellposeSegmenter!"
 """
 
         # Create the execution string
