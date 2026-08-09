@@ -8,7 +8,11 @@ for large multi-dimensional arrays and supports compression and smart slicing.
 from pathlib import Path
 
 import numpy as np
-import zarr
+
+try:
+    import zarr
+except ImportError:  # optional dependency
+    zarr = None
 
 from .base_artifact_io import BaseArtifactIO
 
@@ -30,7 +34,16 @@ class ZarrArtifactIO(BaseArtifactIO):
 
         Args:
             subdirectory: Subdirectory name under 'annotations' (default: "class_0")
+
+        Raises:
+            ImportError: If zarr is not installed. It is an optional
+                dependency, so the rest of the package works without it.
         """
+        if zarr is None:
+            raise ImportError(
+                "Zarr artifact I/O requires zarr, which is not installed. "
+                "Install it with: pip install zarr"
+            )
         super().__init__(subdirectory)
         self.shape_total = None  # Total size of the full array
         self.axis_slice = None  # Axis string for slicing (e.g., "YX", "ZYX")
