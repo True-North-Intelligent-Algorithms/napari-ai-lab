@@ -1,7 +1,17 @@
+# Keeps annotations as strings rather than evaluating them at import time.
+# Without it, `-> A.Compose` below is evaluated when the class body runs, which
+# is None.Compose on a machine without albumentations -- an import-time crash
+# the try/except cannot prevent.
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
-import albumentations as A
 import numpy as np
+
+try:
+    import albumentations as A
+except ImportError:  # optional dependency
+    A = None
 
 from .augmenter_base import AugmenterBase
 
@@ -162,7 +172,17 @@ Albumentations Advanced Augmentation:
     )
 
     def __post_init__(self):
-        """Initialize parent class after dataclass initialization."""
+        """Initialize parent class after dataclass initialization.
+
+        Raises:
+            ImportError: If albumentations is not installed. It is an optional
+                dependency; SimpleAugmenter works without it.
+        """
+        if A is None:
+            raise ImportError(
+                "AlbumentationsAugmenter requires albumentations, which is "
+                "not installed. Install it with: pip install albumentations"
+            )
         super().__init__(seed=self.seed)
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self.supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]

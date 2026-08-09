@@ -209,6 +209,10 @@ class NDEasyAugment(BaseNDApp):
         self.sync_augmenter_parameters()
 
     def sync_augmenter_parameters(self):
+
+        if not hasattr(self, "augmenter") or self.augmenter is None:
+            return
+
         # Filter axes based on current image shape
         if self.image_layer is not None and hasattr(
             self.augmenter, "_potential_axes"

@@ -242,6 +242,13 @@ class NDAILab(QWidget):
         # sync augmenter parameters with current image shape
         self.augment_widget.sync_augmenter_parameters()
 
+        # guard against missing augmenter
+        if (
+            not hasattr(self.augment_widget, "augmenter")
+            or self.augment_widget.augmenter is None
+        ):
+            return
+
         # Todo: this logic could fail if the new image is part of a sequence and we want to remember the last selected axis.
         # For now, just reset to the first supported axis.
         self.augment_widget.augmenter.selected_axis = (
