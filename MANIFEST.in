@@ -9,6 +9,7 @@ recursive-exclude * *.py[co]
 # contains the package under src/ -- but the sdist was 23 MB before these,
 # almost all of it notebook output images.
 prune notebooks
+prune benchmarks
 prune experiments
 prune scripts
 prune temp_scripts
