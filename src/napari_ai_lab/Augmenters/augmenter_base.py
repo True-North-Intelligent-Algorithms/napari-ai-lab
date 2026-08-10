@@ -36,14 +36,38 @@ class AugmenterBase(ABC):
     registry = {}
 
     @classmethod
+    def are_dependencies_available(cls) -> bool:
+        """Whether this augmenter can actually be constructed.
+
+        Mirrors ``GlobalSegmenterBase.are_dependencies_available``. The default
+        is True; an augmenter whose optional dependency may be missing
+        overrides it. Registration consults this, so a registry entry means the
+        augmenter is usable rather than merely importable -- see
+        docs/spec/0003-optional-dependencies.md.
+        """
+        return True
+
+    @classmethod
     def register_framework(cls, name, framework):
         """
         Add a framework to the registry.
+
+        Skips registration when the framework's dependencies are missing.
+        Registering it anyway would offer the user something that raises
+        ImportError the moment the combo box selects it -- which is what
+        happened with albumentations, since it sorts first and so was selected
+        automatically at startup.
 
         Args:
             name (str): The name of the framework.
             framework (AugmenterBase): The framework class to register.
         """
+        if not framework.are_dependencies_available():
+            print(
+                f"Skipping augmenter {name}: dependencies not available. "
+                f"See docs/spec/0003-optional-dependencies.md"
+            )
+            return
         cls.registry[name] = framework
         print(f"Registered augmenter: {name}")
 

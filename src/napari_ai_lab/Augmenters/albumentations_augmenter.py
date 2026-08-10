@@ -199,6 +199,11 @@ Albumentations Advanced Augmentation:
         self.normalization_jitter = self.normalization_jitter
 
     @classmethod
+    def are_dependencies_available(cls) -> bool:
+        """False when albumentations is not installed, so register() skips."""
+        return A is not None
+
+    @classmethod
     def register(cls):
         """Register this augmenter with the framework."""
         return AugmenterBase.register_framework("AlbumentationsAugmenter", cls)
