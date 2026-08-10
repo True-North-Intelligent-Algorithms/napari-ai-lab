@@ -33,25 +33,64 @@ added to a viewer with a canvas. That is the core reason this cannot be
 automated away, and the argument for a smoke test that actually builds a
 viewer and adds a layer.
 
-### Which copy is actually running
+### How the version directories work
 
-There are four vendored copies — `napari_0_4_15`, `napari_0_4_18`,
-`napari_0_5_0`, `napari_0_6_0` — and `_utils.parse_package_by_napari_version`
-picks the **highest directory whose version is <= the installed napari**. On
-napari 0.8.0 that is `napari_0_6_0`, and there is no 0.8 directory.
-
-Each copy subclasses the one below it, but **not uniformly**, and this is the
-trap when patching:
+`_utils.parse_package_by_napari_version` lists the `napari_*` directories and
+picks the **highest one whose version is <= the installed napari**. The
+directories are not independent copies: each is a *delta* on the one below,
+subclassing it and overriding only what changed. `napari_0_6_0/bounding_boxes.py`
+is a single line re-exporting the 0.5.0 class.
 
 ```
-model:  0_6_0 -> 0_5_0 -> 0_4_18 -> 0_4_15      (a fix in 0_4_15 is inherited)
-visual: 0_6_0 -> 0_5_0 -> 0_4_15                (0_5_0 overrides __init__,
-                                                 so a fix in 0_4_15 is NOT used)
+napari_0_4_15   the full vendored copy, thousands of lines
+napari_0_4_18   \
+napari_0_5_0     >  deltas, each subclassing the previous
+napari_0_6_0    /
+napari_0_8_0    added here -- see the incidents below
 ```
 
-So before fixing anything, find the class that is actually in the chain for
-the napari version you are on. A fix in the wrong copy compiles, imports and
-does nothing.
+**A fix belongs in a new directory for the napari version that required it**,
+not in an older one. Two reasons: older directories stay byte-identical to what
+was vendored, so they are provably untouched; and the diff for a release's
+worth of breakage is one self-contained directory, which is what makes this
+readable to anyone else.
+
+The chains differ between the model and the visual, which is worth knowing
+before assuming where a class comes from:
+
+```
+model:  0_8_0 -> 0_6_0 -> 0_5_0 -> 0_4_18 -> 0_4_15
+visual: 0_8_0 -> 0_5_0 -> 0_4_15            (0_6_0 only re-exports;
+                                             0_5_0 overrides __init__)
+```
+
+An earlier attempt at the 0.8 work patched `napari_0_4_15` in place. The model
+fix was inherited and worked; the visual fix was silently dead, because
+`napari_0_5_0` overrides that `__init__`. Both were reverted in favour of the
+directory below.
+
+### The wildcard import trap
+
+`_bounding_boxes_key_bindings.py` has no `__all__` and imports
+`BoundingBoxLayer` itself. So this, at the end of a version directory's
+`__init__.py`:
+
+```python
+from .bounding_boxes import BoundingBoxLayer          # ours
+from ._bounding_boxes_key_bindings import *           # silently overwrites it
+```
+
+re-exports the *older* class and clobbers the one just imported. It raises
+nothing; the package imports cleanly and the wrong class is used. The symptom
+is `BoundingBoxLayer.__module__` naming a directory you did not expect.
+
+Put the wildcard import **first** so the explicit imports win. Worth checking
+with:
+
+```python
+from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
+print(BoundingBoxLayer.__module__)
+```
 
 ## Incidents
 
@@ -70,12 +109,14 @@ new `@abstractmethod`, `_get_layer_slicing_state`, which returns a
 for every existing subclass — an existing layer cannot be instantiated until
 it implements the method.
 
-**Fix.** 12 lines in
-`boundingbox/napari_0_4_15/bounding_boxes.py`: a `_BoundingBoxSlicingState`
-that routes `_set_view_slice` back to the layer's own existing method — the
-same two-line adapter `Shapes` uses — plus the method returning it. The import
-of `_LayerSlicingState` is guarded so the file still works on napari < 0.8,
-where the class does not exist.
+**Fix.** `napari_0_8_0/bounding_boxes.py`, 10 lines: a
+`_BoundingBoxSlicingState` routing `_set_view_slice` back to the layer's own
+existing method — the same two-line adapter napari's `Shapes` uses — and
+`_get_layer_slicing_state` returning it.
+
+Because the directory only loads on napari >= 0.8, `_LayerSlicingState` can be
+imported unconditionally. No version guards are needed anywhere in it, which
+is the main practical benefit of putting the work in its own directory.
 
 **Notes.** The traceback points at a `def` line inside the class body, which
 reads like a call and is not; it is the annotation being evaluated. Worth
@@ -95,35 +136,57 @@ argument, and `_qt/qt_viewer.py` passes `font_info=self.canvas.font_info()`
 when it constructs the visual for every layer. The vendored visual's
 `__init__` predates that and does not accept it.
 
-**Fix.** Accept `**kwargs` and forward them to the base `__init__`. This is
-version-agnostic: on older napari nothing extra is passed, on 0.8 `font_info`
-flows through, and whatever the next release adds flows through too without
-another patch.
+**Fix.** `napari_0_8_0/vispy_bounding_box_layer.py`. Accept `**kwargs` and
+forward them to the base `__init__`, taking kwargs rather than naming
+`font_info` so whatever the next release adds passes through without another
+patch.
 
-Applied in **two** places, because the visual class is overridden partway up
-the chain:
+The subclass has to repeat the whole constructor body rather than calling
+`super().__init__`, because the 0.5.0 version it inherits from builds the
+visual and calls `VispyBaseLayer.__init__` itself, passing neither. Everything
+after those two lines is copied unchanged.
 
-- `boundingbox/napari_0_4_15/vispy_bounding_box_layer.py` — the base
-- `boundingbox/napari_0_5_0/vispy_bounding_box_layer.py` — **the one that
-  actually runs on napari 0.8**, which calls `VispyBaseLayer.__init__`
-  directly rather than going through its parent
+### napari 0.8.0 — `ClippingPlanesMixin` requires `font_info` too
 
-The first fix alone changed nothing at runtime. See "Which copy is actually
-running" above — this cost a wasted edit and is the single most useful thing
-in this file for whoever hits the next one.
+**Symptom**
+
+```
+TypeError: ClippingPlanesMixin.__init__() missing 1 required keyword-only
+argument: 'font_info'
+```
+
+**Cause.** The same change, one level deeper. `font_info` has to reach not only
+the vispy *layer* but the compound visual *node* it builds:
+`ClippingPlanesMixin.__init__(self, *args, font_info: FontInfo, **kwargs)` is
+keyword-only and required.
+
+**Fix.** `napari_0_8_0/vispy_bounding_box_visual.py`, a subclass taking
+`**kwargs` and forwarding them, plus `node = BoundingBoxVisual(**kwargs)` in
+the layer above. napari's own `VispyShapesLayer` does exactly this — passes
+`font_info` to both the visual and the base layer — so the shape of the fix is
+copied from upstream rather than invented.
+
+Three separate constructor sites for one added argument, each discovered by a
+separate crash, is worth noting: the cost of an added required argument on a
+base class is paid once per subclass *per level of the hierarchy*.
 
 ## For the napari conversation
 
 Points worth carrying forward:
 
-- Both breaks were **additive from napari's side** — a new abstract method, a
-  new constructor argument — and neither is additive from a subclass's point
-  of view. Adding an `@abstractmethod` to a public base class is a breaking
-  change for every downstream layer.
-- Neither break is detectable without running a GUI. A downstream maintainer
-  finds out when a user reports a crash.
-- The fixes are individually small. The cost is not the code, it is the
+- All three breaks were **additive from napari's side** — a new abstract
+  method, a new constructor argument — and none is additive from a subclass's
+  point of view. Adding an `@abstractmethod`, or a required argument to a base
+  `__init__`, is a breaking change for every downstream layer.
+- One added argument (`font_info`) required **three** separate fixes, because
+  it has to be threaded through every level of the hierarchy that constructs
+  something. The cost of such a change scales with the depth of downstream
+  class hierarchies, which is invisible from inside napari.
+- None of it is detectable without running a GUI. A downstream maintainer finds
+  out when a user reports a crash.
+- The fixes are individually small — 10 to 20 lines. The cost is the
   discovery: each one took a fresh environment, a failing run, and a read
-  through napari's source to work out what was expected.
+  through napari's source to work out what was expected. Three crash-fix-rerun
+  cycles for one release.
 - A documented, supported extension point for custom layers — or a 3D bounding
   box layer in napari itself — would remove all of this.
