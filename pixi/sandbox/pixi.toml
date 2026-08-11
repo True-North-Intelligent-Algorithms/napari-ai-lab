@@ -1,0 +1,45 @@
+[project]
+name = "ai_lab_sandbox"
+authors = ["bnorthan <bnorthan@gmail.com>"]
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
+version = "0.1.0"
+
+# Deliberately minimal: napari, Qt and napari-ai-lab, nothing else. This env
+# exists to measure UI behaviour -- see benchmarks/bench_sequence_switch.py --
+# so every dependency that is not on that path is a dependency that makes the
+# measurement slower to set up and harder to attribute.
+#
+# In particular there is no pytorch. The segmenter packages catch ImportError
+# and return None (Segmenters/GlobalSegmenters/__init__.py), so the app loads
+# without it. Expect "Could not import <Segmenter>" warnings at startup: that
+# is the guard working, not a failure. Use one of the other environments under
+# pixi/ when you need to actually run a model.
+#
+# napari-ai-lab is installed editable on purpose here. This is a development
+# sandbox, not a reproducible environment.
+
+[dependencies]
+python = "3.12.*"
+
+[pypi-dependencies]
+PyQt5 = "*"
+napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
+
+# napari is pinned per environment rather than here, so the same benchmark can
+# be run against two versions and the numbers compared. 0.6.6 is what the other
+# environments in this repo use; 0.8.0 is where the sequence-switch performance
+# work is reported to have landed.
+[feature.napari-new.pypi-dependencies]
+napari = "==0.8.0"
+
+[feature.napari-old.pypi-dependencies]
+napari = "==0.6.6"
+
+[environments]
+default = ["napari-new"]
+old = ["napari-old"]
+
+[tasks]
+bench = "python ../../benchmarks/bench_sequence_switch.py"
+bench-profile = "python ../../benchmarks/bench_sequence_switch.py --profile"
