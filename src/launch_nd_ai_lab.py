@@ -62,6 +62,21 @@ if MicroSamYoloSegmenter is not None:
 if SkImageWatershedSegmenter is not None:
     SkImageWatershedSegmenter.register()
 
+# Register one scikit-ops op as a global segmenter. It runs in scikit-ops' own
+# environment, so this works even though StarDist and TensorFlow are not
+# installed here -- which is what lets this host stay on a current napari.
+# Explicit rather than discovered: see docs/spec/0004.
+try:
+    from skop.ops.segment.stardist2d import stardist2d_fluo
+
+    from napari_ai_lab.Segmenters.GlobalSegmenters.SkopSegmenter import (
+        SkopSegmenter,
+    )
+
+    SkopSegmenter.register_op(stardist2d_fluo, "StarDist2D (scikit-ops)")
+except ImportError as exc:
+    print(f"ℹ️  scikit-ops segmenter not registered: {exc}")
+
 # Register interactive segmenters
 Square2D.register()
 Otsu2D.register()
