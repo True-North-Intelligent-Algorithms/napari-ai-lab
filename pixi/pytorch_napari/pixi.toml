@@ -1,0 +1,105 @@
+[workspace]
+name = "pytorch_napari"
+description = "Host environment for ND AI Lab: napari, Qt, torch and Cellpose. Nothing else."
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
+version = "0.1.0"
+
+# This is the *host* environment -- the one napari-ai-lab itself runs in. It is
+# deliberately the smallest thing that runs the app with one working global
+# segmenter, and it exists because the older hosts could not be moved forward.
+#
+# What is NOT here, and why:
+#
+#   micro_sam           depends on `napari >=0.5,<0.6` outright, which pins the
+#                       whole application a napari major version back
+#   segment-everything  pins `onnxsim==0.4.36`, which has no wheel past cp311,
+#                       so it pins Python at 3.11 as well
+#   StarDist            TensorFlow, which constrains everything around it
+#   monai               not needed to run the app
+#
+# Those stacks are not gone; they move to scikit-ops, which builds and runs
+# them in their own environments on first use. That is the entire argument of
+# docs/spec/0001-what-moves-to-scikit-ops.md, and dropping them from the host
+# is what buys Python 3.12 and napari 0.8 -- the latter being roughly 4-5x
+# faster at sequence switching (benchmarks/bench_sequence_switch.py).
+#
+# Expect most segmenters to report their dependencies as missing here. That is
+# the design, not a broken environment: see
+# docs/spec/0003-optional-dependencies.md. Cellpose should report available.
+
+[system-requirements]
+cuda = "12.0"
+
+[dependencies]
+python = "3.12.*"
+torchvision = "*"
+
+# NB: cellpose is deliberately NOT here, though conda-forge has it and
+# scikit-ops' envs/pytorch installs it that way. Conda's cellpose is a noarch
+# package, so it installs the original PyPI dist-info, which declares
+#
+#     Requires-Dist: opencv-python-headless
+#
+# uv reads that and cannot tell that conda's `py-opencv` already provides
+# `cv2` -- the distribution names do not match -- so it installs the PyPI
+# opencv wheel on top of the conda one. Two cv2 implementations then compete,
+# and the loser resolves libgobject-2.0.so.0 out of the other's install:
+#
+#     ImportError: .../cv2/.../libgobject-2.0.so.0: undefined symbol:
+#     g_pointer_bit_unlock_and_set
+#
+# That surfaces as `import cellpose` failing *only after* napari is imported,
+# which CellposeSegmenter's try/except turns into "dependencies not
+# available" -- a confusing symptom for a package that is installed twice.
+#
+# Conda's opencv is also a qt6 build, which puts a second Qt in an
+# environment running PyQt5. Taking cellpose from PyPI avoids both.
+
+[pypi-dependencies]
+# Pinned rather than left open, because the point of this environment is to be
+# on 0.8 specifically. If a conda dependency above turns out to want an older
+# napari, this pin makes it fail at solve time rather than silently downgrading
+# the thing we came here for.
+napari = "==0.8.0"
+PyQt5 = "*"
+
+# From PyPI rather than conda -- see the note in [dependencies] above. Torch
+# stays on conda, where the CUDA builds are; cellpose finds it there.
+cellpose = ">=4"
+
+napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
+
+# For the first scikit-ops op -- docs/spec/0004. scikit-ops needs only Python
+# >=3.10 and pulls in no model stack of its own; the heavy environments it runs
+# ops in are built separately, on demand.
+scikit-ops = { path = "../../../scikit-ops", editable=true}
+
+# appose from main, not PyPI: PixiInstallMonitor landed in 3e97f55 and is in no
+# release, so 0.11/0.12 report nothing at all while an environment builds,
+# turning the first run of an op into a silent multi-minute hang.
+appose = { git = "https://github.com/apposed/appose-python", branch = "main" }
+
+# Needed only for the generated parameter panel, step 3 of docs/spec/0004.
+# Uncomment when you get there. It requires Python >=3.12, which this
+# environment already satisfies.
+#skop-napari = { path = "../../../skop-napari", editable=true}
+
+# Deliberately absent: zarr, albumentations. The app must run without them
+# (docs/spec/0003), and this is the environment that proves it.
+
+[target.linux-64.dependencies]
+pytorch-gpu = "*"
+cudnn = "*"
+cuda-version = "12.2"
+
+[target.win-64.dependencies]
+pytorch-gpu = "*"
+cudnn = "*"
+
+[target.osx-arm64.dependencies]
+pytorch = "*"
+
+[tasks]
+lab = "python ../../src/launch_nd_ai_lab.py"
+poc = "python ../../experiments/skop_stardist_poc.py"
