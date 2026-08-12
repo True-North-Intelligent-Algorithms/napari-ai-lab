@@ -174,6 +174,12 @@ class NDAILab(QWidget):
         # Key: segmenter name (e.g., "CellposeSegmenter", "StarDist")
         # Value: napari labels layer
         # Populated on demand when segmentation runs or existing predictions are loaded
+        # The index has to be pushed *before* this call, not with the rest of
+        # the distribution below: _load_existing_prediction_layers reads
+        # current_image_index off the segment widget, so loading here with the
+        # previous image's index finds nothing and creates no layer -- which
+        # looks like a saved segmentation having vanished.
+        self.segment_widget.current_image_index = self.current_image_index
         self.segment_widget._load_existing_prediction_layers(
             self.image_layer.data.shape
         )
@@ -266,6 +272,24 @@ class NDAILab(QWidget):
         Uses direct attribute assignment instead of calling sub-apps' _set_image_layer()
         to avoid duplicate layer creation.
         """
+        # Every sub-widget reads current_image_index when it saves or loads
+        # anything for the current image, but each keeps its own copy,
+        # inherited from BaseNDApp and set only in the standalone image-change
+        # handler that this app does not call. So they all stayed at 0 for a
+        # whole session: annotations and predictions were loaded from image 0,
+        # and -- worse -- saved to image 0, so working on a second image
+        # overwrote the first one's files.
+        #
+        # Pushing it is the small fix. The real one is for sub-widgets to stop
+        # keeping their own copy of state that belongs to the model; see
+        # docs/spec/0005-ai-lab-cleanup.md.
+        for widget in (
+            self.label_widget,
+            self.segment_widget,
+            self.augment_widget,
+        ):
+            widget.current_image_index = self.current_image_index
+
         # Label widget needs: image, labels, points, boxes
         self.label_widget.image_layer = self.image_layer
         self.label_widget.annotation_layer = self.annotations_layer
