@@ -265,6 +265,169 @@ class NDAILab(QWidget):
             self.augment_widget.augmenter.selected_axis
         )
 
+    def _update_layers_for_image(self, image_layer) -> bool:
+        """Point the existing layers at a new image, instead of rebuilding.
+
+        Returns False when the layer set cannot be reused, in which case the
+        caller falls back to the destroy-and-recreate path. Reuse needs every
+        layer still present in the viewer, the same annotation subdirectories,
+        and the same number of dimensions -- a different *size* is fine, since
+        assigning ``.data`` handles that.
+
+        Prediction layers are updated but never removed, and a segmenter with
+        nothing saved for this image gets an all-zero layer rather than
+        disappearing. That keeps the layer list stable while scrolling -- no
+        selection, ordering or colormap resets -- and matches what the stacked
+        viewer shows, where an unsegmented slice is simply empty. Nothing is
+        written to disk for an empty layer.
+        """
+        import numpy as _np
+
+        # Nothing to reuse on the first image of a session, when these
+        # attributes do not exist yet.
+        annotations_layers = getattr(self, "annotations_layers", None)
+        if not annotations_layers:
+            return False
+
+        layers = [
+            getattr(self, "working_layer", None),
+            getattr(self, "points_layer", None),
+            getattr(self, "shapes_layer", None),
+            getattr(self, "boxes_layer", None),
+            getattr(self, "boxes_3D_layer", None),
+            *annotations_layers.values(),
+        ]
+        if any(layer is None for layer in layers):
+            return False
+        if any(layer not in self.viewer.layers for layer in layers):
+            return False
+
+        # A new annotation subdirectory needs a new layer; rebuilding is the
+        # simple answer for a case that happens once, not once per switch.
+        annotation_names = (
+            self.image_data_model.list_annotation_subdirectories()
+            or ["Labels (Persistent)"]
+        )
+        if set(annotation_names) != set(self.annotations_layers):
+            return False
+
+        # The auxiliary layers -- points, shapes, boxes -- were constructed
+        # with a fixed ndim, so a change in dimensionality needs new ones. A
+        # change in *size* does not: assigning .data handles that.
+        image_shape = image_layer.data.shape
+        first = next(iter(annotations_layers.values()))
+        annotation_ndim = first.data.ndim
+        if len(image_shape) != first.data.ndim + len(
+            self.axes_to_collapse or ""
+        ):
+            return False
+
+        self.predictions_layers = (
+            getattr(self, "predictions_layers", None) or {}
+        )
+        self.image_layer = image_layer
+
+        # The sequence viewer adds its new image layer on top of the list.
+        # Rebuilding used to put it underneath implicitly, by creating every
+        # label layer after it; reuse does not, so the image would cover the
+        # labels. Move it rather than remove and re-add -- removal is the cost
+        # this whole path exists to avoid.
+        if image_layer in self.viewer.layers:
+            index = self.viewer.layers.index(image_layer)
+            if index != 0:
+                self.viewer.layers.move(index, 0)
+
+        # NB: every assignment below is followed by refresh(). Since napari
+        # 0.8 the data setter (ScalarFieldBase.data) updates the array, the
+        # thumbnail and the dims, but does not reslice -- so with an unchanged
+        # shape the canvas keeps showing the previous image's labels while the
+        # thumbnail and pixel readout are already correct. Rebuilding layers
+        # hid this, because a new layer slices on creation.
+        for ann_name, layer in self.annotations_layers.items():
+            layer.data = self.image_data_model.load_existing_annotations(
+                self.current_image_index,
+                image_shape,
+                subdirectory=ann_name,
+                axes_to_collapse=self.axes_to_collapse,
+            )
+            layer.refresh()
+        self.annotations_layer = first
+
+        self.working_layer.data = _np.zeros_like(self.annotations_layer.data)
+        self.working_layer.refresh()
+
+        # Per-image annotations that are not persisted here start empty, as
+        # they did when these layers were recreated.
+        self.points_layer.data = _np.empty((0, annotation_ndim))
+        self.shapes_layer.data = []
+        self.boxes_layer.data = []
+        self.boxes_3D_layer.data = []
+        for layer in (
+            self.points_layer,
+            self.shapes_layer,
+            self.boxes_layer,
+            self.boxes_3D_layer,
+        ):
+            layer.refresh()
+
+        self._update_prediction_layers(image_shape)
+
+        self._distribute_layers_to_sub_apps()
+        self.augment_widget.sync_augmenter_parameters()
+        return True
+
+    def _update_prediction_layers(self, image_shape):
+        """Refresh every prediction layer for the current image.
+
+        A segmenter with no saved prediction for this image gets zeros rather
+        than losing its layer. Subdirectories that appeared since the last
+        switch gain a layer; none is ever removed, because removal is the
+        expensive half.
+        """
+        import numpy as _np
+
+        subdirs = self.image_data_model.get_prediction_subdirectories() or []
+        for method_dir in subdirs:
+            method_name = method_dir.name
+            try:
+                # Named directly rather than by setting the model's current
+                # segmenter first: that value is also the default target for
+                # save_predictions, so steering a read with it would leave the
+                # model pointing at whichever directory happened to be last.
+                data = self.image_data_model.load_existing_predictions(
+                    image_index=self.current_image_index,
+                    image_shape=image_shape,
+                    subdirectory=method_name,
+                    axes_to_collapse=self.axes_to_collapse,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(
+                    f"   Could not load predictions for {method_name}: {exc}"
+                )
+                continue
+
+            layer = self.predictions_layers.get(method_name)
+            if layer is not None and layer in self.viewer.layers:
+                layer.data = data
+                layer.refresh()  # see the note in _update_layers_for_image
+            else:
+                self.predictions_layers[method_name] = self.viewer.add_labels(
+                    data,
+                    name=method_name,
+                    scale=self.image_data_model.get_scale(
+                        axes_to_collapse=self.axes_to_collapse
+                    )
+                    or None,
+                )
+
+        # A layer whose subdirectory no longer exists keeps its place in the
+        # list, emptied rather than removed.
+        known = {d.name for d in subdirs}
+        for name, layer in self.predictions_layers.items():
+            if name not in known and layer in self.viewer.layers:
+                layer.data = _np.zeros_like(layer.data)
+                layer.refresh()
+
     def _distribute_layers_to_sub_apps(self):
         """
         Distribute the centrally-created layers to each sub-app.
@@ -318,12 +481,20 @@ class NDAILab(QWidget):
                 self.label_widget._on_boxes_changed
             )
 
-        # Load existing boxes into the boxes_layer from CSV (BEFORE connecting nd_ai_lab event)
+        # Loading boxes from CSV emits the same "added" event as drawing one,
+        # so the handlers are silenced while it happens -- otherwise returning
+        # to an image with a saved box asks whether to copy predictions into a
+        # box the user did not just draw. Connecting afterwards was enough when
+        # every layer was rebuilt per image; with layers reused the connection
+        # already exists, so it has to be blocked explicitly.
         if hasattr(self.label_widget, "_load_existing_boxes"):
-            self.label_widget._load_existing_boxes()
+            if self.boxes_layer is not None:
+                with self.boxes_layer.events.data.blocker():
+                    self.label_widget._load_existing_boxes()
+            else:
+                self.label_widget._load_existing_boxes()
 
         # Connect boxes layer events for nd_ai_lab (for prediction copying)
-        # This is done AFTER loading to avoid triggering dialog on startup
         if self.boxes_layer and hasattr(self, "_on_boxes_changed"):
             self.boxes_layer.events.data.connect(self._on_boxes_changed)
 
@@ -520,13 +691,19 @@ class NDAILab(QWidget):
         if image_layer:
             print(f"   Setting up new image: {image_layer.name}")
 
-            # Cleanup existing layers centrally
-            self._cleanup_layers()
-
-            # Create new layers centrally (this also distributes to sub-apps)
-            self._set_image_layer(image_layer)
-
-            print("✅ nd_ai_lab: Image change complete")
+            # Prefer pointing the existing layers at the new image. Removing a
+            # layer costs a full gc.collect inside napari -- a deliberate
+            # workaround for a Windows OpenGL driver bug, see
+            # napari/_vispy/canvas.py -- and there are seven of them per
+            # switch, which benchmarks/bench_sequence_switch.py measures as
+            # most of the switch time. Nothing about these layers is
+            # image-specific except their data.
+            if self._update_layers_for_image(image_layer):
+                print("✅ nd_ai_lab: Image change complete (layers reused)")
+            else:
+                self._cleanup_layers()
+                self._set_image_layer(image_layer)
+                print("✅ nd_ai_lab: Image change complete (layers rebuilt)")
         else:
             print("⚠️  Received invalid image data from sequence viewer")
             self._cleanup_layers()
