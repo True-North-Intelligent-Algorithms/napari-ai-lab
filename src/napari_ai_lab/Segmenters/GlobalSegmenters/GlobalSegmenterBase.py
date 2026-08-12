@@ -55,6 +55,20 @@ class GlobalSegmenterBase(SegmenterBase):
         cls.registry[name] = framework
         print(f"Registered global segmenter: {name}")
 
+    def availability(self):
+        """How ready this segmenter is, in more detail than a bool.
+
+        The default derives from ``are_dependencies_available``, so every
+        existing segmenter keeps its green-or-red behaviour without change. A
+        segmenter that runs elsewhere overrides this to say so -- see
+        SkopSegmenter and docs/spec/0003-optional-dependencies.md.
+        """
+        from ..availability import available, unavailable
+
+        return (
+            available() if self.are_dependencies_available() else unavailable()
+        )
+
     def segment(self, image, **kwargs):
         """
         Perform global segmentation on the given image.

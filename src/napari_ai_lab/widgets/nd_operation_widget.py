@@ -8,6 +8,7 @@ This module provides a widget that automatically generates form elements
 for parameters defined in ND Operation dataclasses.
 """
 
+import contextlib
 import dataclasses
 from typing import Any
 
@@ -23,6 +24,15 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
+)
+
+#: One banner, four colourings. See _add_instructions_if_present.
+_BANNER_STYLE = (
+    "QLabel {{ font-size: 13px; font-weight: bold;"
+    " color: {fg};"
+    " background-color: {bg};"
+    " border: 1px solid {border};"
+    " border-radius: 4px; padding: 4px 6px; }}"
 )
 
 
@@ -106,6 +116,30 @@ class NDOperationWidget(QWidget):
         self.clear_form()
         self.parse_parameters()
 
+    def _add_supplied_parameters(self) -> bool:
+        """Add parameter rows the operation builds itself.
+
+        Returns True when the operation supplied them, meaning its dataclass
+        fields should not also be parsed.
+        """
+        supply = getattr(self.nd_operation, "get_parameter_widgets", None)
+        if supply is None:
+            return False
+
+        widgets = supply()
+        if not widgets:
+            return False
+
+        for widget in widgets:
+            # magicgui widgets wrap a Qt widget in .native and carry their own
+            # label; anything already a QWidget is added as it comes.
+            native = getattr(widget, "native", widget)
+            label = getattr(widget, "label", None) or getattr(
+                widget, "name", ""
+            )
+            self.form_layout.addRow(str(label), native)
+        return True
+
     def clear_form(self):
         """Clear all parameter widgets from the form."""
         # Clear dependency status label if it exists
@@ -172,6 +206,14 @@ class NDOperationWidget(QWidget):
         # Add axis selection if ND Operation supports multiple axes
         self._add_axis_selection_if_present()
 
+        # An operation may build its own parameter rows rather than declaring
+        # them as dataclass fields -- a scikit-ops op generates them from its
+        # signature, via magicgui. The rows go in the same form layout as any
+        # other, so everything around them (dependency banner, instructions,
+        # axis combo) is unaffected and there is one widget, not two.
+        if self._add_supplied_parameters():
+            return
+
         # Get dataclass fields
         fields = dataclasses.fields(self.nd_operation)
 
@@ -196,26 +238,44 @@ class NDOperationWidget(QWidget):
         # --- Dependency status banner ---
         if hasattr(self.nd_operation, "are_dependencies_available"):
             deps_ok = self.nd_operation.are_dependencies_available()
-            if deps_ok:
+
+            # Four states, not two. An op that runs in its own environment is
+            # neither "available here" nor "unavailable", and an environment
+            # that has yet to be built costs minutes and gigabytes on first
+            # use -- which the user should hear before pressing the button,
+            # not after. See napari_ai_lab/Segmenters/availability.py.
+            from ..Segmenters.availability import State
+
+            status = None
+            if hasattr(self.nd_operation, "availability"):
+                with contextlib.suppress(Exception):
+                    status = self.nd_operation.availability()
+            state = status.state if status is not None else None
+
+            if state is State.WILL_BUILD:
+                dep_text = "\u26a1 " + status.message
+                dep_style = _BANNER_STYLE.format(
+                    fg="#8a5a00", bg="#fff6e0", border="#e0b060"
+                )
+            elif state is State.READY:
+                dep_text = "\u23f3 " + status.message
+                dep_style = _BANNER_STYLE.format(
+                    fg="#7a6a00", bg="#fbf7d6", border="#d8c860"
+                )
+            elif deps_ok:
                 dep_text = "\u2705 Dependencies available"
-                dep_style = (
-                    "QLabel { font-size: 13px; font-weight: bold;"
-                    " color: #1a7a1a;"
-                    " background-color: #e6f4ea;"
-                    " border: 1px solid #82c882;"
-                    " border-radius: 4px; padding: 4px 6px; }"
+                dep_style = _BANNER_STYLE.format(
+                    fg="#1a7a1a", bg="#e6f4ea", border="#82c882"
                 )
             else:
-                dep_text = (
-                    "\u26a0\ufe0f Dependencies not available —"
-                    " install required packages to use this segmenter"
+                dep_text = "\u26a0\ufe0f " + (
+                    status.message
+                    if status is not None
+                    else "Dependencies not available \u2014 install required "
+                    "packages to use this segmenter"
                 )
-                dep_style = (
-                    "QLabel { font-size: 13px; font-weight: bold;"
-                    " color: #b30000;"
-                    " background-color: #fff0f0;"
-                    " border: 1px solid #e08080;"
-                    " border-radius: 4px; padding: 4px 6px; }"
+                dep_style = _BANNER_STYLE.format(
+                    fg="#b30000", bg="#fff0f0", border="#e08080"
                 )
             self._dependency_label = QLabel(dep_text)
             self._dependency_label.setStyleSheet(dep_style)

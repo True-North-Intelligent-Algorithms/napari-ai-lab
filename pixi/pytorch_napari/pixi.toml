@@ -70,23 +70,52 @@ cellpose = ">=4"
 
 napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 
-# For the first scikit-ops op -- docs/spec/0004. scikit-ops needs only Python
-# >=3.10 and pulls in no model stack of its own; the heavy environments it runs
-# ops in are built separately, on demand.
-scikit-ops = { path = "../../../scikit-ops", editable=true}
+# NB: scikit-ops is deliberately NOT declared here, even though this
+# environment is built to use it -- docs/spec/0004. skop-napari below already
+# declares it, in its own [tool.uv.sources], as an editable path resolving to
+# the same checkout. Declaring it here as well produces:
+#
+#     Requirements contain conflicting URLs for package `scikit-ops`:
+#       - file:///.../scikit-ops
+#       - file:///.../scikit-ops (editable)
+#
+# The two declarations are identical apart from the editable flag, which uv
+# drops when applying a path dependency's sources transitively. Declaring it
+# once, there, avoids the conflict and still gives a live editable install.
+#
+# If skop-napari is ever removed from this environment, scikit-ops has to be
+# declared here instead.
 
-# appose from main, not PyPI: PixiInstallMonitor landed in 3e97f55 and is in no
-# release, so 0.11/0.12 report nothing at all while an environment builds,
-# turning the first run of an op into a silent multi-minute hang.
-appose = { git = "https://github.com/apposed/appose-python", branch = "main" }
+# NB: appose is not declared here either, for the same reason as scikit-ops.
+# skop-napari's [tool.uv.sources] supplies it from ../appose-python, and a
+# second declaration here is what makes the solve unsatisfiable. It is needed
+# from a checkout rather than PyPI because PixiInstallMonitor landed in
+# appose 3e97f55 and is in no release, so 0.11/0.12 report nothing while an
+# environment builds -- the first run of an op becomes a silent, multi-minute
+# hang.
+#
+# This environment therefore needs appose-python checked out beside the other
+# repos, even though nothing here names it.
 
-# Needed only for the generated parameter panel, step 3 of docs/spec/0004.
-# Uncomment when you get there. It requires Python >=3.12, which this
-# environment already satisfies.
-#skop-napari = { path = "../../../skop-napari", editable=true}
+# For the generated parameter panel, step 3 of docs/spec/0004. Requires Python
+# >=3.12, which this environment satisfies and the older hosts did not -- which
+# is why the panel could not be attempted before now.
+#
+# Its [tool.uv.sources] points scikit-ops at ../scikit-ops, relative to its own
+# directory, which resolves to the same checkout declared above. So this brings
+# in the live editable scikit-ops, not a pinned copy.
+skop-napari = { path = "../../../skop-napari", editable=true}
 
 # Deliberately absent: zarr, albumentations. The app must run without them
 # (docs/spec/0003), and this is the environment that proves it.
+#
+# NB: this environment is for development, and assumes four sibling checkouts
+# -- napari-ai-lab, scikit-ops, skop-napari, appose-python -- because two of
+# them are pulled in by skop-napari's own [tool.uv.sources] as relative paths.
+# That is not an install a user can be asked to perform. Before release,
+# scikit-ops, skop-napari and appose need to be reachable by version or by
+# git URL, and this file needs a variant that names them that way while the
+# source-tree version stays for development. See docs/spec/0004.
 
 [target.linux-64.dependencies]
 pytorch-gpu = "*"

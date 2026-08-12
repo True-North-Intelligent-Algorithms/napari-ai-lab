@@ -148,6 +148,32 @@ another interpreter, so a one-line status field cannot show the interesting
 part. skop-napari routes it to napari's notification manager, which preserves
 the traceback in history. Same here.
 
+## Installing this, eventually
+
+The environment that runs the first op assumes **four sibling checkouts** --
+napari-ai-lab, scikit-ops, skop-napari, appose-python. Only two are named in
+`pixi/pytorch_napari/pixi.toml`; the other two arrive through skop-napari's own
+`[tool.uv.sources]`, which points at `../scikit-ops` and `../appose-python`
+relative to its own directory. Naming them here as well makes the solve fail
+with conflicting URLs, so they cannot simply be pinned locally either.
+
+That is a development layout, not something a user with little Python can be
+asked to reproduce. Before this ships:
+
+- scikit-ops, skop-napari and appose need to be installable **by version, or
+  at least by git URL** -- which means releases, or pinned revs
+- skop-napari's `[tool.uv.sources]` has to stop deciding where its
+  dependencies come from for everyone downstream; it is dev configuration
+  leaking into consumers
+- appose's `PixiInstallMonitor` needs to be in a release, or the first
+  environment build is silent
+
+And the development layout has to survive alongside it: editable checkouts are
+what make an op change testable without bumping a rev in nine environments
+(scikit-ops `docs/spec/fiji-front-end.md`). So the end state is two ways to
+build the environment -- pinned for users, source-tree for developers -- not
+one replacing the other.
+
 ## Order of work
 
 1. **Prove skop runs StarDist headless in that pixi environment.** A script,
