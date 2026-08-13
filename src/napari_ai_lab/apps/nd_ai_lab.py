@@ -649,8 +649,12 @@ class NDAILab(QWidget):
 
         self._processing_image_change = True
 
-        # Process the image change immediately
-        self._process_image_change(image_layer, image_index)
+        # finally, because the flag is a lock: an exception that escapes would
+        # leave it True and every later image change would be silently dropped.
+        try:
+            self._process_image_change(image_layer, image_index)
+        finally:
+            self._processing_image_change = False
 
     def _process_image_change(self, image_layer, image_index):
         """
@@ -660,26 +664,32 @@ class NDAILab(QWidget):
         """
         print(f"🔄 nd_ai_lab: Processing image change to index {image_index}")
 
-        # Save current annotations before switching (delegate to sub-apps)
-        # Only save from the currently active tab to avoid duplicate saves
-        active_widget_name = self.tabs.tabText(self.tabs.currentIndex())
-
+        # Save the current image's work before switching away from it. This
+        # used to be gated on the Label tab being visible and on a
+        # "labels_layer" attribute that does not exist, so it never ran. See
+        # docs/spec/0005-ai-lab-cleanup.md.
+        #
+        # getattr: on the first image of a session there are no layers yet.
         if (
-            active_widget_name == "Label"
-            and hasattr(self, "labels_layer")
-            and self.annotations_layer
+            getattr(self, "annotations_layers", None)
             and self.image_data_model.parent_directory
         ):
-            try:
-                self.image_data_model.save_annotations(
-                    self.annotations_layer.data,
-                    self.current_image_index,
-                    current_step=self.viewer.dims.current_step,
-                    axes_to_collapse=self.axes_to_collapse,
-                )
-                print("   Saved annotations from Label tab")
-            except (OSError, ValueError, RuntimeError) as e:
-                print(f"   Failed to save annotations: {e}")
+            # Every layer, under its own name. Annotations are a collection --
+            # one subdirectory per layer -- so saving only the active one drops
+            # the rest, and omitting the name falls back to save_annotations'
+            # "class_0" default and invents a subdirectory nothing asked for.
+            for name, layer in self.annotations_layers.items():
+                try:
+                    self.image_data_model.save_annotations(
+                        layer.data,
+                        self.current_image_index,
+                        subdirectory=name,
+                        current_step=self.viewer.dims.current_step,
+                        axes_to_collapse=self.axes_to_collapse,
+                    )
+                    print(f"   Saved annotations: {name}")
+                except (OSError, ValueError, RuntimeError) as e:
+                    print(f"   Failed to save annotations '{name}': {e}")
 
             # Save boxes at the same time as annotations
             self._save_boxes()
@@ -708,7 +718,12 @@ class NDAILab(QWidget):
             print("⚠️  Received invalid image data from sequence viewer")
             self._cleanup_layers()
 
-        self._processing_image_change = False
+        # The lock is released by the caller's finally, not here: one owner.
+
+    def _save_boxes(self):
+        """Delegate box saving to label_widget, which inherits it from BaseNDApp."""
+        if hasattr(self.label_widget, "_save_boxes"):
+            self.label_widget._save_boxes()
 
     def _save_label_patches_on_close(self):
         """Delegate label patch saving to label_widget (called by base close handler)."""
@@ -729,9 +744,10 @@ class NDAILab(QWidget):
         if hasattr(self, "annotations_layers") and self.annotations_layers:
             for ann_name, layer in self.annotations_layers.items():
                 layers_to_remove.append((f"Annotation ({ann_name})", layer))
-        elif hasattr(self, "labels_layer") and self.annotation_layer:
-            # Fallback for the single-layer case.
-            layers_to_remove.append(("Labels", self.annotation_layer))
+        elif getattr(self, "annotations_layer", None) is not None:
+            # Fallback for the single-layer case. Was guarded on a
+            # "labels_layer" attribute that does not exist, so it never ran.
+            layers_to_remove.append(("Labels", self.annotations_layer))
 
         # Handle predictions_layers dictionary (multiple prediction layers)
         if hasattr(self, "predictions_layers") and self.predictions_layers:
@@ -763,8 +779,7 @@ class NDAILab(QWidget):
         # Clear references
         if hasattr(self, "annotations_layers"):
             self.annotations_layers = {}
-        if hasattr(self, "labels_layer"):
-            self.annotation_layer = None
+        self.annotations_layer = None
         if hasattr(self, "predictions_layers"):
             self.predictions_layers = {}
         if hasattr(self, "points_layer"):

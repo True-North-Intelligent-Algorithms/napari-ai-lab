@@ -1,4 +1,5 @@
 import contextlib
+from pathlib import Path
 
 import napari
 import numpy as np
@@ -2100,37 +2101,49 @@ class NDEasyLabel(BaseNDApp):
         shapes = []
         shape_types = []
 
+        # boxes.csv is one file for the whole project, keyed by file_name, and
+        # the same rows serve both viewer modes. The modes disagree about one
+        # thing only: whether "which image" is a coordinate or a filter.
+        #
+        #   stacked  -- every image is present at once along the leading axis,
+        #               so the image index becomes the box's leading coordinate
+        #               and napari shows each box on its own frame
+        #   sequence -- one image is loaded at a time, so rows for other images
+        #               are skipped entirely
+        #
+        # Without the filter every saved box was drawn on every image, and the
+        # next save then re-stamped it with the wrong file_name.
+        # See docs/spec/0005-ai-lab-cleanup.md.
+        stacked = self.image_data_model._is_stacked_sequence()
+        image_paths = self.image_data_model.get_image_paths()
+
+        def index_of(file_name):
+            stem = Path(file_name).stem
+            for idx, path in enumerate(image_paths):
+                if path.name == file_name or path.stem == stem:
+                    return idx
+            return None
+
         for row in all_boxes:
             y0, y1 = row["ystart"], row["yend"]
             x0, x1 = row["xstart"], row["xend"]
             middle = list(row.get("middle_positions", []))
 
-            """
-            if self.image_data_model._is_stacked_sequence():
-                img_name = row.get("file_name", "unknown")
+            img_name = row.get("file_name", "unknown")
+            img_index = index_of(img_name)
+            if img_index is None:
+                print(
+                    f"⚠️  _load_existing_boxes: '{img_name}' "
+                    "not found in image paths — skipping"
+                )
+                continue
 
-                # Find the index of img_name in the image_paths list
-                image_paths = self.image_data_model.get_image_paths()
-                img_index = None
-                for idx, path in enumerate(image_paths):
-                    if path.name == img_name or path.stem == Path(img_name).stem:
-                        img_index = idx
-                        break
-
-                if img_index is None:
-                    # Image not found in current image paths — skip
-                    print(
-                        f"⚠️  _load_existing_boxes: '{img_name}' "
-                        "not found in image paths — skipping"
-                    )
-                    continue
-                # Stacked: leading axis is the image index, then any middle axes
-                leading = [float(img_index), *middle]
+            if stacked:
+                leading = [float(img_index), *[float(p) for p in middle]]
             else:
-                # Non-stacked: only the middle axes (e.g., Z, T) prefix YX
-            """
-
-            leading = [float(p) for p in middle]
+                if img_index != self.current_image_index:
+                    continue
+                leading = [float(p) for p in middle]
 
             # Build a rectangle with the right number of leading dims
             rect = np.array(

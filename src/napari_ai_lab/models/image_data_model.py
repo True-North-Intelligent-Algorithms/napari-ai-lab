@@ -1123,45 +1123,32 @@ class ImageDataModel:
         stacked = self._is_stacked_sequence()
         stacked_names = self._get_stacked_image_names() if stacked else []
 
-        # ------------------------------------------------------------------ #
-        # TODO: multi-image support — revisit when the viewer can hold        #
-        # multiple independent image/label/box layer collections at once.     #
-        #                                                                     #
-        # The original logic below preserved rows belonging to images         #
-        # *outside* the current save set, so that a shared boxes.csv could   #
-        # hold boxes for several different images side-by-side.  This matters #
-        # when, e.g., image A and image B are both open and only image A is   #
-        # being saved — image B's rows must not be erased.                    #
-        #                                                                     #
-        # Stacked-sequence mode is a special case: many source files are      #
-        # merged into one viewer image along axis-0, so all rows can safely   #
-        # be replaced together.  But a true multi-image workflow (separate    #
-        # image layers, each with their own boxes layer) would need a smarter #
-        # strategy — either per-image CSV files, or the preserve logic below. #
-        #                                                                     #
-        # For now we do a full overwrite (simple, no doubles).  Restore the  #
-        # block below and replace `writer.writerows(new_rows)` with           #
-        # `writer.writerows(existing_rows + new_rows)` when multi-image       #
-        # support is needed.                                                  #
-        # ------------------------------------------------------------------ #
+        # Rows for images other than the ones being written are preserved.
+        # The CSV is shared by the whole project: it is keyed by file_name,
+        # not split per image, so a wholesale rewrite silently deletes every
+        # other image's boxes. That is what made a box drawn on one image
+        # reappear -- and then be re-stamped -- under another image's name.
         #
-        # if stacked:
-        #     names_to_replace: set[str] = set(stacked_names)
-        # else:
-        #     image_paths = self.get_image_paths()
-        #     if not (0 <= image_index < len(image_paths)):
-        #         print(f"⚠️  save_boxes: image_index {image_index} out of range")
-        #         return False
-        #     names_to_replace = {image_paths[image_index].name}
-        #
-        # existing_rows: list[dict] = []
-        # if csv_path.exists():
-        #     with open(csv_path, newline="") as fh:
-        #         reader = csv.DictReader(fh)
-        #         for row in reader:
-        #             if row.get("file_name") not in names_to_replace:
-        #                 existing_rows.append(row)
+        # Which names are being replaced is the one thing the two viewer modes
+        # disagree about. Stacked holds every image at once, so a save covers
+        # all of them; sequence holds one, so it covers only the current image.
+        # See docs/spec/0005-ai-lab-cleanup.md.
+        if stacked:
+            names_to_replace: set[str] = set(stacked_names)
+        else:
+            image_paths = self.get_image_paths()
+            if not (0 <= image_index < len(image_paths)):
+                print(f"⚠️  save_boxes: image_index {image_index} out of range")
+                return False
+            names_to_replace = {image_paths[image_index].name}
 
+        existing_rows: list[dict] = []
+        if csv_path.exists():
+            with open(csv_path, newline="") as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    if row.get("file_name") not in names_to_replace:
+                        existing_rows.append(row)
         # ------------------------------------------------------------------ #
         # Build new rows from every box in boxes_layer_data                  #
         # ------------------------------------------------------------------ #
@@ -1220,13 +1207,21 @@ class ImageDataModel:
                 row[key] = int(box[0, col]) if box.shape[-1] >= -col else 0
             new_rows.append(row)
 
-        # Overwrite the entire CSV — no merging, no doubles
+        # Rewrite the file from the rows kept above plus the ones just built,
+        # so images that were not part of this save keep their boxes.
+        # DictWriter needs every key it is given, and a preserved row may
+        # predate a middle-axis column, so fill what is missing.
         with open(csv_path, "w", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=fieldnames)
             writer.writeheader()
+            for row in existing_rows:
+                writer.writerow({key: row.get(key, "") for key in fieldnames})
             writer.writerows(new_rows)
 
-        print(f"📦 Saved {len(new_rows)} box(es) → {csv_path}")
+        print(
+            f"📦 Saved {len(new_rows)} box(es) for this image, "
+            f"{len(existing_rows)} kept for others → {csv_path}"
+        )
         return True
 
     def load_existing_boxes(self) -> list[dict]:
