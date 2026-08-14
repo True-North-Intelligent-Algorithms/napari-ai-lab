@@ -44,10 +44,27 @@ docs/, design/                  loose notes plus docs/spec/
 notebooks/, experiments/, scripts/, temp_scripts/
 ```
 
+## Open items
+
+`docs/spec/OPEN.md` is the register of known-broken and undecided things — one
+heading each, with a `**Status:**` of `open`, `decided: <what>`, or `done`.
+
+- When asked **"what else to do"**, read it and report the items that are not
+  `done`. It is the answer to that question; do not go hunting the codebase
+  instead.
+- When something turns up that is worth fixing but is not the task at hand,
+  add a heading there rather than leaving it in the conversation.
+- When one is resolved, move it to the *Resolved* section at the bottom with a
+  line on what happened. Do not delete it.
+
+Numbered specs in `docs/spec/` are the other half: designed work with a plan.
+`OPEN.md` is for what does not have one yet.
+
 ## Commands
 
 ```sh
 python src/launch_nd_ai_lab.py      # and the other launch_*.py, one per app
+python src/launch_nd_ai_lab.py --stacked   # force stacked; --sequence forces sequence
 pytest                              # dependency group is `testing`, not `dev`
 pytest -m "not bioio"               # skip the slow bioio tests
 ```

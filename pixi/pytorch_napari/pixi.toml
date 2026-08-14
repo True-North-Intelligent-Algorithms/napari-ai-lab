@@ -131,4 +131,6 @@ pytorch = "*"
 
 [tasks]
 lab = "python ../../src/launch_nd_ai_lab.py"
+lab-stacked = "python ../../src/launch_nd_ai_lab.py --stacked"
+lab-sequence = "python ../../src/launch_nd_ai_lab.py --sequence"
 poc = "python ../../experiments/skop_stardist_poc.py"

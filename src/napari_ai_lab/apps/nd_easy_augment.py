@@ -309,6 +309,22 @@ class NDEasyAugment(BaseNDApp):
                 self.image_data_model.set_augmenter(self.augmenter)
                 self.image_data_model.set_patch_size(patch_size)
                 self.image_data_model.set_num_patches(num_patches)
+                # Label crops are derived from image × annotation × boxes, so
+                # regenerate them here rather than trusting whatever the last
+                # save left behind.  Sequence mode drives from boxes.csv since
+                # the boxes layer only holds the current image's boxes -- the
+                # live-layer path would cover one image and wipe the rest.
+                sequence_mode = (
+                    not use_3D
+                    and not self.image_data_model._is_stacked_sequence()
+                )
+                if sequence_mode:
+                    self.progress_logger.log_info(
+                        "Sequence mode — regenerating label crops from boxes.csv"
+                    )
+                    self.image_data_model.crop_and_save_all_label_patches(
+                        progress_logger=self.progress_logger
+                    )
                 self.image_data_model.generate_patches_from_labels(
                     progress_logger=self.progress_logger,
                     use_3D=use_3D,

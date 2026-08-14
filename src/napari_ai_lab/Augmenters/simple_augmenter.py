@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..utility import get_axis_info_from_shape
 from .augmenter_base import AugmenterBase
 
 
@@ -66,8 +67,8 @@ Simple Random Crop Augmentation:
     def __post_init__(self):
         """Initialize parent class after dataclass initialization."""
         super().__init__(seed=self.seed)
-        self._potential_axes = ["YX", "ZYX"]
-        self.supported_axes = ["YX", "ZYX"]
+        self._potential_axes = ["YX", "YXC", "ZYX"]
+        self.supported_axes = ["YX", "YXC", "ZYX"]
         self.normalize = self.normalize
         self.use_global_stats = self.use_global_stats
 
@@ -117,24 +118,30 @@ Simple Random Crop Augmentation:
         ValueError
             If patch_size dimensions don't match image dimensions or if patch is larger than image
         """
-        if im.shape != mask.shape:
+        # An RGB(A) image carries a trailing channel axis the mask does not
+        # have, so only the spatial dimensions take part in cropping.
+        has_channel = get_axis_info_from_shape(im.shape).endswith("C")
+        spatial_shape = im.shape[:-1] if has_channel else im.shape
+
+        if spatial_shape != mask.shape:
             raise ValueError(
-                f"Image and mask shapes must match. Got image: {im.shape}, mask: {mask.shape}"
+                f"Image and mask spatial shapes must match. "
+                f"Got image: {im.shape}, mask: {mask.shape}"
             )
 
         # Convert patch_size to tuple if it's a single value
         if isinstance(patch_size, int):
-            patch_size = (patch_size,) * im.ndim
+            patch_size = (patch_size,) * len(spatial_shape)
 
-        if len(patch_size) != im.ndim:
+        if len(patch_size) != len(spatial_shape):
             raise ValueError(
                 f"patch_size dimensions ({len(patch_size)}) must match "
-                f"image dimensions ({im.ndim})"
+                f"image spatial dimensions ({len(spatial_shape)})"
             )
 
         # Check if patch size is valid
         for i, (img_dim, patch_dim) in enumerate(
-            zip(im.shape, patch_size, strict=False)
+            zip(spatial_shape, patch_size, strict=False)
         ):
             if patch_dim > img_dim:
                 raise ValueError(
@@ -144,7 +151,7 @@ Simple Random Crop Augmentation:
 
         # Generate random starting indices for cropping
         start_indices = self._get_random_crop_indices(
-            im.shape, patch_size, axis
+            spatial_shape, patch_size, axis
         )
 
         # Create slicing tuples for cropping
@@ -153,8 +160,9 @@ Simple Random Crop Augmentation:
             for start, size in zip(start_indices, patch_size, strict=False)
         )
 
-        # Crop both image and mask using the same indices
-        cropped_im = im[slices]
+        # Crop both image and mask using the same indices, keeping all
+        # channels when the image has them
+        cropped_im = im[(*slices, slice(None))] if has_channel else im[slices]
         cropped_mask = mask[slices]
 
         return cropped_im, cropped_mask

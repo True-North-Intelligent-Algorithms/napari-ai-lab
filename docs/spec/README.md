@@ -7,6 +7,10 @@ or graduates into a design document once it does.
 The flat notes in `docs/` are a different thing: after-the-fact notes on code
 that already exists.
 
+[OPEN.md](OPEN.md) is a third thing: a register of known-broken and undecided
+items that are too small or too unresolved to have a plan yet. It is what
+"what else to do" resolves to.
+
 | | |
 | --- | --- |
 | [0001](0001-what-moves-to-scikit-ops.md) | What moves to scikit-ops and skop-napari, and what stays |

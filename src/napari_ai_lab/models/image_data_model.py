@@ -1435,6 +1435,194 @@ class ImageDataModel:
         )
         return labels_dir
 
+    def crop_and_save_all_label_patches(self, progress_logger=None) -> Path:
+        """
+        Regenerate label crops for **every** image that has boxes, driving from
+        ``labels/boxes.csv`` instead of the live layers.
+
+        Sequence mode holds one image at a time, so the boxes layer only ever
+        contains the current image's boxes — the CSV is the only place the
+        whole set lives.  Both Save Project and Augment need the complete set,
+        so both call this.
+
+        The label crops under ``labels/input0`` and ``labels/truth0`` are wiped
+        once at the start and then rebuilt from every image, so the result is
+        the whole project rather than whichever image happened to be current.
+        They are derived data, so rebuilding picks up any annotation or box the
+        user has changed.  ``patches/`` is untouched — augmentation output
+        accumulates and is only removed by Delete Augmentations.
+
+        Args:
+            progress_logger: Optional ProgressLogger; falls back to print.
+
+        Returns:
+            Path to the ``labels/`` directory.
+        """
+        import shutil
+        from itertools import groupby
+
+        from skimage.io import imsave
+
+        from ..utilities.io_util import generate_patch_names
+
+        def emit(message):
+            if progress_logger is not None:
+                progress_logger.log_info(message)
+            else:
+                print(message)
+
+        def warn(message):
+            if progress_logger is not None:
+                progress_logger.log_warning(message)
+            else:
+                print(message)
+
+        labels_dir = self.get_labels_directory()
+
+        rows = self.load_existing_boxes()
+        if not rows:
+            emit("📦 crop_and_save_all_label_patches: no rows in boxes.csv")
+            return labels_dir
+
+        image_paths = self.get_image_paths()
+
+        def index_of(file_name):
+            stem = Path(file_name).stem
+            for idx, path in enumerate(image_paths):
+                if path.name == file_name or path.stem == stem:
+                    return idx
+            return None
+
+        # Group by file so each image is loaded once, however many boxes it has
+        rows = sorted(rows, key=lambda r: r["file_name"])
+        grouped = [
+            (k, list(g)) for k, g in groupby(rows, lambda r: r["file_name"])
+        ]
+
+        emit(
+            f"📦 crop_and_save_all_label_patches — "
+            f"{len(rows)} box row(s) across {len(grouped)} image(s)"
+        )
+        emit(f"   boxes.csv: {self.get_boxes_csv_path()}")
+
+        # Wipe the label crops once for the whole pass, not per image: every
+        # image with boxes is rebuilt below, so anything left over is stale.
+        # This is labels/, not patches/ -- augmentation output is never
+        # touched here.
+        input_dir = labels_dir / "input0"
+        truth_dir = labels_dir / "truth0"
+        for d in (input_dir, truth_dir):
+            if d.exists():
+                shutil.rmtree(d)
+            d.mkdir(parents=True)
+
+        # load_image() overwrites the model's current image state, so put it
+        # back — this pass must not disturb what the viewer is showing.
+        saved_image_data = self.image_data
+        saved_axis_types = self.axis_types
+        saved_scale = self.scale
+
+        saved_count = 0
+
+        try:
+            for file_name, group in grouped:
+                idx = index_of(file_name)
+                emit(f"── {file_name}  (index {idx}, {len(group)} box(es))")
+
+                if idx is None:
+                    warn("   not found in image paths — skipping")
+                    continue
+
+                image = self.load_image(idx)
+                emit(
+                    f"   image:      shape={image.shape} dtype={image.dtype} "
+                    f"axis_types={self.axis_types}"
+                )
+
+                annotation = self.load_existing_annotations(
+                    idx, image_shape=image.shape
+                )
+                nonzero = int(np.count_nonzero(annotation))
+                emit(
+                    f"   annotation: shape={annotation.shape} "
+                    f"dtype={annotation.dtype} nonzero={nonzero}"
+                )
+                if nonzero == 0:
+                    warn(f"   {file_name} has an empty annotation")
+
+                stem = image_paths[idx].stem
+
+                # Axes that are neither Y, X nor C need a single position each;
+                # boxes.csv stores those as middle_positions, outer-first.
+                middle_axes = [
+                    ax for ax in (self.axis_types or "") if ax not in "YXC"
+                ]
+
+                for i, row in enumerate(group):
+                    ystart, yend = row["ystart"], row["yend"]
+                    xstart, xend = row["xstart"], row["xend"]
+
+                    if yend <= ystart or xend <= xstart:
+                        warn(f"   box {i}: degenerate — skipping")
+                        continue
+
+                    middle = list(row["middle_positions"])
+                    if len(middle) < len(middle_axes):
+                        warn(
+                            f"   box {i}: boxes.csv has {len(middle)} middle "
+                            f"position(s) but the image needs "
+                            f"{len(middle_axes)} ({''.join(middle_axes)}) "
+                            f"— padding with 0"
+                        )
+                        middle += [0] * (len(middle_axes) - len(middle))
+
+                    middle_iter = iter(middle)
+                    slices = []
+                    for ax in self.axis_types or "":
+                        if ax == "C":
+                            slices.append(slice(None))
+                        elif ax == "Y":
+                            slices.append(slice(ystart, yend))
+                        elif ax == "X":
+                            slices.append(slice(xstart, xend))
+                        else:
+                            slices.append(int(next(middle_iter)))
+
+                    image_crop = image[tuple(slices)]
+
+                    # Annotations may have C collapsed; drop the C slice if so.
+                    if annotation.ndim == image.ndim:
+                        ann_slices = slices
+                    else:
+                        ann_slices = [
+                            s
+                            for ax, s in zip(
+                                self.axis_types or "", slices, strict=False
+                            )
+                            if ax != "C"
+                        ]
+                    annotation_crop = annotation[tuple(ann_slices)]
+
+                    image_name, mask_name = generate_patch_names(
+                        str(input_dir), str(truth_dir), stem
+                    )
+                    imsave(image_name, image_crop)
+                    imsave(mask_name, annotation_crop.astype(np.uint16))
+
+                    emit(
+                        f"   box {i}: y[{ystart}:{yend}] x[{xstart}:{xend}] "
+                        f"middle={middle} → {Path(image_name).name} "
+                        f"{image_crop.shape}"
+                    )
+                    saved_count += 1
+        finally:
+            self.image_data = saved_image_data
+            self.axis_types = saved_axis_types
+            self.scale = saved_scale
+
+        emit(f"📦 saved {saved_count} label crop pair(s) → {labels_dir}")
+        return labels_dir
+
     def crop_and_save_3D_label_patches(
         self,
         boxes_3D_layer_data: list,

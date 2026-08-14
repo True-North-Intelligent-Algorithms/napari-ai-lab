@@ -5,6 +5,7 @@ This script launches the combined AI Lab plugin with Label, Augment,
 and Segment tabs in a single interface.
 """
 
+import argparse
 from pathlib import Path
 
 import napari
@@ -41,6 +42,27 @@ from napari_ai_lab.Segmenters.InteractiveSegmenters import (
 
 # Flag to control viewer type
 viewer_type = "none"  # Options: "none", "stacked", "sequence"
+
+# Each test set below picks its own viewer type.  Pass --stacked or --sequence
+# to override it, so the same images can be run through both paths and the
+# results compared -- N of YXC against a single NYXC dataset.
+parser = argparse.ArgumentParser(description="Launch ND AI Lab")
+viewer_group = parser.add_mutually_exclusive_group()
+viewer_group.add_argument(
+    "--stacked",
+    dest="viewer_type_override",
+    action="store_const",
+    const="stacked",
+    help="Force stacked mode (one N-dimensional dataset)",
+)
+viewer_group.add_argument(
+    "--sequence",
+    dest="viewer_type_override",
+    action="store_const",
+    const="sequence",
+    help="Force sequence mode (one image at a time)",
+)
+args = parser.parse_args()
 
 # Register global segmenters (only if successfully imported)
 if CellposeSegmenter is not None:
@@ -182,6 +204,13 @@ elif test_set == "new":
     viewer_type = ("none",)
     axes_to_collapse = ("C",)
     axis_types = "YXC"
+
+if args.viewer_type_override is not None:
+    print(
+        f"🔀 Viewer type overridden on the command line: "
+        f"{viewer_type} -> {args.viewer_type_override}"
+    )
+    viewer_type = args.viewer_type_override
 
 # Create model
 # Launch using helper; keep the test-set selection code above unchanged so this
