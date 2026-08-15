@@ -15,6 +15,35 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## Does appose still report environment-build progress, and under what name?
+
+**Status:** open — found incidentally, not chased.
+
+`pixi/pytorch_napari/pixi.toml` took appose from a sibling checkout rather than
+PyPI because `PixiInstallMonitor` was in no release, and without it the first
+run of an op is a silent multi-minute hang while an environment builds.
+
+That symbol is no longer in the checkout either. It landed in appose 3e97f55
+(2026-06-24), which *is* an ancestor of the checkout's HEAD, so it was removed
+or renamed upstream some time after. So the stated reason for preferring a
+checkout no longer holds, and nobody has checked what replaced it.
+
+Three things to find out, in order:
+
+1. What happened to `PixiInstallMonitor` — renamed, folded into `Service`, or
+   dropped. `git log -S PixiInstallMonitor` in `../appose-python` answers it.
+2. Whether build progress reaches the user today at all. The symptom to look
+   for is the original one: trigger a first-run environment build from the
+   segmenter list and see whether anything appears before it finishes.
+3. Whether the checkout is still needed, or PyPI would now do.
+
+Not urgent — nothing regressed, this was always the state. It surfaced because
+adding albumentations forced a full re-resolve, which is also how the appose
+source came to be declared explicitly in that file; the comment there has the
+detail.
+
+---
+
 ## Stacked mode writes boxes.csv in a different format than sequence mode
 
 **Status:** open — fix or deprecate, undecided.

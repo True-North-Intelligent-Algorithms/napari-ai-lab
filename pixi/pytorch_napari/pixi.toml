@@ -68,6 +68,18 @@ PyQt5 = "*"
 # stays on conda, where the CUDA builds are; cellpose finds it there.
 cellpose = ">=4"
 
+# AlbumentationsAugmenter's dependency, and the one model stack this host does
+# install. It earns that because it is not a stack: no CUDA, no python pin, no
+# hard numpy ceiling, and cellpose already brings opencv-python-headless,
+# scipy and pydantic here -- so it costs albucore and two small wheels. The
+# alternative was an appose round trip per patch, and augmentation runs
+# thousands of times per session.
+#
+# PyPI rather than conda for the same reason as cellpose above, and more so:
+# conda's albumentations pulls `py-opencv`, which is the qt6 build, which puts
+# a second Qt next to PyQt5 and a second cv2 next to the PyPI one.
+albumentations = "*"
+
 napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 
 # NB: scikit-ops is deliberately NOT declared here, even though this
@@ -86,16 +98,28 @@ napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 # If skop-napari is ever removed from this environment, scikit-ops has to be
 # declared here instead.
 
-# NB: appose is not declared here either, for the same reason as scikit-ops.
-# skop-napari's [tool.uv.sources] supplies it from ../appose-python, and a
-# second declaration here is what makes the solve unsatisfiable. It is needed
-# from a checkout rather than PyPI because PixiInstallMonitor landed in
-# appose 3e97f55 and is in no release, so 0.11/0.12 report nothing while an
-# environment builds -- the first run of an op becomes a silent, multi-minute
-# hang.
+# appose comes from the sibling checkout, which is ahead of the 0.12.0 release.
 #
-# This environment therefore needs appose-python checked out beside the other
-# repos, even though nothing here names it.
+# It used to be left undeclared, on the grounds that skop-napari's
+# [tool.uv.sources] supplies it from ../appose-python and a second declaration
+# here made the solve unsatisfiable. That holds only while the lock is reused.
+# Adding any new pypi dependency forces a full re-resolve, and in a full
+# re-resolve uv does not apply a path dependency's sources transitively --
+# appose silently reverts to the PyPI wheel. Adding albumentations below is
+# what tripped it. Reproduce by deleting this line and adding any pypi
+# package: `grep -c appose-python pixi.lock` goes from 4 to 0.
+#
+# Naming it here is worth doing whichever appose is wanted: a dependency
+# changing source as a side effect of an unrelated edit is invisible at
+# runtime and survives into the lock.
+#
+# The reason previously given for preferring a checkout was PixiInstallMonitor,
+# absent from 0.11/0.12 and needed so that an environment build is not a silent
+# multi-minute hang. That rationale is stale: the symbol is not in the checkout
+# either. It landed in 3e97f55, which is an ancestor of the checkout's HEAD, so
+# it was removed or renamed upstream afterwards. Whether build progress still
+# reports, and under what name, is unresolved -- see docs/spec/OPEN.md.
+appose = { path = "../../../appose-python", editable = true }
 
 # For the generated parameter panel, step 3 of docs/spec/0004. Requires Python
 # >=3.12, which this environment satisfies and the older hosts did not -- which
@@ -106,8 +130,11 @@ napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 # in the live editable scikit-ops, not a pinned copy.
 skop-napari = { path = "../../../skop-napari", editable=true}
 
-# Deliberately absent: zarr, albumentations. The app must run without them
-# (docs/spec/0003), and this is the environment that proves it.
+# Deliberately absent: zarr. The app must run without it (docs/spec/0003).
+# albumentations used to be listed here too; it is now installed above, and
+# `pixi/sandbox` is the environment that carries the minimal-tier promise
+# (0003 names it as such). The app still runs without albumentations -- the
+# augmenter registers either way and reports its dependencies in the banner.
 #
 # NB: this environment is for development, and assumes four sibling checkouts
 # -- napari-ai-lab, scikit-ops, skop-napari, appose-python -- because two of

@@ -408,7 +408,18 @@ class NDEasyAugment(BaseNDApp):
                 )
                 self._on_augment_all_finished()
 
-        except (ValueError, RuntimeError, OSError, AttributeError) as e:
+        except (
+            ImportError,
+            ValueError,
+            RuntimeError,
+            OSError,
+            AttributeError,
+        ) as e:
+            # ImportError included so that selecting an augmenter whose
+            # optional dependency is missing reports in the log rather than
+            # escaping to the console. The augmenter is listed with a red
+            # banner and the button stays live, so pressing it is a thing
+            # users will do.
             error_msg = f"Error during augmentation: {e}"
             self.progress_logger.log_error(error_msg)
 

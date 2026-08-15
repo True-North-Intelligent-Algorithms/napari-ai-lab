@@ -41,35 +41,52 @@ class AugmenterBase(ABC):
 
         Mirrors ``GlobalSegmenterBase.are_dependencies_available``. The default
         is True; an augmenter whose optional dependency may be missing
-        overrides it. Registration consults this, so a registry entry means the
-        augmenter is usable rather than merely importable -- see
+        overrides it. The UI draws this as the green or red banner -- see
         docs/spec/0003-optional-dependencies.md.
         """
         return True
+
+    def availability(self):
+        """How ready this augmenter is, in the segmenters' vocabulary.
+
+        Green or red only, never the amber states. Those describe an operation
+        that runs in *another* environment via appose, and augmenters run here
+        or not at all -- promising an environment that will be built would be
+        a lie. Mirrors ``GlobalSegmenterBase.availability``, which is likewise
+        two-state for everything except SkopSegmenter.
+        """
+        from ..Segmenters.availability import available, unavailable
+
+        if self.are_dependencies_available():
+            return available()
+        return unavailable(
+            "Dependencies not available — install required packages to use "
+            "this augmenter"
+        )
 
     @classmethod
     def register_framework(cls, name, framework):
         """
         Add a framework to the registry.
 
-        Skips registration when the framework's dependencies are missing.
-        Registering it anyway would offer the user something that raises
-        ImportError the moment the combo box selects it -- which is what
-        happened with albumentations, since it sorts first and so was selected
-        automatically at startup.
+        Registers regardless of whether the dependencies are there, so a
+        missing library shows as a red banner on a listed augmenter rather
+        than as an augmenter that silently does not exist. This is what the
+        segmenters do, and the difference was confusing: albumentations simply
+        vanished from the combo box with no indication why.
 
         Args:
             name (str): The name of the framework.
             framework (AugmenterBase): The framework class to register.
         """
-        if not framework.are_dependencies_available():
-            print(
-                f"Skipping augmenter {name}: dependencies not available. "
-                f"See docs/spec/0003-optional-dependencies.md"
-            )
-            return
         cls.registry[name] = framework
-        print(f"Registered augmenter: {name}")
+        if framework.are_dependencies_available():
+            print(f"Registered augmenter: {name}")
+        else:
+            print(
+                f"Registered augmenter: {name} (dependencies not available; "
+                f"it will list with a red banner)"
+            )
 
     @classmethod
     def get_registered_frameworks(cls):

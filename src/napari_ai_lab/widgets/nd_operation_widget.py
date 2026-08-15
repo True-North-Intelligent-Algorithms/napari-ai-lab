@@ -283,8 +283,11 @@ class NDOperationWidget(QWidget):
             self.main_layout.addWidget(self._dependency_label)
 
             # When deps are missing, offer a "Choose Environment..." picker
-            # so the segmenter can be run remotely via appose.
-            if not deps_ok:
+            # so the segmenter can be run remotely via appose -- but only for
+            # operations that can actually do that. Augmenters run here or not
+            # at all, and offering them an environment would promise something
+            # that cannot happen.
+            if not deps_ok and self._supports_remote_execution():
                 self._add_remote_env_row()
 
         # --- Instructions label ---
@@ -304,6 +307,24 @@ class NDOperationWidget(QWidget):
                 print(
                     f"Added instructions for {self.nd_operation.__class__.__name__}"
                 )
+
+    def _supports_remote_execution(self) -> bool:
+        """Whether this operation can run in another environment via appose.
+
+        True when the class supplies its own ``get_execution_string``; the
+        base implementation on GlobalSegmenterBase only raises, so inheriting
+        it is a "no". Augmenters do not define the method at all, so they are
+        a "no" as well.
+        """
+        method = getattr(type(self.nd_operation), "get_execution_string", None)
+        if method is None:
+            return False
+
+        from ..Segmenters.GlobalSegmenters.GlobalSegmenterBase import (
+            GlobalSegmenterBase,
+        )
+
+        return method is not GlobalSegmenterBase.get_execution_string
 
     def _add_remote_env_row(self):
         """Show current remote-env pin + a button to (re)pick one.

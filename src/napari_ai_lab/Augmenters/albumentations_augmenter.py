@@ -174,15 +174,13 @@ Albumentations Advanced Augmentation:
     def __post_init__(self):
         """Initialize parent class after dataclass initialization.
 
-        Raises:
-            ImportError: If albumentations is not installed. It is an optional
-                dependency; SimpleAugmenter works without it.
+        Constructs even when albumentations is missing, so the augmenter can
+        appear in the list with a red banner rather than not appearing at all.
+        The guard lives in ``_create_augmentation_pipeline``, at the point the
+        library is actually needed -- the same shape as CellposeSegmenter,
+        which constructs without cellpose and checks at run time. See
+        docs/spec/0003-optional-dependencies.md.
         """
-        if A is None:
-            raise ImportError(
-                "AlbumentationsAugmenter requires albumentations, which is "
-                "not installed. Install it with: pip install albumentations"
-            )
         super().__init__(seed=self.seed)
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self.supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
@@ -200,7 +198,7 @@ Albumentations Advanced Augmentation:
 
     @classmethod
     def are_dependencies_available(cls) -> bool:
-        """False when albumentations is not installed, so register() skips."""
+        """False when albumentations is not installed, so the banner goes red."""
         return A is not None
 
     @classmethod
@@ -240,7 +238,20 @@ Albumentations Advanced Augmentation:
         -------
         A.Compose
             Composed augmentation pipeline
+
+        Raises
+        ------
+        ImportError
+            If albumentations is not installed. It is an optional dependency;
+            SimpleAugmenter works without it. Raised here rather than at
+            construction so the augmenter still lists with a red banner.
         """
+        if A is None:
+            raise ImportError(
+                "AlbumentationsAugmenter requires albumentations, which is "
+                "not installed. Install it with: pip install albumentations"
+            )
+
         augmentations = []
 
         if self.do_vertical_flip:
