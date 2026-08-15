@@ -1435,7 +1435,9 @@ class ImageDataModel:
         )
         return labels_dir
 
-    def crop_and_save_all_label_patches(self, progress_logger=None) -> Path:
+    def crop_and_save_all_label_patches(
+        self, progress_logger=None, annotation_name: str | None = None
+    ) -> Path:
         """
         Regenerate label crops for **every** image that has boxes, driving from
         ``labels/boxes.csv`` instead of the live layers.
@@ -1454,10 +1456,19 @@ class ImageDataModel:
 
         Args:
             progress_logger: Optional ProgressLogger; falls back to print.
+            annotation_name: Which annotation collection to crop, naming a
+                subdirectory of ``annotations/``. Annotations are a collection
+                (one subdirectory per labels layer), and stacked mode picks
+                between them with the active-layer combo; this is the same
+                choice, spelled as a name because the images being cropped are
+                not loaded and so have no layer to read. Defaults to
+                ``load_existing_annotations``' own default, which is only
+                right for a project that predates named collections.
 
         Returns:
             Path to the ``labels/`` directory.
         """
+        import json
         import shutil
         from itertools import groupby
 
@@ -1504,6 +1515,7 @@ class ImageDataModel:
             f"{len(rows)} box row(s) across {len(grouped)} image(s)"
         )
         emit(f"   boxes.csv: {self.get_boxes_csv_path()}")
+        emit(f"   annotations: {annotation_name or 'class_0 (default)'}")
 
         # Wipe the label crops once for the whole pass, not per image: every
         # image with boxes is rebuilt below, so anything left over is stale.
@@ -1518,9 +1530,11 @@ class ImageDataModel:
 
         # load_image() overwrites the model's current image state, so put it
         # back — this pass must not disturb what the viewer is showing.
-        saved_image_data = self.image_data
-        saved_axis_types = self.axis_types
-        saved_scale = self.scale
+        # getattr rather than direct access: load_image sets these lazily, so
+        # on a model that has not loaded an image yet they do not exist.
+        saved_image_data = getattr(self, "image_data", None)
+        saved_axis_types = getattr(self, "axis_types", None)
+        saved_scale = getattr(self, "scale", None)
 
         saved_count = 0
 
@@ -1539,8 +1553,16 @@ class ImageDataModel:
                     f"axis_types={self.axis_types}"
                 )
 
-                annotation = self.load_existing_annotations(
-                    idx, image_shape=image.shape
+                annotation = (
+                    self.load_existing_annotations(
+                        idx,
+                        image_shape=image.shape,
+                        subdirectory=annotation_name,
+                    )
+                    if annotation_name is not None
+                    else self.load_existing_annotations(
+                        idx, image_shape=image.shape
+                    )
                 )
                 nonzero = int(np.count_nonzero(annotation))
                 emit(
@@ -1619,6 +1641,24 @@ class ImageDataModel:
             self.image_data = saved_image_data
             self.axis_types = saved_axis_types
             self.scale = saved_scale
+
+        # Record which annotation collection these crops came from. The choice
+        # is the active-layer combo, which is transient UI state, while the
+        # crops are a persisted artifact -- so without this the same project
+        # yields different truth depending on what happened to be selected,
+        # with nothing on disk saying which. Mirrors the info.json the
+        # augmenter writes beside the patches.
+        info_path = labels_dir / "info.json"
+        with open(info_path, "w") as fh:
+            json.dump(
+                {
+                    "annotation_collection": annotation_name,
+                    "n_crop_pairs": saved_count,
+                    "n_images": len(grouped),
+                },
+                fh,
+                indent=2,
+            )
 
         emit(f"📦 saved {saved_count} label crop pair(s) → {labels_dir}")
         return labels_dir

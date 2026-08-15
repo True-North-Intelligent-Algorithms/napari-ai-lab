@@ -27,6 +27,12 @@ from ..utility import (
 )
 from ..widgets import NDOperationWidget
 
+# Name of the annotation collection used when a project has none yet. It is
+# both a layer name and the ``annotations/<name>/`` directory the layer saves
+# to, so the two must not be chosen independently -- reading one while writing
+# the other is how label crops came out empty.
+DEFAULT_ANNOTATION_NAME = "Labels (Persistent)"
+
 
 class BaseNDApp(QWidget):
     """
@@ -191,6 +197,18 @@ class BaseNDApp(QWidget):
                     "Save Error",
                     f"Failed to save annotations '{name}': {e}",
                 )
+
+    def _active_annotation_name(self) -> str | None:
+        """Name of the active annotation collection, or None if there is none.
+
+        Annotations are a collection -- one ``annotations/<name>/`` directory
+        per labels layer -- and ``annotation_layer`` is the active one, chosen
+        by the label panel's combo. Code holding a layer can just use its data;
+        code reading images that are not loaded has no layer and needs the
+        name instead. Both are the same choice, so both come from here.
+        """
+        layer = getattr(self, "annotation_layer", None)
+        return layer.name if layer is not None else None
 
     def _on_save_annotations(self):
         """Save current annotations explicitly."""

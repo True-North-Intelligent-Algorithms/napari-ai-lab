@@ -22,7 +22,7 @@ from ..models import ImageDataModel
 from ..utilities import QtProgressLogger, SliceProcessor, SliceProcessorThread
 from ..utility import get_supported_axes_from_shape
 from ..widgets.nd_operation_widget import NDOperationWidget
-from .base_nd_app import BaseNDApp
+from .base_nd_app import DEFAULT_ANNOTATION_NAME, BaseNDApp
 
 
 class NDEasyAugment(BaseNDApp):
@@ -245,15 +245,21 @@ class NDEasyAugment(BaseNDApp):
         self.image_layer = image_layer
         image_data = image_layer.data
 
-        # Load existing labels or create empty ones
+        # Load existing labels or create empty ones. Read from the collection
+        # the layer is about to be named after -- reading class_0 while
+        # creating "Labels (Persistent)" silently pairs a layer with somebody
+        # else's annotations, which is how the empty-truth bug happened.
+        # Only reached standalone; inside NDAILab the distributor overwrites
+        # annotation_layer with the active one.
         labels_data = self.image_data_model.load_existing_annotations(
             self.current_image_index,
             image_data.shape,
+            subdirectory=DEFAULT_ANNOTATION_NAME,
             axes_to_collapse=self.axes_to_collapse,
         )
 
         self.annotation_layer = self.viewer.add_labels(
-            labels_data, name="Labels (Persistent)"
+            labels_data, name=DEFAULT_ANNOTATION_NAME
         )
 
         print(
@@ -323,7 +329,8 @@ class NDEasyAugment(BaseNDApp):
                         "Sequence mode — regenerating label crops from boxes.csv"
                     )
                     self.image_data_model.crop_and_save_all_label_patches(
-                        progress_logger=self.progress_logger
+                        progress_logger=self.progress_logger,
+                        annotation_name=self._active_annotation_name(),
                     )
                 self.image_data_model.generate_patches_from_labels(
                     progress_logger=self.progress_logger,

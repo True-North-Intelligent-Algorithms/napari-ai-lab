@@ -1993,7 +1993,9 @@ class NDEasyLabel(BaseNDApp):
         # this image's annotations and boxes, so the CSV is current.
         boxes_layer = getattr(self, "boxes_layer", None)
         if not self.image_data_model._is_stacked_sequence():
-            self.image_data_model.crop_and_save_all_label_patches()
+            self.image_data_model.crop_and_save_all_label_patches(
+                annotation_name=self._active_annotation_name()
+            )
         elif boxes_layer is not None and len(boxes_layer.data) > 0:
             self.image_data_model.crop_and_save_label_patches(
                 boxes_layer.data,

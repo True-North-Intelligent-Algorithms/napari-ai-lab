@@ -15,6 +15,56 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## Annotations are a collection; labels and patches are still singular
+
+**Status:** open — deliberately deferred. The immediate bug is fixed; the
+generalisation is not.
+
+`annotations/` became a collection — one `annotations/<layer name>/` directory
+per labels layer, so several classes can be annotated separately. Everything
+downstream stayed singular:
+
+```
+annotations/<name>/          a collection, one per labels layer
+labels/input0, labels/truth0 one pair, whichever collection was active
+patches/patches_axis_*/      one set, from that one pair
+```
+
+So `truth0` holds whichever collection the active-layer combo happened to
+select when Save Project or Augment ran. Switching the combo and re-running
+silently rewrites it with a different class. `labels/info.json` now records
+which collection was used, which makes that visible after the fact but does not
+make it correct.
+
+The generalisation is that `labels/` and `patches/` become per-collection too,
+and it reaches further than it first looks. Consumers of the `input0` /
+`ground_truth0` convention:
+
+- `generate_patches_from_labels` and both crop methods in `image_data_model.py`
+- `dl_util.py:102` (`load_patches`), `io_util.py:37`
+- `nd_easy_augment.py:500` (the "show patches" viewer)
+- training in `MonaiUNetSegmenter`, `MonaiUNetSegmenter3D`, `MicroSamSegmenter`
+- `TrainingBase.py`, which already documents `ground_truth0, ground_truth1, …`
+  as a numbered series — so the convention anticipated this and nothing uses it
+
+Worth deciding before building: whether a collection maps to a **numbered**
+truth directory beside one input set (`truth0`, `truth1`, sharing `input0` —
+which is what the numbering above was for, and is the multi-class training
+shape), or to a **separate patch tree** per collection. The first is smaller
+and matches what training frameworks expect; the second generalises to
+collections that do not share crop geometry.
+
+Not urgent while there is one collection. It becomes urgent the day there are
+two, and the symptom will be silently mixed-up training data rather than an
+error.
+
+Prompted by the empty-truth bug: writes had moved to `subdirectory=<layer
+name>` while two readers still defaulted to `class_0`, so `truth0` was cropped
+from an empty `annotations/class_0/`. Fixed by threading the active layer's
+name through; `annotations/class_0/` is left on disk here and is stale.
+
+---
+
 ## Does appose still report environment-build progress, and under what name?
 
 **Status:** open — found incidentally, not chased.
