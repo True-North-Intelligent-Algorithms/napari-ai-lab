@@ -1509,6 +1509,13 @@ class NDEasyLabel(BaseNDApp):
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
 
+    def _on_box_selection_changed(self, *_):
+        selected = list(self.boxes_layer.selected_data)
+        if selected:
+            self._update_active_box_size_label(
+                self.boxes_layer.data[selected[-1]]
+            )
+
     def _on_shapes_changed(self, event):
         """Handle shapes layer data changes - prints shape information."""
         shapes_layer = event.source
@@ -2277,6 +2284,9 @@ class NDEasyLabel(BaseNDApp):
 
             # Connect boxes layer event handler
             self.boxes_layer.events.data.connect(self._on_boxes_changed)
+            self.boxes_layer.selected_data.events.items_changed.connect(
+                self._on_box_selection_changed
+            )
 
             # Load any previously saved boxes from CSV
             self._load_existing_boxes()

@@ -480,6 +480,9 @@ class NDAILab(QWidget):
             self.boxes_layer.events.data.connect(
                 self.label_widget._on_boxes_changed
             )
+            self.boxes_layer.selected_data.events.items_changed.connect(
+                self.label_widget._on_box_selection_changed
+            )
 
         # Loading boxes from CSV emits the same "added" event as drawing one,
         # so the handlers are silenced while it happens -- otherwise returning
@@ -489,7 +492,8 @@ class NDAILab(QWidget):
         # already exists, so it has to be blocked explicitly.
         if hasattr(self.label_widget, "_load_existing_boxes"):
             if self.boxes_layer is not None:
-                with self.boxes_layer.events.data.blocker():
+                sel = self.boxes_layer.selected_data.events.items_changed
+                with self.boxes_layer.events.data.blocker(), sel.blocked():
                     self.label_widget._load_existing_boxes()
             else:
                 self.label_widget._load_existing_boxes()
