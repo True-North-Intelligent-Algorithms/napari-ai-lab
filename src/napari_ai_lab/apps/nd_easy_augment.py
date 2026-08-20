@@ -19,7 +19,7 @@ from qtpy.QtWidgets import (
 
 from ..Augmenters import AugmenterBase
 from ..models import ImageDataModel
-from ..utilities import QtProgressLogger, SliceProcessor, SliceProcessorThread
+from ..utilities import ProcessorThread, QtProgressLogger, SliceProcessor
 from ..utility import get_supported_axes_from_shape
 from ..widgets.nd_operation_widget import NDOperationWidget
 from .base_nd_app import DEFAULT_ANNOTATION_NAME, BaseNDApp
@@ -395,7 +395,7 @@ class NDEasyAugment(BaseNDApp):
             use_threading = False
 
             if use_threading:
-                self._augment_thread = SliceProcessorThread(
+                self._augment_thread = ProcessorThread(
                     processor, do_augment_slice
                 )
                 self._augment_thread.progress.connect(

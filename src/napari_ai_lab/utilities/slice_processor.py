@@ -3,7 +3,8 @@ SliceProcessor: iterates over non-spatial slices of ND data and applies
 an operation to each slice.
 
 Supports both single-slice (process_slice) and full-volume (process_all) modes.
-SliceProcessorWorker wraps process_all in a QThread for non-blocking GUI updates.
+ProcessorThread wraps process_all in a QThread for non-blocking GUI updates. It
+only calls process_all, so it drives any processor offering that method.
 """
 
 import itertools
@@ -123,8 +124,8 @@ class SliceProcessor:
             self.process_slice(current_step, operation_fn, on_slice_done)
 
 
-class _SliceWorker(QObject):
-    """QObject that runs SliceProcessor.process_all in a worker thread.
+class _ProcessorWorker(QObject):
+    """QObject that runs a processor's process_all in a worker thread.
 
     Emits signals so the main/GUI thread can safely update widgets and layers.
     """
@@ -168,12 +169,12 @@ class _SliceWorker(QObject):
             self.finished.emit()
 
 
-class SliceProcessorThread:
-    """Convenience wrapper that manages QThread + _SliceWorker lifecycle.
+class ProcessorThread:
+    """Convenience wrapper that manages QThread + _ProcessorWorker lifecycle.
 
     Usage::
 
-        spt = SliceProcessorThread(processor, operation_fn)
+        spt = ProcessorThread(processor, operation_fn)
         spt.progress.connect(my_progress_handler)
         spt.slice_done.connect(my_slice_done_handler)
         spt.finished.connect(my_finished_handler)
@@ -186,7 +187,7 @@ class SliceProcessorThread:
         self, processor, operation_fn, start_index=None, end_index=None
     ):
         self.thread = QThread()
-        self.worker = _SliceWorker(
+        self.worker = _ProcessorWorker(
             processor,
             operation_fn,
             start_index=start_index,

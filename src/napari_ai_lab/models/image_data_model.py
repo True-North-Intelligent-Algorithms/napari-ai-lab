@@ -2466,15 +2466,15 @@ class ImageDataModel:
                 after each slice is segmented.
             on_progress: Optional callable(current_index, total_slices)
                 called before each slice for progress reporting.
-            use_threading: If True, returns a SliceProcessorThread that must
+            use_threading: If True, returns a ProcessorThread that must
                 be started by the caller. If False, executes synchronously.
 
         Returns:
             If use_threading=False: SliceProcessor (for access to total_slices etc.)
-            If use_threading=True: (SliceProcessor, SliceProcessorThread)
+            If use_threading=True: (SliceProcessor, ProcessorThread)
                 The thread must be started by the caller with .start()
         """
-        from ..utilities.slice_processor import SliceProcessorThread
+        from ..utilities.slice_processor import ProcessorThread
 
         self.set_current_segmenter_name(segmenter.__class__.__name__)
 
@@ -2487,7 +2487,7 @@ class ImageDataModel:
 
         if use_threading:
             # Return thread for caller to start and manage
-            thread = SliceProcessorThread(
+            thread = ProcessorThread(
                 processor,
                 operation,
                 start_index=start_index,

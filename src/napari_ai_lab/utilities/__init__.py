@@ -29,7 +29,7 @@ from .progress_logger import (
     ProgressLogger,
 )
 from .qt_progress_logger import QtProgressLogger
-from .slice_processor import SliceProcessor, SliceProcessorThread
+from .slice_processor import ProcessorThread, SliceProcessor
 from .training_thread import TrainingThread
 
 __all__ = [
@@ -59,7 +59,7 @@ __all__ = [
     "divide_training_data",
     # slice_processor
     "SliceProcessor",
-    "SliceProcessorThread",
+    "ProcessorThread",
     # training_thread
     "TrainingThread",
 ]
