@@ -15,6 +15,25 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## Reading image shapes without a full load
+
+**Status:** open — deferred out of spec 0006, not a blocker.
+
+Spec 0006 wanted a pre-flight pass telling the user "84 of 100 will be
+processed, 16 skipped" before a batch starts, rather than discovering it in a
+summary twenty minutes later. It settled for post-hoc reporting because the
+count needs every image's `axis_types`, and getting those today means
+`load_image` on all of them — which is the batch itself.
+
+Both tiff and czi headers carry shape and axes; the IO layer does not expose a
+way to read them without the pixels. If it did, pre-flight is cheap and the
+decision in 0006 flips.
+
+Wider than 0006: anything wanting to describe a folder before working through
+it has the same problem.
+
+---
+
 ## Annotations are a collection; labels and patches are still singular
 
 **Status:** open — deliberately deferred. The immediate bug is fixed; the

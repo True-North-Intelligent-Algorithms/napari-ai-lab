@@ -18,3 +18,4 @@ items that are too small or too unresolved to have a plan yet. It is what
 | [0003](0003-optional-dependencies.md) | Import never fails, construction may; the minimal install as a testable promise |
 | [0004](0004-first-scikit-ops-segmenter.md) | One skop op in the segmenter list, magicgui panel, and what a first-run environment build owes the user |
 | [0005](0005-ai-lab-cleanup.md) | State copied rather than read, save-on-switch, two viewers, and what to do about each |
+| [0006](0006-batch-segmentation-over-a-sequence.md) | Segment Range over every image; a stacked sequence is a sequence of one |
