@@ -208,6 +208,21 @@ Two things the nesting changes, both easy to get wrong:
 Untouched: stacked mode, which runs as a sequence of one; every individual
 segmenter; and the layer wiring in `nd_ai_lab.py`.
 
+## Built differently than planned
+
+- `can_process` answers only "are my axes here". Whether the slicer can build
+  the iteration is `unsupported_iteration` in `slice_processor.py`, kept apart
+  so a temporary limit does not become a rule on every segmenter.
+- A leading channel axis iterates fine; a trailing one cannot, because the
+  slicer iterates leading axes. So `CYX` works and `YXC` needs `C` collapsed.
+  See OPEN.md, "Segmenting channels separately".
+- `_on_segment_slice_done` was split rather than stripped -- single-slice mode
+  shares it. The sequence path connects only the update half.
+- `SequenceProcessor` takes `segmenter` and `current_index` as well as
+  `source`, and lives in its own `sequence_processor.py`.
+- `ProcessorThread` moved to `processor_thread.py` and now publishes the
+  QThread's `finished`, not the worker's.
+
 ## What this is not
 
 Not a change to what a segmenter does to one image, and not a rework of

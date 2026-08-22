@@ -15,6 +15,55 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## Segmenting channels separately
+
+**Status:** open — a real use case the slicing cannot express.
+
+`SliceProcessor` iterates *leading* axes. A channel axis is trailing, so YXC
+asked to iterate loops over Y instead — 780 "slices" of nonsense. The only way
+through is to collapse C, and `can_process` refuses the alternative rather
+than let it happen quietly.
+
+That refusal is a limitation, not a judgement about channels. Three distinct
+channels — nuclei, mito, CY3 — are often exactly what one wants segmented
+separately, and the collapse is right sometimes and wrong other times. Nothing
+today lets the user say which.
+
+Fixing it means either moving the iterated axis to the front before slicing,
+or teaching `SliceProcessor` to iterate an arbitrary axis rather than assuming
+the leading ones.
+
+---
+
+## Cellpose reloads its model once per image
+
+**Status:** open — performance only, found running spec 0006's batcher.
+
+`Using CellposeSAM model: cpsam` prints once per image in a sequence run: ten
+images, ten initialisations. VRAM is flat across them (2.77 GB reserved), so
+nothing leaks, but the load is most of the wall clock on small images.
+
+A batch has one segmenter instance throughout, so the model could be loaded
+once. Whether that belongs in `CellposeSegmenter` or in a general
+"segmenter is about to see many images" hook is undecided — the same question
+applies to every model-backed segmenter.
+
+---
+
+## Which pollen images suit instance segmentation
+
+**Status:** open — the decision exists only as folder membership.
+
+`tests/test_images/pollen_count` and `pollen_morphology` are a 10/10 split of
+the 20-image pollen set, made in an earlier session: many grains per field
+versus one to three large ones. The criterion is written down nowhere.
+`pollen SOURCES.md` covers provenance and licences and does not mention the
+split, and `tests/test_images/` is gitignored, so there is no commit history
+to recover it from either.
+
+If the folders are ever lost the judgement goes with them. `pollen SOURCES.md`
+lives outside the project folders and is the natural place to record it.
+
 ## Reading image shapes without a full load
 
 **Status:** open — deferred out of spec 0006, not a blocker.
