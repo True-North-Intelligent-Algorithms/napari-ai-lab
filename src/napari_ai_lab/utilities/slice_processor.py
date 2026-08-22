@@ -2,15 +2,13 @@
 SliceProcessor: iterates over non-spatial slices of ND data and applies
 an operation to each slice.
 
-Supports both single-slice (process_slice) and full-volume (process_all) modes.
-ProcessorThread wraps process_all in a QThread for non-blocking GUI updates. It
-only calls process_all, so it drives any processor offering that method.
+Supports both single-slice (process_slice) and full-volume (process_all)
+modes.  No Qt here: ProcessorThread runs either mode off the GUI thread.
 """
 
 import itertools
 
 import numpy as np
-from qtpy.QtCore import QObject, QThread, Signal
 
 
 class SliceProcessor:
@@ -124,89 +122,37 @@ class SliceProcessor:
             self.process_slice(current_step, operation_fn, on_slice_done)
 
 
-class _ProcessorWorker(QObject):
-    """QObject that runs a processor's process_all in a worker thread.
+def unsupported_iteration(axis_types, selected_axis, axes_to_collapse=None):
+    """Why SliceProcessor cannot iterate this image, or None if it can.
 
-    Emits signals so the main/GUI thread can safely update widgets and layers.
+    Limits of this slicer, not of the segmenter and not of the idea. Two
+    today, both from the same assumption -- that the axes to iterate are the
+    leading ones:
+
+    - a leftover axis that is not leading. YXC handed to a YX segmenter should
+      loop over C, and looping over C is a perfectly reasonable thing to want
+      -- three channels, nuclei and mito and CY3, segmented separately. This
+      would loop over Y instead, so it is refused rather than done wrongly.
+    - a collapse naming an axis the image does not have, which drives the
+      slice arithmetic negative.
+
+    Both disappear when the slicer can iterate an arbitrary axis. See
+    docs/spec/OPEN.md, "Segmenting channels separately".
     """
-
-    progress = Signal(int, int)  # (current, total)
-    slice_done = Signal(tuple, object)  # (current_step, result)
-    finished = Signal()
-    error = Signal(str)
-
-    def __init__(
-        self, processor, operation_fn, start_index=None, end_index=None
-    ):
-        super().__init__()
-        self.processor = processor
-        self.operation_fn = operation_fn
-        self.start_index = start_index
-        self.end_index = end_index
-
-    def run(self):
-        """Execute process_all; called on the worker thread."""
-        try:
-            self.processor.process_all(
-                self.operation_fn,
-                on_slice_done=lambda step, result: self.slice_done.emit(
-                    step, result
-                ),
-                on_progress=lambda cur, tot: self.progress.emit(cur, tot),
-                start_index=self.start_index,
-                end_index=self.end_index,
-            )
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            OSError,
-            IndexError,
-            AttributeError,
-        ) as e:
-            self.error.emit(str(e))
-        finally:
-            self.finished.emit()
-
-
-class ProcessorThread:
-    """Convenience wrapper that manages QThread + _ProcessorWorker lifecycle.
-
-    Usage::
-
-        spt = ProcessorThread(processor, operation_fn)
-        spt.progress.connect(my_progress_handler)
-        spt.slice_done.connect(my_slice_done_handler)
-        spt.finished.connect(my_finished_handler)
-        spt.start()
-
-    The caller must keep a reference to this object until ``finished`` fires.
-    """
-
-    def __init__(
-        self, processor, operation_fn, start_index=None, end_index=None
-    ):
-        self.thread = QThread()
-        self.worker = _ProcessorWorker(
-            processor,
-            operation_fn,
-            start_index=start_index,
-            end_index=end_index,
+    leading = axis_types[: len(axis_types) - len(selected_axis)]
+    for ax in axes_to_collapse or []:
+        if ax not in axis_types:
+            return f"axes {axis_types}, no {ax} to collapse"
+    leftover = [
+        ax
+        for ax in axis_types
+        if ax not in selected_axis
+        and ax not in (axes_to_collapse or [])
+        and ax not in leading
+    ]
+    if leftover:
+        return (
+            f"axes {axis_types}, cannot iterate {''.join(leftover)}: "
+            "it is not a leading axis"
         )
-        self.worker.moveToThread(self.thread)
-
-        # Wire lifecycle
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        # Expose signals for external connection
-        self.progress = self.worker.progress
-        self.slice_done = self.worker.slice_done
-        self.finished = self.worker.finished
-        self.error = self.worker.error
-
-    def start(self):
-        """Start processing on the worker thread."""
-        self.thread.start()
+    return None

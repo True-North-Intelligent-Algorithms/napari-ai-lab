@@ -2474,7 +2474,7 @@ class ImageDataModel:
             If use_threading=True: (SliceProcessor, ProcessorThread)
                 The thread must be started by the caller with .start()
         """
-        from ..utilities.slice_processor import ProcessorThread
+        from ..utilities.processor_thread import ProcessorThread
 
         self.set_current_segmenter_name(segmenter.__class__.__name__)
 
@@ -2503,6 +2503,88 @@ class ImageDataModel:
             return processor, thread
         else:
             # Synchronous execution
+            processor.process_all(
+                operation,
+                on_slice_done,
+                on_progress,
+                start_index=start_index,
+                end_index=end_index,
+            )
+            return processor
+
+    def segment_sequence(
+        self,
+        segmenter,
+        selected_axis,
+        start_index=None,
+        end_index=None,
+        axes_to_collapse=None,
+        current_index=None,
+        on_slice_done=None,
+        on_progress=None,
+        use_threading=False,
+    ):
+        """Segment every image in a range of the sequence, slice by slice.
+
+        The sequence counterpart of segment_range: same arguments, same
+        return, but the indices count images rather than slices and each
+        image's predictions are saved as they are produced.  Images the
+        segmenter cannot handle are skipped and listed in
+        ``processor.summary()`` rather than stopping the run.
+
+        Args:
+            segmenter: The segmenter instance to use.
+            selected_axis: Spatial axis string, e.g. "YX", "ZYX".
+            start_index: Optional inclusive index of the first image.
+                Defaults to 0.
+            end_index: Optional inclusive index of the last image.
+                Defaults to the last image in the sequence.
+            axes_to_collapse: Optional list of axis names that are collapsed.
+            current_index: The image the viewer is showing.  Reloaded when the
+                batch ends, and the only one reported to on_slice_done.
+            on_slice_done: Optional callable(current_step, mask) called after
+                each slice of ``current_index``.
+            on_progress: Optional callable(current_image, total_images)
+                called before each image.
+            use_threading: If True, returns a ProcessorThread that must be
+                started by the caller.  If False, executes synchronously.
+
+        Returns:
+            If use_threading=False: SequenceProcessor (for summary() etc.)
+            If use_threading=True: (SequenceProcessor, ProcessorThread)
+                The thread must be started by the caller with .start()
+        """
+        from ..utilities.processor_thread import ProcessorThread
+        from ..utilities.sequence_processor import SequenceProcessor
+
+        self.set_current_segmenter_name(segmenter.__class__.__name__)
+
+        processor = SequenceProcessor(
+            self,
+            segmenter,
+            selected_axis,
+            axes_to_collapse,
+            current_index=current_index,
+        )
+
+        def operation(step):
+            return self.segment_slice(segmenter, step, selected_axis)
+
+        if use_threading:
+            thread = ProcessorThread(
+                processor,
+                operation,
+                start_index=start_index,
+                end_index=end_index,
+            )
+            if on_slice_done:
+                thread.slice_done.connect(
+                    lambda step, result: on_slice_done(step, result)
+                )
+            if on_progress:
+                thread.progress.connect(lambda cur, tot: on_progress(cur, tot))
+            return processor, thread
+        else:
             processor.process_all(
                 operation,
                 on_slice_done,

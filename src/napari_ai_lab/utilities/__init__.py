@@ -23,13 +23,15 @@ from .image_util import (
     pad_to_largest,
     remove_trivial_axes,
 )
+from .processor_thread import ProcessorThread
 from .progress_logger import (
     ConsoleProgressLogger,
     NapariProgressLogger,
     ProgressLogger,
 )
 from .qt_progress_logger import QtProgressLogger
-from .slice_processor import ProcessorThread, SliceProcessor
+from .sequence_processor import SequenceProcessor
+from .slice_processor import SliceProcessor
 from .training_thread import TrainingThread
 
 __all__ = [
@@ -60,6 +62,7 @@ __all__ = [
     # slice_processor
     "SliceProcessor",
     "ProcessorThread",
+    "SequenceProcessor",
     # training_thread
     "TrainingThread",
 ]

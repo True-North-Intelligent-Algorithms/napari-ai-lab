@@ -132,6 +132,37 @@ class SegmenterBase:
         """
         return axis_info in self.supported_axes
 
+    def can_process(self, axis_types, selected_axis):
+        """Check whether this segmenter can run on an image with these axes.
+
+        The default is a set test: every axis this segmenter consumes has to
+        be present.  Whatever is left over is the caller's to iterate -- YX
+        against a ZYX image is forty slices, not a refusal.
+
+        Override to refuse something the letters allow.  A tracker needs T
+        specifically, not merely three axes.
+
+        Whether the caller can actually build that iteration is a separate
+        question, and not this one: see ``unsupported_iteration``.
+
+        Args:
+            axis_types (str): The image's axes, e.g. "TYX", "ZYX", "YXC".
+            selected_axis (str): The axes this segmenter consumes, e.g. "YX".
+
+        Returns:
+            tuple[bool, str]: Whether it can run, and why not if it cannot.
+        """
+        if not axis_types:
+            return False, "no axis information"
+
+        available = list(axis_types)
+        for ax in selected_axis:
+            if ax not in available:
+                return False, f"axes {axis_types}, need {ax}"
+            available.remove(ax)
+
+        return True, ""
+
     def get_parameters_dict(self):
         """
         Get current parameters as a dictionary.
