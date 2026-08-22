@@ -130,6 +130,10 @@ class NDEasySegment(BaseNDApp):
         self.segment_all_btn.clicked.connect(self._on_segment_range)
         auto_layout.addWidget(self.segment_all_btn)
 
+        self.segment_sequence_btn = QPushButton("Process Sequence")
+        self.segment_sequence_btn.clicked.connect(self._on_segment_sequence)
+        auto_layout.addWidget(self.segment_sequence_btn)
+
         # Start/end slice spinboxes for the range
         range_row = QHBoxLayout()
         range_row.addWidget(QLabel("Start:"))
@@ -634,6 +638,92 @@ class NDEasySegment(BaseNDApp):
         thread.error.connect(self._on_segment_all_error)
         thread.start()
 
+    def _on_segment_sequence(self):
+        """Segment every image in the sequence (threaded).
+
+        Whole folder, whole image each -- the slice spinboxes are the range
+        within one image and do not apply here.  Predictions are saved by the
+        batcher as they are produced, so slice_done is deliberately not
+        connected: results for other images appear when the user scrolls to
+        them, and the view stays where it is.
+        """
+        if self.image_layer is None:
+            QMessageBox.warning(self, "Warning", "No images loaded")
+            return
+
+        if not hasattr(self, "segmenter") or self.segmenter is None:
+            QMessageBox.warning(self, "Warning", "No segmenter selected")
+            return
+
+        self.segmenter = (
+            self.segmenter_parameter_form.sync_nd_operation_instance(
+                self.segmenter
+            )
+        )
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+
+        # The image on screen is a mistake in the request, not a
+        # heterogeneous folder: fail before starting rather than at image 73.
+        from ..utilities.sequence_processor import why_not
+
+        reason = why_not(
+            self.segmenter,
+            self.image_data_model.axis_types,
+            selected_axis,
+            self.axes_to_collapse,
+        )
+        if reason:
+            QMessageBox.warning(
+                self, "Cannot segment", f"This image: {reason}"
+            )
+            return
+
+        self.segment_progress_logger.clear()
+        self.segment_progress_logger.log_info(
+            f"Processing sequence, axis {selected_axis}..."
+        )
+
+        self._setup_segment_context()
+
+        processor, thread = self.image_data_model.segment_sequence(
+            segmenter=self.segmenter,
+            selected_axis=selected_axis,
+            axes_to_collapse=self.axes_to_collapse,
+            current_index=self.current_image_index,
+            use_threading=True,
+        )
+
+        self.segment_sequence_btn.setEnabled(False)
+        self.segment_all_btn.setEnabled(False)
+
+        self._segment_thread = thread
+        self._sequence_processor = processor
+        thread.progress.connect(self._on_segment_sequence_progress)
+        # Only the image on screen reaches this -- SequenceProcessor reports
+        # slices for current_index and no other -- so results appear as they
+        # are made while the batch carries on behind them.
+        thread.slice_done.connect(self._show_slice_prediction)
+        thread.finished.connect(self._on_segment_sequence_finished)
+        thread.error.connect(self._on_segment_all_error)
+        thread.start()
+
+    def _on_segment_sequence_progress(self, current, total):
+        """Progress across the batch, counted in images."""
+        self.segment_progress_logger.update_progress(
+            current, total, f"Image {current}/{total}"
+        )
+        print(f"Image {current}/{total}")
+
+    def _on_segment_sequence_finished(self):
+        """Report what ran and what did not."""
+        self.segment_sequence_btn.setEnabled(True)
+        self.segment_all_btn.setEnabled(True)
+        summary = self._sequence_processor.summary()
+        print(summary)
+        for line in summary.splitlines():
+            self.segment_progress_logger.log_info(line)
+        self._segment_thread = None
+
     def _on_segment_all_progress(self, current, total):
         """Handle progress updates from the worker thread (runs on main thread)."""
         self.segment_progress_logger.update_progress(
@@ -645,9 +735,7 @@ class NDEasySegment(BaseNDApp):
         """Handle completion of threaded segment-all (runs on main thread)."""
         self.segment_all_btn.setEnabled(True)
         total = getattr(self, "_segment_thread", None)
-        total_str = (
-            str(total.worker.processor.total_slices) if total else "all"
-        )
+        total_str = str(total.processor.total_slices) if total else "all"
         print(f"✅ Completed segmentation of {total_str} slices")
         self.segment_progress_logger.log_info(
             f"✅ Completed segmentation of {total_str} slices"
@@ -657,6 +745,7 @@ class NDEasySegment(BaseNDApp):
     def _on_segment_all_error(self, error_msg):
         """Handle errors from the worker thread (runs on main thread)."""
         self.segment_all_btn.setEnabled(True)
+        self.segment_sequence_btn.setEnabled(True)
         print(f"Error during segment all: {error_msg}")
         QMessageBox.critical(
             self, "Error", f"Segmentation failed: {error_msg}"
@@ -696,19 +785,30 @@ class NDEasySegment(BaseNDApp):
             current_step: Tuple of indices identifying the slice position.
             mask: The segmentation mask returned by _do_segment_slice.
         """
+        if self.save_slice_wise_cb.isChecked():
+            self.image_data_model.save_predictions(
+                mask,
+                self.current_image_index,
+                current_step=current_step,
+                selected_axis=self._seg_segmentation_axis,
+                axes_to_collapse=self.axes_to_collapse,
+            )
+        self._show_slice_prediction(current_step, mask)
+
+    def _show_slice_prediction(self, current_step, mask):
+        """Draw one slice's mask into the predictions layer.
+
+        The update half of _on_segment_slice_done, on its own so that a
+        sequence run can use it: there the batcher has already saved the
+        mask, and only the image on screen reaches this at all.
+
+        Args:
+            current_step: Tuple of indices identifying the slice position.
+            mask: The segmentation mask to draw.
+        """
         try:
             segmentation_axis = self._seg_segmentation_axis
             segmenter_name = self._seg_segmenter_name
-
-            # Save predictions via model
-            if self.save_slice_wise_cb.isChecked():
-                self.image_data_model.save_predictions(
-                    mask,
-                    self.current_image_index,
-                    current_step=current_step,
-                    selected_axis=segmentation_axis,
-                    axes_to_collapse=self.axes_to_collapse,
-                )
 
             segmentation_indices = get_current_slice_indices(
                 current_step,
