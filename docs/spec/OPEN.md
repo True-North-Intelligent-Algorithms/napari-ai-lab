@@ -221,6 +221,64 @@ pixi run lab-stacked
 
 ---
 
+## scikit-ops is a copy, not an editable install, in pytorch_napari
+
+**Status:** open — blocks testing anything newly added to scikit-ops.
+
+`pixi/pytorch_napari` never declares scikit-ops. The comment there explains
+why: `skop-napari`'s own `[tool.uv.sources]` supplies it as an editable path
+to the same checkout, and declaring it twice produced a conflicting-URLs
+error. That has stopped being true in the built environment:
+
+```
+$ .pixi/envs/default/bin/python -c "import skop; print(skop.__file__)"
+.../pixi/pytorch_napari/.pixi/envs/default/lib/python3.12/site-packages/skop/__init__.py
+```
+
+A copy in site-packages, not the checkout. So anything added to scikit-ops is
+invisible here until the environment is rebuilt — `skop.ops.train` raised
+`ModuleNotFoundError` while the same import worked fine from the checkout.
+
+This is the exact failure the `appose` comment in that same `pixi.toml`
+already documents: *"in a full re-resolve uv does not apply a path
+dependency's sources transitively"*. appose was fixed by naming it directly
+with `editable = true`. scikit-ops needs the same treatment, and the
+conflicting-URLs warning in the comment should be re-tested rather than
+trusted — it was written when `skop-napari` supplied it non-editably.
+
+Unblock without touching the toml:
+
+```sh
+pixi run python -m pip install -e ../../../scikit-ops --no-deps
+```
+
+Worth checking `grep -c scikit-ops pixi.lock` the way the appose note
+prescribes, to confirm which source the lock actually recorded.
+
+## Two StarDist segmenters, and duplicated model-map code
+
+**Status:** open — deliberate, deferred until the skop one can train.
+
+`StardistSkopSegmenter` carries its own copy of `BUILTIN_MODEL_MAP`,
+`build_pretrained_model_map`, `get_custom_model_from_path` and
+`get_model_axis_map` rather than sharing them with `StardistSegmenter`.
+Around 80 lines of `os.listdir` plus `json.load` on `config.json`, duplicated
+on purpose so the commit adding the skop segmenter does not also refactor the
+working one.
+
+The real question underneath is whether `StardistSkopSegmenter` eventually
+*replaces* `StardistSegmenter`. It cannot yet — the direct one trains and the
+skop one does not, and inference through skop needs `stardist2d_custom` in
+scikit-ops before a user-trained model is reachable at all.
+
+- If the skop one replaces it, the duplicate leaves with the old class and no
+  refactor is needed.
+- If both stay, the four move to a `StardistModelMap` mixin in `mixins/`,
+  matching `TrainingBase`.
+
+Decide once the skop segmenter can train. Until then the risk is a scan fix
+landing in one copy and not the other.
+
 ## Resolved
 
 Nothing yet.

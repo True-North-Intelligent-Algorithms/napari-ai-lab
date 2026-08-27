@@ -89,20 +89,17 @@ if SkImageWatershedSegmenter is not None:
 # installed here -- which is what lets this host stay on a current napari.
 # Explicit rather than discovered: see docs/spec/0004.
 try:
-    from skop.ops.segment.stardist2d import stardist2d_fluo, stardist2d_he
-
-    from napari_ai_lab.Segmenters.GlobalSegmenters.SkopSegmenter import (
-        SkopSegmenter,
+    from napari_ai_lab.Segmenters.GlobalSegmenters.StardistSkopSegmenter import (
+        StardistSkopSegmenter,
     )
 
-    # Two ops rather than one with a model switch, because they do not accept
-    # the same thing: fluo declares Axes("y", "x", "c?") and averages a
-    # trailing RGB axis away, he declares Axes("y", "x", "c") and needs the
-    # colour. scikit-ops handles that difference entirely; nothing here does.
-    SkopSegmenter.register_op(
-        stardist2d_fluo, "StarDist2D fluorescence (scikit-ops)"
-    )
-    SkopSegmenter.register_op(stardist2d_he, "StarDist2D H&E (scikit-ops)")
+    # One row, with a combo choosing the model -- matching StardistSegmenter,
+    # and leaving room for models trained into the project. Fluo and H&E stay
+    # two ops in scikit-ops, because they do not accept the same thing: fluo
+    # declares Axes("y", "x", "c?") and averages a trailing RGB axis away, he
+    # declares Axes("y", "x", "c") and needs the colour. Which op runs is the
+    # segmenter's business, not the user's.
+    StardistSkopSegmenter.register()
 except ImportError as exc:
     print(f"ℹ️  scikit-ops segmenter not registered: {exc}")
 
