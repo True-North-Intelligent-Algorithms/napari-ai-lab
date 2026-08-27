@@ -8,10 +8,11 @@ major version.
 
 Deliberately minimal for this iteration:
 
-* No parameters. The op runs on its defaults, so nothing here duplicates the
-  op's signature. Generating the parameter form from that signature, via
-  skop-napari and magicgui, is the next step and is the whole point -- writing
-  the parameters out by hand here would be the opposite of it.
+* No parameters here. A subclass that wants some declares them as dataclass
+  fields, the way every other segmenter does, and returns them from
+  ``_op_params``. Generating the form from the op signature was tried and
+  removed: it meant a second widget generator beside ai-lab's own, and an
+  adapter hook for every parameter the app supplies itself.
 * No training. skop has no training ops yet (see 0001).
 * Availability is reported as plain True. It deserves a third state -- "runs
   elsewhere, and the environment may still need building, which costs minutes
@@ -23,25 +24,14 @@ from dataclasses import dataclass
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 try:
-    from skop import Role, spec
+    from skop import spec
     from skop.runner import Runner
 
     _is_skop_available = True
 except ImportError:  # optional dependency, see docs/spec/0003
-    Role = None
     spec = None
     Runner = None
     _is_skop_available = False
-
-try:
-    from skop_napari._roles import annotation_for, value_for
-    from skop_napari._widget import build_inputs
-
-    _is_skop_napari_available = True
-except ImportError:  # the generated form is optional; defaults still work
-    annotation_for = value_for = build_inputs = None
-    _is_skop_napari_available = False
-
 
 #: One Runner for the process. It caches built environments, so sharing it
 #: means the environment is located once rather than per segmentation.
@@ -72,7 +62,6 @@ scikit-ops segmenter:
 • Runs in scikit-ops' own environment, not this one
 • The first run builds that environment, which takes minutes and gigabytes
 • Later runs reuse it
-• Parameters below are generated from the op signature
     """
 
     def __post_init__(self):
@@ -80,37 +69,15 @@ scikit-ops segmenter:
         # dataclass's generated __init__ does not call.
         self._potential_axes = ["YX", "YXC"]
         self._supported_axes = ["YX", "YXC"]
-        #: The magicgui-built inputs, once a panel has been asked for. Holds
-        #: the values the op will be called with.
-        self._inputs = None
 
-    def get_parameter_widgets(self):
-        """Parameter widgets generated from the op's signature.
+    def _op_params(self) -> dict:
+        """Keyword arguments for the op, beyond the image.
 
-        The op signature already declares every parameter, its type, its
-        default and its widget hints, so the form is generated from it rather
-        than written out again as dataclass fields. NDOperationWidget lays
-        these out in the same form as any other segmenter's, so the dependency
-        banner, instructions and axis combo are unaffected.
-
-        Returns an empty list when skop-napari is absent, which leaves the op
-        on its defaults rather than failing.
+        Empty here: an op registered by ``register_op`` runs on its defaults.
+        A subclass declares the parameters it wants exposed as dataclass
+        fields and returns them from here.
         """
-        if not (
-            _is_skop_napari_available and self.are_dependencies_available()
-        ):
-            return []
-
-        # Array inputs are skipped: napari-ai-lab chooses the image itself and
-        # passes it to segment(). Offering a layer combo here would be a second
-        # image selector disagreeing with the first.
-        def skip(param):
-            return param.role is Role.image
-
-        self._inputs = build_inputs(
-            spec(self.op), annotation_for, value_for, skip=skip
-        )
-        return self._inputs.widgets
+        return {}
 
     def are_dependencies_available(self) -> bool:
         """True when scikit-ops is importable here.
@@ -165,7 +132,10 @@ scikit-ops segmenter:
         try:
             from pathlib import Path
 
-            from appose.util.environment import appose_envs_dir
+            try:
+                from appose.util.filepath import appose_envs_dir
+            except ImportError:  # older appose kept it next door
+                from appose.util.environment import appose_envs_dir
 
             return (
                 Path(appose_envs_dir()) / f"skop-{self._env_id()}"
@@ -200,12 +170,7 @@ scikit-ops segmenter:
                 "This segmenter requires scikit-ops, which is not installed. "
                 "Install it with: pip install scikit-ops"
             )
-        # Read the generated form at call time rather than tracking a
-        # changed signal: the widgets already hold the current values, so
-        # there is nothing to keep in sync. Empty when no panel was built,
-        # which leaves the op on its own defaults.
-        params = self._inputs.values() if self._inputs is not None else {}
-        return _get_runner().run(self.op, image=image, **params)
+        return _get_runner().run(self.op, image=image, **self._op_params())
 
     @classmethod
     def register_op(cls, op, name: str, potential_axes=None):

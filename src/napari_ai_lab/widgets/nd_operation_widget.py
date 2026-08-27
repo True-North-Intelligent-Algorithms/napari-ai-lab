@@ -116,30 +116,6 @@ class NDOperationWidget(QWidget):
         self.clear_form()
         self.parse_parameters()
 
-    def _add_supplied_parameters(self) -> bool:
-        """Add parameter rows the operation builds itself.
-
-        Returns True when the operation supplied them, meaning its dataclass
-        fields should not also be parsed.
-        """
-        supply = getattr(self.nd_operation, "get_parameter_widgets", None)
-        if supply is None:
-            return False
-
-        widgets = supply()
-        if not widgets:
-            return False
-
-        for widget in widgets:
-            # magicgui widgets wrap a Qt widget in .native and carry their own
-            # label; anything already a QWidget is added as it comes.
-            native = getattr(widget, "native", widget)
-            label = getattr(widget, "label", None) or getattr(
-                widget, "name", ""
-            )
-            self.form_layout.addRow(str(label), native)
-        return True
-
     def clear_form(self):
         """Clear all parameter widgets from the form."""
         # Clear dependency status label if it exists
@@ -205,14 +181,6 @@ class NDOperationWidget(QWidget):
 
         # Add axis selection if ND Operation supports multiple axes
         self._add_axis_selection_if_present()
-
-        # An operation may build its own parameter rows rather than declaring
-        # them as dataclass fields -- a scikit-ops op generates them from its
-        # signature, via magicgui. The rows go in the same form layout as any
-        # other, so everything around them (dependency banner, instructions,
-        # axis combo) is unaffected and there is one widget, not two.
-        if self._add_supplied_parameters():
-            return
 
         # Get dataclass fields
         fields = dataclasses.fields(self.nd_operation)

@@ -1,6 +1,7 @@
 # 0004 — The first scikit-ops segmenter
 
-**Status:** proposed. Nothing built.
+**Status:** built, and one decision since reversed — the generated parameter
+panel is gone. See *The generated panel, and why it was removed* at the end.
 
 The first concrete step of [0001](0001-what-moves-to-scikit-ops.md). One op —
 StarDist 2D — appears in the existing global segmenter list, with its parameter
@@ -198,4 +199,46 @@ Each step is independently checkable. Step 1 first, always.
   skipped here. skop has `skop.progress()`, ai-lab has `utilities/progress_logger.py`.
   Joining them is separate work.
 - **Does the generated panel look acceptable next to the hand-built one?**
-  The honest reason to build this before deciding anything larger.
+  The honest reason to build this before deciding anything larger. Answered
+  below: it looked fine, and was removed anyway.
+
+## The generated panel, and why it was removed
+
+The scope section above said two form builders would coexist, and that whether
+the generated one wins "is a decision to make after seeing it work, not
+before". It worked, it was seen, and the decision went the other way. Since
+`SkopSegmenter` no longer generates a form, this section is the record of what
+was tried, so it is not tried again by accident.
+
+Nothing was wrong with the panel itself. What did not hold was the claim that
+generating it saves writing the parameters twice, because two things a form
+needs are nowhere in an op's signature.
+
+**Which parameters the app supplies.** The image is chosen by ai-lab, and a
+model by a combo. Generated straight from the signature, both appear a second
+time as widgets that silently disagree with the real choice, so each needs
+filtering out — a rule per segmenter, growing with each one.
+
+**Which parameters are worth showing.** An op signature is written for every
+caller, including a CLI and a notebook, so it cannot say what matters in a
+panel, in what order, under what label, or which belongs behind an expert
+toggle. That judgement is this repo's product and is exactly the kind of thing
+[0001](0001-what-moves-to-scikit-ops.md) keeps on this side of the line.
+
+Training made it concrete. Training parameters cannot be generated at all —
+the patch directory, the model directory and the progress callback are the
+app's, not the user's — so they arrived as dataclass fields like every other
+segmenter's. One segmenter then carried two forms built two different ways,
+and `nd_operation_widget.py` needed a rule for which to build. That rule, and
+the parameter-filtering rule, are the seam between two generators rather than
+features of either.
+
+So a skop segmenter now declares its parameters as dataclass fields, like
+every other segmenter, and returns them from `_op_params()`. One form builder,
+one place to look. What is genuinely lost: a parameter added to an op upstream
+no longer appears here on its own, and keeping the two in step is now a review
+habit. A *renamed* parameter still fails loudly on the next run; a newly added
+one is the quiet case to watch for.
+
+The rest of 0004 stands. The environment split, the availability states and
+the explicit registration are all still how this works.
