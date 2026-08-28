@@ -151,6 +151,17 @@ class StardistSkopSegmenter(SkopSegmenter, TrainingBase):
             "default": 3,
         },
     )
+    grid_size_xy: int = field(
+        default=1,
+        metadata={
+            "type": "int",
+            "param_type": "training",
+            "min": 1,
+            "max": 8,
+            "step": 1,
+            "default": 1,
+        },
+    )
     val_size: int = field(
         default=2,
         metadata={
@@ -331,6 +342,7 @@ StarDist 2D (scikit-ops):
             train_patch_size=self.train_patch_size_xy,
             train_batch_size=self.train_batch_size,
             unet_n_depth=self.unet_n_depth,
+            grid_size_xy=self.grid_size_xy,
             val_size=self.val_size,
             on_progress=on_progress,
         )
