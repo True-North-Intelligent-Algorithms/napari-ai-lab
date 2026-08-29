@@ -454,14 +454,27 @@ class AugmenterBase(ABC):
         import json
         import os
 
+        from ..utilities.io_util import zero_pad_index
+
+        info_path = os.path.join(patch_path, "info.json")
+
+        # A counter bumped every time patches are written, so training can
+        # record which set it used and a loss curve can mark where the data
+        # changed. It says *that* they changed, not how -- new labels and a
+        # different augmentation look identical from here.
+        previous = 0
+        if os.path.exists(info_path):
+            with open(info_path) as f:
+                previous = int(json.load(f).get("dataset_id", -1)) + 1
+
         info = {
             "axes": axes,
             "num_inputs": num_inputs,
             "num_truths": num_truths,
             "sub_sample": sub_sample,
+            "dataset_id": zero_pad_index(previous, width=3),
         }
 
-        info_path = os.path.join(patch_path, "info.json")
         with open(info_path, "w") as f:
             json.dump(info, f, indent=2)
 

@@ -14,6 +14,7 @@ import numpy as np
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -69,6 +70,12 @@ class NDEasySegment(BaseNDApp):
         self.embedded = embedded
         self.training_widget_mode = training_widget_mode
         self.axes_to_collapse = axes_to_collapse
+
+        # Models this session has trained. Training into one of them again is
+        # the tuning loop -- label a bit more, train a bit more -- and needs
+        # neither a warning nor another archived copy. Training over one the
+        # session did not make is what destroys work nothing can rebuild.
+        self._models_trained_this_session = set()
 
         # Create Qt progress logger for training tab
         self.progress_logger = QtProgressLogger()
@@ -336,17 +343,65 @@ class NDEasySegment(BaseNDApp):
             generate_next_name(models_dir, base, ext="")
         )
 
+    def _on_show_history(self):
+        """Plot the loss curve of the model named in "Save as".
+
+        That name is where training last wrote and where it will write next,
+        so it is the model this tab is about. Its history carries its
+        ancestors' epochs too, since continuing copies the parent directory.
+        """
+        from ..utilities.training_history import plot_history
+
+        name = self.model_name_edit.text().strip()
+        models_dir = str(self.image_data_model.get_models_directory())
+        model_dir = os.path.join(models_dir, name)
+
+        try:
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+            from matplotlib.figure import Figure
+        except ImportError:
+            QMessageBox.information(
+                self,
+                "Training History",
+                "Plotting needs matplotlib, which is not installed here.",
+            )
+            return
+
+        # A Figure and a Qt canvas rather than pyplot: pyplot starts an event
+        # loop of its own, and napari is already running one -- the symptom is
+        # "QCoreApplication::exec: The event loop is already running" and no
+        # window.
+        figure = Figure(figsize=(8, 4.5))
+        if plot_history(model_dir, ax=figure.add_subplot(111)) is None:
+            QMessageBox.information(
+                self,
+                "Training History",
+                f"No history for '{name}'. It has not been trained here, or "
+                f"was trained before history was recorded.",
+            )
+            return
+
+        figure.tight_layout()
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Training history — {name}")
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.addWidget(FigureCanvasQTAgg(figure))
+        dialog.resize(900, 520)
+        dialog.show()
+        # Kept alive: a QDialog with no reference is garbage collected and
+        # the window vanishes as soon as this method returns.
+        self._history_dialog = dialog
+
     def _archive_if_overwriting(self) -> bool:
         """Move an existing model aside before training over it.
 
         Returns False when the user backs out.
 
-        Training into the name it started from is the tuning loop -- label a
-        bit more, train a bit more -- and needs no ceremony. Training over a
-        *different* model destroys work that nothing else would bring back, so
-        it asks first and keeps a copy either way. The copy goes under
-        ``archive/``, which has no config.json and so never appears in the
-        model combos.
+        Asked once per model per session: after the first training the model
+        is this session's own, and the tuning loop that follows would only
+        collect identical warnings and near-identical archives. The copy goes
+        under ``archive/``, which has no config.json and so never appears in
+        the model combos.
         """
         import shutil
 
@@ -358,18 +413,18 @@ class NDEasySegment(BaseNDApp):
         if not os.path.isdir(existing):
             return True
 
-        continuing = name == getattr(self.segmenter, "initial_model_name", "")
-        if not continuing:
-            answer = QMessageBox.question(
-                self,
-                "Overwrite model?",
-                f"'{name}' already exists and was not the model you are "
-                f"training from.\n\nIt will be copied to archive/ and then "
-                f"replaced.",
-                QMessageBox.Ok | QMessageBox.Cancel,
-            )
-            if answer != QMessageBox.Ok:
-                return False
+        if name in self._models_trained_this_session:
+            return True
+
+        answer = QMessageBox.question(
+            self,
+            "Overwrite model?",
+            f"'{name}' already exists and was not trained in this session."
+            f"\n\nIt will be copied to archive/ and then replaced.",
+            QMessageBox.Ok | QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Ok:
+            return False
 
         archive_dir = os.path.join(models_dir, "archive")
         os.makedirs(archive_dir, exist_ok=True)
@@ -456,6 +511,10 @@ class NDEasySegment(BaseNDApp):
         train_btn = QPushButton("Train Model")
         train_btn.clicked.connect(self._on_train)
         layout.addWidget(train_btn)
+
+        history_btn = QPushButton("Show Training History")
+        history_btn.clicked.connect(self._on_show_history)
+        layout.addWidget(history_btn)
 
         # Add stretch before progress widget to push it to bottom
         layout.addStretch()
@@ -1318,6 +1377,12 @@ class NDEasySegment(BaseNDApp):
         # Refresh model combos in both forms to include the newly trained model
         trained_name = self.segmenter.inference_model_name
         if trained_name:
+            # The next training continues this one rather than starting over,
+            # which is what pressing Train twice in a row means. "Save as" is
+            # left alone -- refresh_model_combo blocks signals, so choosing
+            # the model here does not propose a new name.
+            self.segmenter.initial_model_name = trained_name
+            self._models_trained_this_session.add(trained_name)
             self.segmenter_parameter_form.refresh_model_combo(
                 select_name=trained_name
             )

@@ -321,7 +321,8 @@ StarDist 2D (scikit-ops):
         name = self.training_model_name or "stardist_model"
 
         with open(os.path.join(self.patch_path, "info.json")) as f:
-            axes = json.load(f)["axes"]
+            info = json.load(f)
+        axes = info["axes"]
 
         images, labels = self._patch_pairs()
         if not images:
@@ -365,6 +366,7 @@ StarDist 2D (scikit-ops):
             unet_n_depth=self.unet_n_depth,
             grid_size_xy=self.grid_size_xy,
             initial_model=self._initial_model(),
+            dataset_id=info.get("dataset_id", ""),
             val_size=self.val_size,
             on_progress=on_progress,
         )

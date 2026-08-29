@@ -35,6 +35,7 @@ cuda = "12.0"
 python = "3.12.*"
 torchvision = "*"
 ipykernel = "<7"  # napari-console requires <7; a bare "*" grabs 7.x and fails to solve
+matplotlib = "*"  # training-history plots, in the app and in notebooks
 
 # NB: cellpose is deliberately NOT here, though conda-forge has it and
 # scikit-ops' envs/pytorch installs it that way. Conda's cellpose is a noarch
