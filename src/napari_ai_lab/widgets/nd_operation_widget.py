@@ -50,12 +50,21 @@ class NDOperationWidget(QWidget):
     # Signal emitted when axis selection changes
     axis_changed = Signal(str)
 
+    # Signal emitted when the starting model changes (training mode only).
+    # Empty string means "from scratch".
+    initial_model_changed = Signal(str)
+
+    #: Shown first in the "Start from" combo. Not a model name, so it is
+    #: translated to an empty ``initial_model_name`` on the way through.
+    FROM_SCRATCH = "(train from scratch)"
+
     def __init__(
         self,
         nd_operation=None,
         parent=None,
         param_type_to_parse=None,
         show_axis_combo=True,
+        model_role="inference",
     ):
         """
         Initialize the ND Operation widget.
@@ -73,12 +82,19 @@ class NDOperationWidget(QWidget):
                 provides an alternate selector — for example the
                 training tab swaps the axis combo for a "Patches to
                 Process" combo populated from the project directory.
+            model_role: What the model combo selects. "inference" (default)
+                picks the model that predicts, and writes it through
+                ``set_model``. "initial" picks the model training starts
+                from, offers a "train from scratch" entry, and writes
+                ``initial_model_name`` -- a different question with the same
+                list of answers, so the two must not share a destination.
         """
         super().__init__(parent)
 
         self.nd_operation = nd_operation
         self.param_type_to_parse = param_type_to_parse
         self.show_axis_combo = show_axis_combo
+        self.model_role = model_role
 
         self.parameter_widgets = {}  # Maps field names to widget instances
         self.parameter_values = {}  # Current parameter values
@@ -181,6 +197,11 @@ class NDOperationWidget(QWidget):
 
         # Add axis selection if ND Operation supports multiple axes
         self._add_axis_selection_if_present()
+
+        # Add the model combo. Separate from the axis block above: the
+        # training form suppresses the axis combo but still wants a model
+        # list, and while the two shared a method it could not have one.
+        self._add_model_selection_if_present()
 
         # Get dataclass fields
         fields = dataclasses.fields(self.nd_operation)
@@ -387,44 +408,68 @@ class NDOperationWidget(QWidget):
                     f"Could not get supported axes for {self.nd_operation.__class__.__name__}: {e}"
                 )
 
-        # Add model preset combo if nd_operation has get_model_axis_map
-        if hasattr(self.nd_operation, "get_model_axis_map"):
-            try:
-                from qtpy.QtWidgets import QComboBox
+    def _add_model_selection_if_present(self):
+        """Add the model combo, if the ND Operation offers a model list.
 
-                model_map = self.nd_operation.get_model_axis_map()
-                if model_map:
-                    self._model_combo = QComboBox()
-                    for name in model_map:
-                        self._model_combo.addItem(name)
-                    # Restore previously selected model if the segmenter
-                    # already has one, using blockSignals to avoid
-                    # overriding the already-restored axis selection.
-                    existing_model = getattr(
-                        self.nd_operation, "inference_model_name", None
-                    )
-                    if existing_model and existing_model in model_map:
-                        self._model_combo.blockSignals(True)
-                        self._model_combo.setCurrentText(existing_model)
-                        self._model_combo.blockSignals(False)
-                    self._model_combo.currentTextChanged.connect(
-                        self._on_model_changed
-                    )
-                    self.form_layout.addRow(
-                        QLabel("Model:"), self._model_combo
-                    )
-            except (TypeError, ValueError, AttributeError, RuntimeError) as e:
-                print(f"Could not add model combo: {e}")
+        The same widget answers two different questions depending on
+        ``model_role``: which model predicts, or which model training starts
+        from. Both list what ``get_model_axis_map`` returns, and each writes
+        somewhere of its own -- picking a starting model must not change what
+        the segment tab predicts with.
+        """
+        if not hasattr(self.nd_operation, "get_model_axis_map"):
+            return
+        try:
+            from qtpy.QtWidgets import QComboBox
+
+            model_map = self.nd_operation.get_model_axis_map()
+            if not model_map:
+                return
+
+            starting = self.model_role == "initial"
+            self._model_combo = QComboBox()
+            if starting:
+                self._model_combo.addItem(self.FROM_SCRATCH)
+            for name in model_map:
+                self._model_combo.addItem(name)
+
+            # Restore what the segmenter already has, using blockSignals to
+            # avoid overriding the already-restored axis selection.
+            attr = "initial_model_name" if starting else "inference_model_name"
+            existing_model = getattr(self.nd_operation, attr, None)
+            if existing_model and existing_model in model_map:
+                self._model_combo.blockSignals(True)
+                self._model_combo.setCurrentText(existing_model)
+                self._model_combo.blockSignals(False)
+
+            self._model_combo.currentTextChanged.connect(
+                self._on_model_changed
+            )
+            self.form_layout.addRow(
+                QLabel("Start from:" if starting else "Model:"),
+                self._model_combo,
+            )
+        except (TypeError, ValueError, AttributeError, RuntimeError) as e:
+            print(f"Could not add model combo: {e}")
 
     def _on_model_changed(self, model_name):
         """Handle model selection changes."""
+        if self.model_role == "initial":
+            name = "" if model_name == self.FROM_SCRATCH else model_name
+            self.nd_operation.initial_model_name = name
+            self.initial_model_changed.emit(name)
+            return
+
         if hasattr(self.nd_operation, "set_model"):
             self.nd_operation.set_model(model_name)
 
-        model_axis = self.nd_operation.get_model_axis_map().get(
-            model_name, "YX"
-        )
-        self._axis_combo.setCurrentText(model_axis)
+        # The axis combo is absent in training mode, where the parent app
+        # supplies a "Patches to Process" combo instead.
+        if self._axis_combo is not None:
+            model_axis = self.nd_operation.get_model_axis_map().get(
+                model_name, "YX"
+            )
+            self._axis_combo.setCurrentText(model_axis)
 
     def refresh_model_combo(self, select_name=None):
         """Re-populate model combo from nd_operation.get_model_axis_map(), optionally select a model."""
@@ -433,11 +478,20 @@ class NDOperationWidget(QWidget):
         model_map = self.nd_operation.get_model_axis_map()
         self._model_combo.blockSignals(True)
         self._model_combo.clear()
+        if self.model_role == "initial":
+            self._model_combo.addItem(self.FROM_SCRATCH)
         for name in model_map:
             self._model_combo.addItem(name)
         if select_name:
             self._model_combo.setCurrentText(select_name)
         self._model_combo.blockSignals(False)
+
+    def set_parameters_enabled(self, names, enabled):
+        """Enable or disable the widgets for *names*, ignoring absent ones."""
+        for name in names:
+            widget = self.parameter_widgets.get(name)
+            if widget is not None:
+                widget.setEnabled(enabled)
 
     def set_model_combo(self, name):
         """Set model combo to name without triggering signals."""
