@@ -34,6 +34,7 @@ cuda = "12.0"
 [dependencies]
 python = "3.12.*"
 torchvision = "*"
+ipykernel = "<7"  # napari-console requires <7; a bare "*" grabs 7.x and fails to solve
 
 # NB: cellpose is deliberately NOT here, though conda-forge has it and
 # scikit-ops' envs/pytorch installs it that way. Conda's cellpose is a noarch
@@ -82,21 +83,25 @@ albumentations = "*"
 
 napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 
-# NB: scikit-ops is deliberately NOT declared here, even though this
-# environment is built to use it -- docs/spec/0004. skop-napari below already
-# declares it, in its own [tool.uv.sources], as an editable path resolving to
-# the same checkout. Declaring it here as well produces:
+# scikit-ops, declared here directly so `editable = true` is actually applied.
+#
+# It used to come in through skop-napari's own [tool.uv.sources] instead, and
+# declaring it here as well produced:
 #
 #     Requirements contain conflicting URLs for package `scikit-ops`:
 #       - file:///.../scikit-ops
 #       - file:///.../scikit-ops (editable)
 #
-# The two declarations are identical apart from the editable flag, which uv
-# drops when applying a path dependency's sources transitively. Declaring it
-# once, there, avoids the conflict and still gives a live editable install.
+# Both declarations said editable = true; uv drops that flag when applying a
+# path dependency's sources transitively, so the two differed and collided.
+# Relying on skop-napari's alone then gave a *copy* in site-packages, and edits
+# to the checkout were invisible until someone reinstalled it by hand.
 #
-# If skop-napari is ever removed from this environment, scikit-ops has to be
-# declared here instead.
+# skop-napari is no longer a dependency of this environment at all -- nothing
+# in napari-ai-lab imports it since 7b36e20 removed the generated parameter
+# form -- so there is only one declaration left and no conflict to have. Add
+# it back and this collision returns; declare scikit-ops in exactly one place.
+scikit-ops = { path = "../../../scikit-ops", editable = true }
 
 # appose comes from the sibling checkout, which is ahead of the 0.12.0 release.
 #
@@ -121,14 +126,6 @@ napari-ai-lab = { path = "../../../napari-ai-lab", editable=true}
 # reports, and under what name, is unresolved -- see docs/spec/OPEN.md.
 appose = { path = "../../../appose-python", editable = true }
 
-# For the generated parameter panel, step 3 of docs/spec/0004. Requires Python
-# >=3.12, which this environment satisfies and the older hosts did not -- which
-# is why the panel could not be attempted before now.
-#
-# Its [tool.uv.sources] points scikit-ops at ../scikit-ops, relative to its own
-# directory, which resolves to the same checkout declared above. So this brings
-# in the live editable scikit-ops, not a pinned copy.
-skop-napari = { path = "../../../skop-napari", editable=true}
 
 # Deliberately absent: zarr. The app must run without it (docs/spec/0003).
 # albumentations used to be listed here too; it is now installed above, and
@@ -161,3 +158,6 @@ lab = "python ../../src/launch_nd_ai_lab.py"
 lab-stacked = "python ../../src/launch_nd_ai_lab.py --stacked"
 lab-sequence = "python ../../src/launch_nd_ai_lab.py --sequence"
 poc = "python ../../experiments/skop_stardist_poc.py"
+
+# Register the environment as a Jupyter kernel for use in VS Code and Jupyter
+register-kernel = "python -m ipykernel install --user --name=pytorch_napari --display-name 'AI-LAB (pytorch_napari)'"
