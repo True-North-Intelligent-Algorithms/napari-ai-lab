@@ -15,6 +15,7 @@ The model-map methods are duplicated from ``StardistSegmenter`` rather than
 shared, deliberately
 """
 
+import contextlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -174,6 +175,16 @@ class StardistSkopSegmenter(SkopSegmenter, TrainingBase):
         },
     )
 
+    #: Baked into a trained model, so continuing from one inherits them and
+    #: the op ignores whatever the form says. The training tab greys these
+    #: out while a starting model is selected.
+    INHERITED_WHEN_CONTINUING = (
+        "grid_size_xy",
+        "unet_n_depth",
+        "train_patch_size_xy",
+        "train_batch_size",
+    )
+
     instructions = """
 StarDist 2D (scikit-ops):
 • Runs in scikit-ops' own environment, not this one
@@ -188,6 +199,10 @@ StarDist 2D (scikit-ops):
         self.model_save_dir = ""
         self.training_model_name = ""
         self.inference_model_name = "2D_versatile_fluo"
+        # Which model training starts from. Empty means random weights.
+        # Deliberately not the same attribute as inference_model_name: the
+        # two combos ask different questions of the same list.
+        self.initial_model_name = ""
 
     # ------------------------------------------------------------------
     # Model list. NDOperationWidget adds a "Model:" combo to any segmenter
@@ -323,7 +338,13 @@ StarDist 2D (scikit-ops):
         # skop_napari/_run.py does the same bounce for the same reason.
         @ensure_main_thread
         def on_progress(event):
-            if updater is not None:
+            if updater is None:
+                return
+            # Queueing to the main thread means an event can arrive after
+            # training finished and the worker behind `updater` was deleted,
+            # leaving a Qt object whose C++ half is gone. Nothing is lost by
+            # dropping it -- there is no longer a progress bar to move.
+            with contextlib.suppress(RuntimeError):
                 updater(
                     event.current or 0,
                     event.maximum or self.num_epochs,
@@ -343,6 +364,7 @@ StarDist 2D (scikit-ops):
             train_batch_size=self.train_batch_size,
             unet_n_depth=self.unet_n_depth,
             grid_size_xy=self.grid_size_xy,
+            initial_model=self._initial_model(),
             val_size=self.val_size,
             on_progress=on_progress,
         )
@@ -354,6 +376,20 @@ StarDist 2D (scikit-ops):
             "success": True,
             "message": f"Training complete. Model saved to: {model_path}",
         }
+
+    def _initial_model(self) -> str:
+        """What training starts from: a directory, a builtin name, or "".
+
+        A project model is resolved to its directory here, where the layout
+        is known. A builtin is passed on by name -- resolving it means asking
+        StarDist where it cached the download, and StarDist lives in the op's
+        environment, not this one.
+        """
+        if not self.initial_model_name:
+            return ""
+        if self.initial_model_name in BUILTIN_MODEL_MAP:
+            return self.initial_model_name
+        return os.path.join(self.model_save_dir, self.initial_model_name)
 
     def _patch_pairs(self):
         """``input0``/``ground_truth0`` resolved to two lists of paths.

@@ -6,6 +6,8 @@ and automatic (full plane/volume) segmentation workflows.
 """
 
 import contextlib
+import os
+import re
 
 import napari
 import numpy as np
@@ -297,12 +299,88 @@ class NDEasySegment(BaseNDApp):
         self.training_parameter_form = NDOperationWidget(
             param_type_to_parse="training",
             show_axis_combo=False,
+            model_role="initial",
         )
         # Connect to the same handler as segmenter params (updates will sync)
         self.training_parameter_form.parameters_changed.connect(
             self._on_segmenter_parameters_changed
         )
         return self.training_parameter_form
+
+    def _on_initial_model_changed(self, model_name):
+        """Propose a "Save as" name for the model chosen to start from.
+
+        Numbered with the same helper the patch files use, so a project has
+        one numbering convention rather than two. Empty means from scratch,
+        which goes back to the default name.
+        """
+        from ..utilities.io_util import generate_next_name
+
+        # Architecture comes from the model being continued, so the fields
+        # that describe it are shown but not editable -- greyed rather than
+        # hidden, so it is visible what was inherited.
+        self.training_parameter_form.set_parameters_enabled(
+            getattr(self.segmenter, "INHERITED_WHEN_CONTINUING", ()),
+            not model_name,
+        )
+
+        if not model_name:
+            self.model_name_edit.setText("my_model")
+            return
+
+        models_dir = str(self.image_data_model.get_models_directory())
+        # Strip a trailing _NNNNN so continuing from my_model_00001 proposes
+        # my_model_00002, not my_model_00001_00000.
+        base = re.sub(r"_\d{5}$", "", model_name)
+        self.model_name_edit.setText(
+            generate_next_name(models_dir, base, ext="")
+        )
+
+    def _archive_if_overwriting(self) -> bool:
+        """Move an existing model aside before training over it.
+
+        Returns False when the user backs out.
+
+        Training into the name it started from is the tuning loop -- label a
+        bit more, train a bit more -- and needs no ceremony. Training over a
+        *different* model destroys work that nothing else would bring back, so
+        it asks first and keeps a copy either way. The copy goes under
+        ``archive/``, which has no config.json and so never appears in the
+        model combos.
+        """
+        import shutil
+
+        from ..utilities.io_util import generate_next_name
+
+        name = self.segmenter.training_model_name
+        models_dir = str(self.image_data_model.get_models_directory())
+        existing = os.path.join(models_dir, name)
+        if not os.path.isdir(existing):
+            return True
+
+        continuing = name == getattr(self.segmenter, "initial_model_name", "")
+        if not continuing:
+            answer = QMessageBox.question(
+                self,
+                "Overwrite model?",
+                f"'{name}' already exists and was not the model you are "
+                f"training from.\n\nIt will be copied to archive/ and then "
+                f"replaced.",
+                QMessageBox.Ok | QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Ok:
+                return False
+
+        archive_dir = os.path.join(models_dir, "archive")
+        os.makedirs(archive_dir, exist_ok=True)
+        archived = generate_next_name(archive_dir, name, ext="")
+        shutil.copytree(existing, os.path.join(archive_dir, archived))
+        print(f"archived {name} to archive/{archived}")
+        if hasattr(self, "progress_logger"):
+            self.progress_logger.log_info(
+                f"Archived existing '{name}' to archive/{archived}"
+            )
+        return True
 
     def _refresh_patches_combo(self):
         """Refresh the training form's "Patches to Process" combo.
@@ -360,10 +438,19 @@ class NDEasySegment(BaseNDApp):
         # Populate it with the same items as the main combo (triggers _on_segmenter_changed)
         self._populate_segmenter_combo()
 
-        # Model name input
-        layout.addWidget(QLabel("Model name:"))
+        # Where the trained model is written. Named "Save as" rather than
+        # "Model name" because there are now two model names on this tab, and
+        # the other one says where training starts.
+        layout.addWidget(QLabel("Save as:"))
         self.model_name_edit = QLineEdit("my_model")
         layout.addWidget(self.model_name_edit)
+
+        # Choosing something to start from proposes a name derived from it,
+        # so the usual case -- keep training this, keep the lineage visible --
+        # needs no typing.
+        self.training_parameter_form.initial_model_changed.connect(
+            self._on_initial_model_changed
+        )
 
         # Train button (same as in automatic mode controls)
         train_btn = QPushButton("Train Model")
@@ -1119,6 +1206,8 @@ class NDEasySegment(BaseNDApp):
         self.segmenter.training_model_name = (
             self.model_name_edit.text().strip() or "model"
         )
+        if not self._archive_if_overwriting():
+            return
         print(f"patch_path:    {self.segmenter.patch_path}")
         print(f"model_save_dir:{self.segmenter.model_save_dir}")
         print(f"training_model_name:    {self.segmenter.training_model_name}")
