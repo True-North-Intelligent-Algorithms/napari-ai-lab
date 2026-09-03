@@ -91,6 +91,31 @@ the skop spec has to keep substitutable.
 Steps 1–2 are worth doing alone. If nothing after them ever happens, the code is
 no worse off than today.
 
+## What this means for the host environment
+
+If augment is an op, `pixi/pytorch_napari` never installs albumentations, and
+[0003](0003-optional-dependencies.md)'s claim that the app runs without it stays
+true. That is the point of leaving it out.
+
+Adding it to the host would be cheap — its dependencies (`opencv-python-headless`,
+`numpy`, `scipy`, `pydantic`) are all there already from PyPI via cellpose, and
+the conda/PyPI opencv trap documented in that pixi.toml does not apply, because
+there is no conda `py-opencv` in this environment. Cheap is not a reason to,
+though: the only real pull is a **live preview** in `nd_easy_augment`, and even
+that can go through the op with `n=1`.
+
+So the near-term goal — StarDist predict, augmentation, StarDist train in one
+napari — has no conflict in it. Predict and train are ops in a TensorFlow
+environment; augment is an op in its own; the host sees only arrays crossing.
+The middle being "incompatible with the other two" is only true if they share an
+environment, and by then none of them do.
+
+The one thing that would change this: if a training op wants to augment *per
+epoch* inside its own loop, albumentations has to be installed wherever training
+runs, not here. Unlikely for StarDist, whose training loop is third-party and
+not ours to reach into — which is the same reason pre-training augmentation is
+the right shape for us. The skop spec keeps the two separate deliberately.
+
 ## Open questions
 
 - **The 3-D story is decided in skop, not here** (see that spec's open

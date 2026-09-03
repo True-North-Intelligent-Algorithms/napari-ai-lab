@@ -15,6 +15,50 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## Starting empty and choosing a directory from the GUI
+
+**Status:** decided: this is the user's path — needs testing, soon.
+
+`launch_nd_ai_lab.py` picks its data by an `if/elif` chain over a hardcoded
+`test_set` variable (lines 127-237), one branch per folder under
+`tests/test_images/`. That is the developer harness and it stays one: a
+dataset is chosen by editing the file, which nobody but us can do.
+
+The user's path is the opposite — the lab opens with nothing loaded and the
+user points it at their own directory. That already exists but has not been
+exercised much, and it is the thing a new user meets first, so it is the thing
+most worth getting right. Command-line selection of a built-in set stays
+alongside it for our own use.
+
+---
+
+## Users need pixi on the command line, and appose's copy is not it
+
+**Status:** open — a documentation gap, not a bug.
+
+Appose downloads and manages its own pixi at
+`~/.local/share/appose/.pixi/bin/pixi` (`appose/tool/pixi.py`, invoked from
+`PixiBuilder.build`). It covers all six platforms, it is never put on PATH,
+and it is enough to build every op environment without the user having pixi.
+
+It cannot bootstrap the lab itself. `pixi run lab`
+(`pixi/pytorch_napari/pixi.toml:158`) has to run before any Python exists, so
+the user needs their own pixi — `winget install prefix-dev.pixi` on Windows,
+the pixi.sh installer elsewhere. The two copies share `~/.cache/rattler`, so
+having both costs one 58 MB binary and nothing more.
+
+What is missing is saying so. A user who installs napari-ai-lab, wants pixi at
+a terminal, and finds nothing there has no way to learn that a pixi already
+came with it, or that installing a second one is harmless. Install docs should
+say both.
+
+Separately, there is no `[project.scripts]` entry point, and
+`launch_nd_ai_lab.py` is a flat script with no `main()`, so a pip install
+leaves nothing to type. Only worth doing if a pip route is wanted alongside
+the pixi one.
+
+---
+
 ## Segmenting channels separately
 
 **Status:** open — a real use case the slicing cannot express.

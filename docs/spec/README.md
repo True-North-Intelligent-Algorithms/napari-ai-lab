@@ -19,3 +19,5 @@ items that are too small or too unresolved to have a plan yet. It is what
 | [0004](0004-first-scikit-ops-segmenter.md) | One skop op in the segmenter list, magicgui panel, and what a first-run environment build owes the user |
 | [0005](0005-ai-lab-cleanup.md) | State copied rather than read, save-on-switch, two viewers, and what to do about each |
 | [0006](0006-batch-segmentation-over-a-sequence.md) | Segment Range over every image; a stacked sequence is a sequence of one |
+| [0007](0007-per-project-parameters.md) | Parameters that belong to a project, not to a hardcoded default |
+| [0008](0008-user-documentation.md) | mkdocs for users; a parameter reference for the controls a wrong guess ruins |
