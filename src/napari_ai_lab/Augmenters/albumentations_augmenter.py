@@ -39,6 +39,7 @@ Albumentations Advanced Augmentation:
 • Random 90-degree rotations
 • Random sized crop with resize
 • Random brightness/contrast adjustments
+• Colour jitter (hue/saturation) and random gamma, off by default
 • Normalization: Percentile-based intensity normalization
 • Best for: Advanced data augmentation with diverse transforms
     """,
@@ -110,15 +111,45 @@ Albumentations Advanced Augmentation:
         },
     )
 
-    size_factor: float = field(
-        default=0.8,
+    do_color_jitter: bool = field(
+        default=False,
         metadata={
-            "type": "float",
+            "type": "bool",
             "param_type": "augmentation",
-            "min": 0.1,
-            "max": 1.0,
-            "step": 0.1,
-            "default": 0.8,
+            "default": False,
+        },
+    )
+
+    do_random_gamma: bool = field(
+        default=False,
+        metadata={
+            "type": "bool",
+            "param_type": "augmentation",
+            "default": False,
+        },
+    )
+
+    min_long_axis: int = field(
+        default=30,
+        metadata={
+            "type": "int",
+            "param_type": "augmentation",
+            "min": 4,
+            "max": 2048,
+            "step": 5,
+            "default": 30,
+        },
+    )
+
+    max_long_axis: int = field(
+        default=200,
+        metadata={
+            "type": "int",
+            "param_type": "augmentation",
+            "min": 8,
+            "max": 4096,
+            "step": 5,
+            "default": 200,
         },
     )
 
@@ -143,6 +174,30 @@ Albumentations Advanced Augmentation:
             "max": 1.0,
             "step": 0.05,
             "default": 0.2,
+        },
+    )
+
+    hue_limit: float = field(
+        default=0.05,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 0.0,
+            "max": 0.5,
+            "step": 0.01,
+            "default": 0.05,
+        },
+    )
+
+    saturation_limit: float = field(
+        default=0.3,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.3,
         },
     )
 
@@ -191,7 +246,8 @@ Albumentations Advanced Augmentation:
         self.do_random_rotate90 = self.do_random_rotate90
         self.do_random_sized_crop = self.do_random_sized_crop
         self.do_random_brightness_contrast = self.do_random_brightness_contrast
-        self.size_factor = self.size_factor
+        self.min_long_axis = self.min_long_axis
+        self.max_long_axis = self.max_long_axis
         self.brightness_limit = self.brightness_limit
         self.contrast_limit = self.contrast_limit
         self.normalization_jitter = self.normalization_jitter
@@ -218,14 +274,21 @@ Albumentations Advanced Augmentation:
             "do_random_rotate90": self.do_random_rotate90,
             "do_random_sized_crop": self.do_random_sized_crop,
             "do_random_brightness_contrast": self.do_random_brightness_contrast,
-            "size_factor": self.size_factor,
+            "min_long_axis": self.min_long_axis,
+            "max_long_axis": self.max_long_axis,
+            "do_color_jitter": self.do_color_jitter,
+            "do_random_gamma": self.do_random_gamma,
             "brightness_limit": self.brightness_limit,
             "contrast_limit": self.contrast_limit,
+            "hue_limit": self.hue_limit,
+            "saturation_limit": self.saturation_limit,
             "normalization_jitter": self.normalization_jitter,
             "seed": self.seed,
         }
 
-    def _create_augmentation_pipeline(self, patch_size: int) -> A.Compose:
+    def _create_augmentation_pipeline(
+        self, patch_size: int, min_max_height: tuple[int, int] | None = None
+    ) -> A.Compose:
         """
         Create the Albumentations augmentation pipeline.
 
@@ -263,15 +326,7 @@ Albumentations Advanced Augmentation:
         if self.do_random_rotate90:
             augmentations.append(A.RandomRotate90(p=0.5))
 
-        if self.do_random_sized_crop:
-            # TODO: make more flexibility for resize
-            # need to invert the size factor because it controls the crop size which is then resized to the patch size.
-            # So a smaller factor will lead to a larger resize.
-            inverse_size_factor = 0.99 / self.size_factor
-            min_max_height = (
-                int(inverse_size_factor * patch_size[0]),
-                patch_size[0],
-            )
+        if self.do_random_sized_crop and min_max_height is not None:
             augmentations.append(
                 A.RandomSizedCrop(
                     min_max_height=min_max_height,
@@ -291,7 +346,108 @@ Albumentations Advanced Augmentation:
                 )
             )
 
+        # For RGB, where hue and saturation vary between acquisitions.
+        # Off by default: single-channel images have no hue to shift.
+        if self.do_color_jitter:
+            augmentations.append(
+                # Hue and saturation only -- brightness and contrast have
+                # their own toggle above, and ColorJitter reads its limits
+                # multiplicatively where RandomBrightnessContrast reads them
+                # additively.
+                # The shift is drawn uniformly up to the limit, so hue_limit
+                # sets how far colour can move, not how far it does. At the
+                # 0.5 maximum a third of patches are untouched, the rest are
+                # spread over the whole colour circle.
+                A.ColorJitter(
+                    hue=self.hue_limit,
+                    saturation=self.saturation_limit,
+                    brightness=0.0,
+                    contrast=0.0,
+                    p=0.65,
+                )
+            )
+
+        if self.do_random_gamma:
+            augmentations.append(A.RandomGamma(p=0.5))
+
         return A.Compose(augmentations)
+
+    def _report_once(self, message: str) -> None:
+        """Print a message the first time only. Patch generation runs hundreds
+        of times over the same images, and a warning repeated hundreds of times
+        is a warning nobody reads."""
+        seen = self.__dict__.setdefault("_reported", set())
+        if message not in seen:
+            seen.add(message)
+            print(f"  {message}")
+
+    def _crop_range(self, mask, patch_size) -> tuple[int, int] | None:
+        """The crop sizes that put objects inside the requested size range.
+
+        A crop is resized to the patch, so cropping *small* enlarges what is in
+        it and cropping *large* shrinks it. To land an object of long axis L at
+        a target size T, crop ``patch_size * L / T``.
+
+        Anchored on the **largest** labelled object, not the median. The point
+        of a range is that the top of it gets covered, and the biggest object
+        is what has to reach it -- a median anchor leaves the large end empty
+        unless the labels happen to be uniform. Objects smaller than the
+        requested minimum simply come out smaller still, which costs nothing:
+        extra small examples are harmless, missing large ones are not.
+
+        Returns None when there is nothing to measure, which leaves the crop
+        out of the pipeline rather than guessing a scale.
+        """
+        from skimage.measure import regionprops
+
+        labels = mask if mask.ndim == 2 else mask[mask.shape[0] // 2]
+        lengths = [
+            r.axis_major_length for r in regionprops(labels.astype(np.int32))
+        ]
+        if not lengths:
+            return None
+
+        longest = max(lengths)
+        if longest <= 0:
+            return None
+
+        # crop = patch * longest / target, so the smaller target gives the
+        # larger crop. Clamped so a crop is never below 16px or above the
+        # image, which would fail rather than scale.
+        low = int(round(patch_size[0] * longest / max(self.max_long_axis, 1)))
+        high = int(round(patch_size[0] * longest / max(self.min_long_axis, 1)))
+        # Shrinking an object means cropping *more* than the patch, and there
+        # is only so much image. Say so rather than quietly narrowing the
+        # range: a request that cannot be met is worth knowing before training,
+        # not after wondering why the small end is empty.
+        limit = min(mask.shape[-2:])
+        if high > limit:
+            reachable = int(round(longest * patch_size[0] / limit))
+            self._report_once(
+                f"size range: asked for {self.min_long_axis}-"
+                f"{self.max_long_axis}px long axis, but this image can only "
+                f"reach {reachable}-{self.max_long_axis}px -- shrinking "
+                f"further would need a crop larger than the image"
+            )
+        if low < patch_size[0] // 2:
+            self._report_once(
+                f"size range: {self.max_long_axis}px objects are more than "
+                f"half of a {patch_size[0]}px patch, so most will be cut by "
+                f"the crop edge -- raise the patch size or lower max_long_axis"
+            )
+        low, high = max(16, min(low, limit)), max(16, min(high, limit))
+        if low > high:
+            low, high = high, low
+
+        # One size per call, drawn log-uniformly, rather than handing
+        # RandomSizedCrop the whole range. It samples the crop *height*
+        # uniformly, and size is the reciprocal of height -- so a uniform
+        # height draw piles up at the small-object end and the top of the
+        # requested range goes nearly unvisited. Log-uniform gives each
+        # doubling equal weight, which is what "cover 30 to 200" means.
+        draw = np.exp(self.rng.uniform(np.log(low), np.log(high)))
+        size = int(round(draw))
+        return (size, size)
 
     def augment(
         self,
@@ -331,10 +487,20 @@ Albumentations Advanced Augmentation:
         # Use the 2D patch size (last two dims) for the pipeline
         patch_size_2d = patch_size[-2:] if len(patch_size) >= 2 else patch_size
 
-        transform = self._create_augmentation_pipeline(patch_size_2d)
+        transform = self._create_augmentation_pipeline(
+            patch_size_2d, self._crop_range(mask, patch_size_2d)
+        )
 
         # Determine if this is truly a 3D image or just RGB
         # If last dimension is 3, it's RGB (not 3D)
+        # ColorJitter converts RGB to HSV through OpenCV, which accepts uint8
+        # and float32 and nothing else -- float64 and uint16 both raise
+        # "Unsupported depth of input image". Normalisation usually leaves
+        # float32, but it can be switched off, so convert here rather than
+        # relying on it.
+        if self.do_color_jitter and im.dtype not in (np.uint8, np.float32):
+            im = im.astype(np.float32)
+
         # If last dimension is > 4, it's probably 3D
         if im.ndim > 2:
             last_dim = im.shape[-1]

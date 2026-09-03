@@ -25,7 +25,12 @@ def normalize_intensity(image, intensity_low, intensity_high):
             intensity_high - intensity_low
         )
         image_float = np.clip(image_float, 0, 1)
-    return image_float
+    # Cast back rather than trusting the arithmetic: np.percentile hands back
+    # np.float64 scalars, and dividing a float32 array by one promotes the
+    # result to float64. That is twice the memory for no precision that
+    # matters, and it reaches OpenCV -- which accepts uint8 and float32 for
+    # RGB/HSV conversion and rejects float64 outright.
+    return image_float.astype(np.float32, copy=False)
 
 
 def compute_percentiles(image, percentile_low=1, percentile_high=99):
