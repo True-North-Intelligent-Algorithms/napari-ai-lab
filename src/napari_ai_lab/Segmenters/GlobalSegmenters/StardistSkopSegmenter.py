@@ -337,7 +337,6 @@ StarDist 2D (scikit-ops):
         # in-process segmenters do not need this: they call `updater` from the
         # QThread that TrainingThread created, which Qt can queue from.
         # skop_napari/_run.py does the same bounce for the same reason.
-        @ensure_main_thread
         def on_progress(event):
             if updater is None:
                 return
@@ -351,6 +350,20 @@ StarDist 2D (scikit-ops):
                     event.maximum or self.num_epochs,
                     event.message or "",
                 )
+
+        # Bounced to the main thread only when there is one to bounce to.
+        # ensure_main_thread asks Qt for the application's thread, and in a
+        # notebook there is no application -- every event then raised before
+        # it could report anything, which looked like training hanging in
+        # silence. Called directly, a notebook prints and a GUI would touch a
+        # widget from Appose's pipe-reading thread, hence the test.
+        from qtpy.QtCore import QCoreApplication
+
+        report = (
+            ensure_main_thread(on_progress)
+            if QCoreApplication.instance() is not None
+            else on_progress
+        )
 
         model_path = _get_runner().run(
             train_stardist2d,
@@ -368,7 +381,7 @@ StarDist 2D (scikit-ops):
             initial_model=self._initial_model(),
             dataset_id=info.get("dataset_id", ""),
             val_size=self.val_size,
-            on_progress=on_progress,
+            on_progress=report,
         )
 
         # Make it selectable without a restart: the combo rebuilds from
