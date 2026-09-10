@@ -33,10 +33,24 @@ BOUNDARIES = {
 }
 
 
+def _history_path(model_dir):
+    """Where the history is, for either layout: StarDist saves a model as a
+    directory, Cellpose as a file inside a ``models/`` subdirectory."""
+    parent, name = os.path.split(model_dir.rstrip(os.sep))
+    for path in (
+        os.path.join(model_dir, "history.csv"),
+        os.path.join(parent, "models", f"{name}_history.csv"),
+        f"{model_dir}_history.csv",
+    ):
+        if os.path.isfile(path):
+            return path
+    return None
+
+
 def load_history(model_dir):
-    """Rows of ``history.csv``, oldest first. Empty when there is none."""
-    path = os.path.join(model_dir, "history.csv")
-    if not os.path.isfile(path):
+    """Rows of the model's history, oldest first. Empty when there is none."""
+    path = _history_path(model_dir)
+    if path is None:
         return []
     with open(path) as f:
         return list(csv.DictReader(f))

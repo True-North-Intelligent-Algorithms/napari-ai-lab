@@ -66,6 +66,10 @@ matplotlib = "*"  # training-history plots, in the app and in notebooks
 napari = "==0.8.0"
 PyQt5 = "*"
 
+# From PyPI, not the sibling checkout: this environment tests the released
+# version.
+tnia-python = "*"
+
 # From PyPI rather than conda -- see the note in [dependencies] above. Torch
 # stays on conda, where the CUDA builds are; cellpose finds it there.
 cellpose = ">=4"

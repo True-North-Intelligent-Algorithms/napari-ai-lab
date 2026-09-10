@@ -10,6 +10,7 @@ for parameters defined in ND Operation dataclasses.
 
 import contextlib
 import dataclasses
+import math
 from typing import Any
 
 from qtpy.QtCore import Signal
@@ -656,6 +657,13 @@ class NDOperationWidget(QWidget):
         """Create a float input widget (double spinbox)."""
         spinbox = QDoubleSpinBox()
 
+        # Decimals first, and enough of them to show the step: a learning rate
+        # of 1e-5 in a 3-decimal box is stored as 0 and trains nothing.
+        decimals = (
+            3 if step <= 0 else max(1, min(8, -math.floor(math.log10(step))))
+        )
+        spinbox.setDecimals(decimals)
+
         if min_val is not None:
             spinbox.setMinimum(min_val)
         if max_val is not None:
@@ -663,14 +671,6 @@ class NDOperationWidget(QWidget):
         if default_val is not None:
             spinbox.setValue(default_val)
         spinbox.setSingleStep(step)
-
-        # Set reasonable decimal places based on step size
-        if step < 0.01:
-            spinbox.setDecimals(3)
-        elif step < 0.1:
-            spinbox.setDecimals(2)
-        else:
-            spinbox.setDecimals(1)
 
         # Only fire when user commits the value (Enter/Tab/focus-loss),
         # not on every intermediate keystroke while typing.

@@ -44,6 +44,7 @@ class QtProgressLogger:
         )  # Stretch factor 1 = stretches
 
         self._total = 0
+        self._last_message = None
 
     def get_widget(self):
         """
@@ -70,10 +71,16 @@ class QtProgressLogger:
             percentage = int((current / total) * 100)
             self.progressBar.setValue(percentage)
 
-        # Log milestone messages (every 10% or completion)
+        # A message that has changed is news and is always logged -- a
+        # training epoch reports its losses, so every line differs. The 10%
+        # milestone is for a sender that repeats one message while a counter
+        # climbs, where logging every tick would be a wall of the same line.
         if message and (
-            current % max(1, total // 10) == 0 or current == total
+            message != self._last_message
+            or current % max(1, total // 10) == 0
+            or current == total
         ):
+            self._last_message = message
             status = f"{message} ({current}/{total})"
             self.textBrowser_log.append(status)
 
@@ -94,3 +101,4 @@ class QtProgressLogger:
         self.textBrowser_log.clear()
         self.progressBar.setValue(0)
         self._total = 0
+        self._last_message = None
