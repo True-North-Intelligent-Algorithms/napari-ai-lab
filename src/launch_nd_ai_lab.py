@@ -100,6 +100,21 @@ try:
     # declares Axes("y", "x", "c") and needs the colour. Which op runs is the
     # segmenter's business, not the user's.
     StardistSkopSegmenter.register()
+
+    # Cellpose is two architectures under one name, so it is two rows: a
+    # user cannot tell a CPSAM checkpoint from a CPnet one by its filename,
+    # and the two take different channel arguments.
+    from napari_ai_lab.Segmenters.GlobalSegmenters.Cellpose3SkopSegmenter import (
+        Cellpose3SkopSegmenter,
+    )
+
+    Cellpose3SkopSegmenter.register()
+
+    from napari_ai_lab.Segmenters.GlobalSegmenters.Cellpose4SkopSegmenter import (
+        Cellpose4SkopSegmenter,
+    )
+
+    Cellpose4SkopSegmenter.register()
 except ImportError as exc:
     print(f"ℹ️  scikit-ops segmenter not registered: {exc}")
 
@@ -142,9 +157,19 @@ test_sets = [
     "overlapping",  # 8
     "tough cellpose",  # 9
     "new",  # 10
+    "tutorial candidates",  # 11
+    "pollen",  # 12
+    "pollen count",  # 13
+    "pollen morphology",  # 14
+    "tutorial candidates 2",  # 15
+    "tutorial candidates 3",  # 16
+    "bees",  # 17
+    "bees on comb",  # 18
+    "bees on comb medium",  # 19
+    "bees on comb test",  # 20
 ]
 
-test_set = test_sets[1]
+test_set = test_sets[19]
 
 annotations_viewer_type = "none"
 
@@ -194,6 +219,51 @@ elif test_set == "tough cellpose":
     viewer_type = "stacked"
     axes_to_collapse = "C"
     axis_types = "NYX"
+elif test_set in ("pollen count", "pollen morphology"):
+    parent_dir = test_images_dir / test_set.replace(" ", "_")
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "pollen":
+    parent_dir = test_images_dir / "pollen"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "bees on comb medium":
+    parent_dir = test_images_dir / "bees on comb medium"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "bees on comb test":
+    parent_dir = test_images_dir / "bees on comb test"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "bees on comb":
+    parent_dir = test_images_dir / "bees on comb"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "bees":
+    parent_dir = test_images_dir / "bees"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "tutorial candidates 3":
+    parent_dir = test_images_dir / "tutorial candidates 3"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "tutorial candidates 2":
+    parent_dir = test_images_dir / "tutorial candidates 2"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
+elif test_set == "tutorial candidates":
+    parent_dir = test_images_dir / "tutorial candidates"
+    viewer_type = "sequence"
+    axes_to_collapse = "C"
+    axis_types = "NYXC"
 elif test_set == "new":
     parent_dir = (
         r"/home/bnorthan/images/tnia-python-images/imagesc/2026_07_07_bubbles"
