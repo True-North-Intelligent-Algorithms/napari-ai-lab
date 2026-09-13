@@ -44,9 +44,9 @@ Instructions:
 1. Activate Points layer
 2. Draw points on objects
 3. SAM creates 3D segmentation
-4. Press 'C' to commit current label
-5. Press 'X' to erase current label
-6. Press 'V' to toggle positive/negative points
+4. Press 'K' to commit, Ctrl+Backspace to erase
+5. Press 'N' to switch between positive and negative points
+6. Every point in the layer is sent, so add more to refine
     """
 
     iou_threshold: float = field(
@@ -287,7 +287,9 @@ Instructions:
         """
         return _is_micro_sam_available
 
-    def segment(self, image, points=None, shapes=None, **kwargs):
+    def segment(
+        self, image, points=None, shapes=None, point_labels=None, **kwargs
+    ):
         """
         Perform SAM segmentation on 3D image using points and shapes.
 
@@ -295,6 +297,9 @@ Instructions:
             image (numpy.ndarray): Input 3D image to segment.
             points (list, optional): List of annotation points for prompting SAM.
             shapes (list, optional): List of annotation shapes for prompting SAM.
+            point_labels (list, optional): 1 for a positive point, 0 for a
+                negative one, in the same order as ``points``. All positive
+                when not given.
             **kwargs: Additional keyword arguments including:
                 parent_directory (str, optional): Directory path for embedding storage.
 
@@ -325,8 +330,8 @@ Instructions:
         if shapes is not None:
             print(f"SAM3D: Using {len(shapes)} shapes for segmentation")
 
-        # TODO assign labels based on point types (positive/negative)
-        labels = [1] * len(points)
+        # 1 positive, 0 negative, as micro_sam's own annotator states them.
+        labels = point_labels or [1] * len(points)
 
         # Handle both 2D and 3D points
         if len(points[0]) == 3:

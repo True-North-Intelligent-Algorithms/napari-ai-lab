@@ -3,7 +3,8 @@ from pathlib import Path
 
 import napari
 import numpy as np
-from qtpy.QtCore import QTimer
+from qtpy.QtCore import Qt, QTimer
+from qtpy.QtGui import QKeySequence, QShortcut
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -126,6 +127,10 @@ class NDEasyLabel(BaseNDApp):
         )
         self.commit_working_btn.clicked.connect(self._on_commit_working)
         commit_row.addWidget(self.commit_working_btn)
+        # k for "keep", n for the sign of the next point. Through napari
+        # rather than Qt, so they fire on the canvas and not while typing.
+        self.viewer.bind_key("k", lambda _viewer: self._on_commit_working())
+        self.viewer.bind_key("n", lambda _viewer: self._toggle_point_sign())
 
         self.erase_working_btn = QPushButton("Erase")
         self.erase_working_btn.setToolTip(
@@ -133,8 +138,13 @@ class NDEasyLabel(BaseNDApp):
             "interactive segmentation)"
         )
         self.erase_working_btn.clicked.connect(self._on_erase_working)
+        self._shortcut(QKeySequence("Ctrl+Backspace"), self._on_erase_working)
         commit_row.addWidget(self.erase_working_btn)
         self.layout().addLayout(commit_row)
+
+        self.point_sign_label = QLabel()
+        self.layout().addWidget(self.point_sign_label)
+        self._show_point_sign("positive")
 
         # Combo: choose which layer drives live interactive segmentation.
         # Populated dynamically ("None" plus whatever box-like layers exist).
@@ -322,11 +332,65 @@ class NDEasyLabel(BaseNDApp):
             clear = (sub_mask == 0) & (sub_target == value)
             sub_target[clear] = 0
         else:
+            # Replace, do not accumulate: the segmenter is given every point
+            # and returns the whole answer, so a mask that shrank has to
+            # shrink here too. Only this segmenter's own pixels are cleared.
             nz = mask != 0
             target[nz] = value
+            target[(~nz) & (target == value)] = 0
 
         if self.working_layer is not None:
             self.working_layer.refresh()
+
+    def _show_point_sign(self, sign):
+        """Say which sign the next point carries, in the colour it will be."""
+        colour = "red" if sign == "positive" else "blue"
+        self.point_sign_label.setText(f"Next point: {sign}  (N to switch)")
+        self.point_sign_label.setStyleSheet(f"QLabel {{ color: {colour}; }}")
+
+    def _clear_points(self):
+        """Drop the prompts. They belong to the object just finished."""
+        layer = getattr(self, "points_layer", None)
+        if layer is None or len(layer.data) == 0:
+            return
+        layer.data = np.empty((0, layer.data.shape[1]))
+        layer.refresh()
+
+    def _toggle_point_sign(self):
+        """Flip whether the next point placed is positive or negative."""
+        layer = getattr(self, "points_layer", None)
+        if layer is None:
+            return
+        # Deselect first: napari applies current_properties to the selection
+        # too, so toggling would rewrite the point just placed.
+        layer.selected_data = set()
+        current = layer.current_properties
+        was = str(current.get("label", ["positive"])[0])
+        now = "positive" if was == "negative" else "negative"
+        current["label"] = np.array([now])
+        layer.current_properties = current
+        layer.refresh_colors()
+        self._show_point_sign(now)
+
+    def _point_prompts(self, points_layer, selected_axis):
+        """Every point in the layer, with 1 positive / 0 negative beside it.
+
+        The sign lives on the layer as a "label" property, which is also what
+        colours the points; the segmenter only sees numbers.
+        """
+        keep = -3 if selected_axis in ("ZYX", "ZYXC") else -2
+        prompts = [tuple(p[keep:]) for p in points_layer.data]
+        labels = points_layer.properties.get("label", [])
+        signs = [0 if str(v) == "negative" else 1 for v in labels]
+        signs += [1] * (len(prompts) - len(signs))
+        return prompts, signs[: len(prompts)]
+
+    def _shortcut(self, key, slot):
+        """A window-wide shortcut, for keys a text box will not swallow."""
+        shortcut = QShortcut(key, self)
+        shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        shortcut.activated.connect(slot)
+        return shortcut
 
     def _on_commit_working(self):
         """Promote the working layer into the persistent annotation layer.
@@ -348,6 +412,7 @@ class NDEasyLabel(BaseNDApp):
         work[nz] = 0
         self.annotation_layer.refresh()
         self.working_layer.refresh()
+        self._clear_points()
         print(f"Committed working layer with label {self.current_label_num}")
         self._maybe_increment_label()
         # Invalidate any stashed live-rerun context: the seed has been
@@ -1428,12 +1493,23 @@ class NDEasyLabel(BaseNDApp):
                 )
             )
 
-            # Call segmenter with the latest point
+            # Every point, not just the newest: a second point refines the
+            # answer rather than starting a new one.
+            prompts, prompt_labels = self._point_prompts(
+                points_layer, selected_axis
+            )
+            print(
+                f"Prompting with {len(prompts)} points: "
+                f"{sum(prompt_labels)} positive, "
+                f"{len(prompt_labels) - sum(prompt_labels)} negative"
+            )
+
             try:
                 mask = self.segmenter.segment(
                     image_data,
-                    points=[latest_point],
+                    points=prompts,
                     shapes=None,
+                    point_labels=prompt_labels,
                 )
 
                 # Apply the mask to the labels layer (restricted to ROI bbox
@@ -1453,7 +1529,7 @@ class NDEasyLabel(BaseNDApp):
                     self._last_interactive_segmentation = {
                         "image_data": image_data,
                         "segmentation_indices": segmentation_indices,
-                        "points": [latest_point],
+                        "points": prompts,
                         "shapes": None,
                         "label_num": self.current_label_num,
                         "segmenter_name": type(self.segmenter).__name__,
