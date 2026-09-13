@@ -13,7 +13,7 @@ import dataclasses
 import math
 from typing import Any
 
-from qtpy.QtCore import Signal
+from qtpy.QtCore import Qt, Signal
 from qtpy.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
@@ -611,7 +611,7 @@ class NDOperationWidget(QWidget):
             and (max_val - min_val) <= 1000
         ):
             slider = QSlider()
-            slider.setOrientation(1)  # Horizontal
+            slider.setOrientation(Qt.Orientation.Horizontal)
             slider.setMinimum(min_val)
             slider.setMaximum(max_val)
             if default_val is not None:

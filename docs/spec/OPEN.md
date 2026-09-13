@@ -15,6 +15,22 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## Vendored napari_bbox tracks napari's private API, one variant per release
+
+**Status:** open — a 0.9 variant exists; the pattern is the problem.
+
+`vendored/napari_bbox/boundingbox/` now holds six version directories, one
+per napari release that moved something private under it. 0.8 needed
+`_get_layer_slicing_state`; 0.9 needed `_view_indices`, without which adding
+the layer raises from napari's own text drawing. Each fix is a few lines, and
+each is found by crashing.
+
+Three ways out, none chosen: upstream a public hook, drop the layer for a
+plain Shapes layer with a bounding-box mode, or accept the tax and add a
+variant per release. The last is what is happening by default.
+
+---
+
 ## Starting empty and choosing a directory from the GUI
 
 **Status:** decided: this is the user's path — needs testing, soon.
@@ -288,6 +304,32 @@ scikit-ops before a user-trained model is reachable at all.
 
 Decide once the skop segmenter can train. Until then the risk is a scan fix
 landing in one copy and not the other.
+
+## CUDA drops out silently, and everything falls back to CPU
+
+**Status:** open — a workaround is known, the cause is not. Blocks a tutorial.
+
+`nvidia-smi` reports the RTX 4070 healthy and idle while torch, inside the
+appose environments, raises `CUDA initialization: CUDA unknown error ...
+Setting the available devices to be zero`. Rebooting while plugged in restores
+it; why it goes is unknown. Suspected trigger is closing the lid or running on
+battery.
+
+Nothing announces the fallback. Cellpose and the ops just run on CPU, so the
+only symptom is wall-clock: on 2026-09-07 the `cellpose_mixed` notebook
+appeared to hang, and it was CPSAM on CPU at `niter=2000` — not an environment
+build, as first assumed.
+
+That silence is the part that matters for a tutorial. A room full of people
+watching a segmentation take fifteen minutes, with no message saying why, is a
+worse failure than an error would be. Two separable pieces of work: find the
+cause, and make the CPU fallback say so.
+
+Not chased yet: whether suspend/resume drops the nvidia kernel modules,
+whether `nvidia-persistenced` is running, and whether the same error appears
+outside the appose environments at the same moment.
+
+---
 
 ## Resolved
 
