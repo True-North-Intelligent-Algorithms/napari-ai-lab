@@ -238,7 +238,11 @@ class NDAILab(QWidget):
 
         # self.boxes_3D_layer.feature_defaults["split_set"] = ""
 
-        self.viewer.add_layer(self.boxes_3D_layer)
+        # Only for ND data. apply_mode decides; this is the other place the
+        # layer would otherwise come back, once per image change.
+        model = self.image_data_model
+        if model is None or model.mode != "2d":
+            self.viewer.add_layer(self.boxes_3D_layer)
 
         # Distribute layers to sub-apps (direct assignment, not calling their _set_image_layer)
         self._distribute_layers_to_sub_apps()
@@ -635,6 +639,25 @@ class NDAILab(QWidget):
 
             print("✅ Model created and shared across all tabs")
             # TODO Phase 3: Load images and create layers
+
+    def apply_mode(self):
+        """Show what this project needs, once one is loaded.
+
+        Everything that depends on 2D-versus-ND, or on there being a
+        sequence, is decided here and nowhere else.
+        """
+        model = self.image_data_model
+        nd = model is None or model.mode != "2d"
+        if hasattr(self, "boxes_3D_layer"):
+            if nd and self.boxes_3D_layer not in self.viewer.layers:
+                self.viewer.add_layer(self.boxes_3D_layer)
+            elif not nd and self.boxes_3D_layer in self.viewer.layers:
+                self.viewer.layers.remove(self.boxes_3D_layer)
+        self.label_widget.add_interactive_3D_boxes_btn.setVisible(nd)
+
+        sequence = model is not None and model.viewer_type == "sequence"
+        self.segment_widget.segment_sequence_btn.setVisible(sequence)
+        self.segment_widget.segment_all_btn.setVisible(not sequence)
 
     def connect_sequence_viewer(self, sequence_viewer):
         """Connect to sequence viewer for automatic layer updates."""

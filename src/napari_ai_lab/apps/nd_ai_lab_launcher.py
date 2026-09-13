@@ -86,4 +86,7 @@ def launch_nd_ai_lab(
 
     nd_ai_lab_widget.segment_widget.automatic_mode_btn.setChecked(True)
 
+    model.viewer_type = viewer_type
+    nd_ai_lab_widget.apply_mode()
+
     return nd_ai_lab_widget, seq_widget, model

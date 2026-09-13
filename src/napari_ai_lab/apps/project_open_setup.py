@@ -160,4 +160,7 @@ def apply_project_setup(nd_ai_lab, values: dict):
         )
         nd_ai_lab._set_image_layer(image_layer)
 
+    model.viewer_type = viewer_type
+    nd_ai_lab.apply_mode()
+
     print(f"✅ Project loaded: {directory} (viewer={viewer_type})")

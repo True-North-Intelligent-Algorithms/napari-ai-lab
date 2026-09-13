@@ -101,6 +101,8 @@ class ImageDataModel:
         self._input_images_io = None
         self._current_segmenter_name: str | None = None
         self.axis_types: str | None = None
+        # Set when a sequence viewer is attached; the segment buttons differ.
+        self.viewer_type: str = "none"
         self.scale: list[float] | None = None
         self.annotation_save_granularity: str = "file"
         self.prediction_save_granularity: str = "file"
@@ -560,6 +562,12 @@ class ImageDataModel:
             Path to parent directory
         """
         return self.parent_directory
+
+    @property
+    def mode(self) -> str:
+        """ "2d" when every image is a plane. N is the sequence axis and C is
+        colour; neither makes an image 3D."""
+        return "2d" if set(self.axis_types or "Z") <= set("NYXC") else "nd"
 
     def get_base_embeddings_directory(self) -> Path:
         """
