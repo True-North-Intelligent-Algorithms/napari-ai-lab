@@ -44,7 +44,10 @@ class Square2D(InteractiveSegmenterBase):
 
     def __init__(self):
         super().__init__()
-        self._supported_axes = ["YX", "ZYX", "TYX", "TZYX"]
+        # YXC like Otsu2D: colour is not a spatial axis, and without it
+        # here an RGB image is sliced as if the first axis were extra.
+        self._supported_axes = ["YX", "YXC", "ZYX", "TYX", "TZYX"]
+        self._potential_axes = ["YX"]
 
     def segment(
         self,
@@ -76,8 +79,13 @@ class Square2D(InteractiveSegmenterBase):
         if image is None:
             raise ValueError("Image cannot be None")
 
-        # Initialize empty mask
-        mask = np.zeros(image.shape, dtype=bool)
+        # Spatial shape only: a trailing RGB axis is not somewhere to draw.
+        shape = (
+            image.shape[:-1]
+            if image.ndim == 3 and image.shape[-1] in (3, 4)
+            else image.shape
+        )
+        mask = np.zeros(shape, dtype=bool)
 
         if points is None or len(points) == 0:
             return mask
