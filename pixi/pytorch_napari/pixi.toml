@@ -1,18 +1,19 @@
 [workspace]
 name = "pytorch_napari"
-description = "Host environment for ND AI Lab: napari, Qt, torch and Cellpose. Nothing else."
+description = "Host environment on the newest napari, with micro_sam for interactive SAM."
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-arm64"]
 version = "0.1.0"
 
-# This is the *host* environment -- the one napari-ai-lab itself runs in. It is
-# deliberately the smallest thing that runs the app with one working global
-# segmenter, and it exists because the older hosts could not be moved forward.
+# The host environment -- the one napari-ai-lab itself runs in. Newest napari,
+# plus micro_sam so the interactive SAM segmenter runs in the host.
 #
-# What is NOT here, and why:
+# micro_sam is here rather than isolated because interactive clicking needs
+# the image embedding resident between calls, and today only the host process
+# holds it -- see scikit-ops docs/design/0019. It costs pyqt6 instead of
+# PyQt5 and whatever napari micro_sam agrees to, currently 0.9.1.
 #
-#   micro_sam           depends on `napari >=0.5,<0.6` outright, which pins the
-#                       whole application a napari major version back
+# What is still NOT here, and why:
 #   segment-everything  pins `onnxsim==0.4.36`, which has no wheel past cp311,
 #                       so it pins Python at 3.11 as well
 #   StarDist            TensorFlow, which constrains everything around it
@@ -33,6 +34,8 @@ cuda = "12.0"
 
 [dependencies]
 python = "3.12.*"
+# Brings napari, pyqt6 and segment-anything with it.
+micro_sam = ">=1.8"
 torchvision = "*"
 ipykernel = "<7"  # napari-console requires <7; a bare "*" grabs 7.x and fails to solve
 matplotlib = "*"  # training-history plots, in the app and in notebooks
@@ -59,12 +62,8 @@ matplotlib = "*"  # training-history plots, in the app and in notebooks
 # environment running PyQt5. Taking cellpose from PyPI avoids both.
 
 [pypi-dependencies]
-# Pinned rather than left open, because the point of this environment is to be
-# on 0.8 specifically. If a conda dependency above turns out to want an older
-# napari, this pin makes it fail at solve time rather than silently downgrading
-# the thing we came here for.
-napari = "==0.8.0"
-PyQt5 = "*"
+# napari and Qt are not named here: micro_sam brings both from conda, and a
+# PyPI pin beside it is the conflict that keeps them out.
 
 # From PyPI, not the sibling checkout: this environment tests the released
 # version.
