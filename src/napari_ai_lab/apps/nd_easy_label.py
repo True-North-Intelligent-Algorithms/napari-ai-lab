@@ -420,11 +420,12 @@ class NDEasyLabel(BaseNDApp):
         self._last_interactive_segmentation = None
 
     def _on_erase_working(self):
-        """Clear the working labels layer (discard uncommitted segmentation)."""
+        """Discard the uncommitted segmentation and the points that made it."""
         if self.working_layer is None:
             return
         self.working_layer.data[...] = 0
         self.working_layer.refresh()
+        self._clear_points()
         print("Erased working layer")
         self._last_interactive_segmentation = None
 
