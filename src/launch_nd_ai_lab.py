@@ -169,7 +169,7 @@ test_sets = [
     "bees on comb test",  # 20
 ]
 
-test_set = test_sets[19]
+test_set = test_sets[17]
 
 annotations_viewer_type = "none"
 
@@ -245,7 +245,13 @@ elif test_set == "bees on comb":
     axes_to_collapse = "C"
     axis_types = "NYXC"
 elif test_set == "bees":
-    parent_dir = test_images_dir / "bees"
+    # The i2k-2026 workshop project, used in place rather than copied: it is a
+    # live ND AI Lab project (labels, patches, models, predictions), so a copy
+    # under tests/test_images would fork the annotations away from the
+    # notebooks that read them.
+    parent_dir = (
+        project_root.parent / "i2k-2026" / "notebooks" / "data" / "bees"
+    )
     viewer_type = "sequence"
     axes_to_collapse = "C"
     axis_types = "NYXC"
