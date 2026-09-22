@@ -88,19 +88,26 @@ class NDEasySegment(BaseNDApp):
         main_layout = QVBoxLayout(self)
 
         # === Mode Selection Group ===
-        mode_group = QGroupBox("Segmentation Mode")
-        mode_layout = QHBoxLayout(mode_group)
+        self.mode_group = QGroupBox("Segmentation Mode")
+        mode_layout = QHBoxLayout(self.mode_group)
 
         self.interactive_mode_btn = QRadioButton("Interactive (Points/Shapes)")
         self.automatic_mode_btn = QRadioButton("Automatic (Full Image)")
-        self.interactive_mode_btn.setChecked(True)  # Default to interactive
+        # Embedded, the label panel owns interactive segmentation, so two
+        # interactive segmenter UIs would sit in the same dock.  This panel is
+        # automatic-only there and the choice is not offered.
+        if self.embedded:
+            self.automatic_mode_btn.setChecked(True)
+        else:
+            self.interactive_mode_btn.setChecked(True)
 
         self.interactive_mode_btn.toggled.connect(self._on_mode_changed)
         self.automatic_mode_btn.toggled.connect(self._on_mode_changed)
 
         mode_layout.addWidget(self.interactive_mode_btn)
         mode_layout.addWidget(self.automatic_mode_btn)
-        main_layout.addWidget(mode_group)
+        self.mode_group.setVisible(not self.embedded)
+        main_layout.addWidget(self.mode_group)
 
         # === Common Controls ===
         # Directory selection (only in standalone mode)
