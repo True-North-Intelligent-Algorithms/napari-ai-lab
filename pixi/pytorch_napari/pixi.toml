@@ -164,4 +164,6 @@ lab-sequence = "python ../../src/launch_nd_ai_lab.py --sequence"
 poc = "python ../../experiments/skop_stardist_poc.py"
 
 # Register the environment as a Jupyter kernel for use in VS Code and Jupyter
-register-kernel = "python -m ipykernel install --user --name=pytorch_napari --display-name 'AI-LAB (pytorch_napari)'"
+# Not `ipykernel install`: that writes a bare-interpreter argv, which dies in
+# VS Code on import skimage. See ../register_kernel.py.
+register-kernel = { cmd = "python ../register_kernel.py --name pytorch_napari --display-name 'AI-LAB (pytorch_napari)'", cwd = "." }
