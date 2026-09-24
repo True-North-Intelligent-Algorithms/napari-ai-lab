@@ -1387,6 +1387,52 @@ class NDEasyLabel(BaseNDApp):
         ) as e:
             print(f"Live re-segmentation failed: {e}")
 
+    def _segmenter_target(self):
+        """(parent directory, artifact name, image slice) for the current view.
+
+        The three values ``_initialize_segmenter`` hands the segmenter, so a
+        caller can ask whether that initialization still fits without
+        repeating how the artifact name is built.
+        """
+        parent_dir = self.image_data_model.get_parent_directory()
+        image_paths = self.image_data_model.get_image_paths()
+        image_name = image_paths[self.current_image_index].stem
+        selected_axis = self.segmenter_parameter_form.get_selected_axis()
+        indices = get_current_slice_indices(
+            self.viewer.dims.current_step, selected_axis
+        )
+        image_data = self.image_layer.data[indices]
+        step = self.viewer.dims.current_step
+        image_name = create_artifact_name(image_name, step, selected_axis)
+        return str(parent_dir), image_name, image_data
+
+    def _ensure_segmenter_initialized(self):
+        """Initialize the segmenter if it is not ready for this image.
+
+        Choosing a segmenter initializes it, and so does setting up annotation
+        layers.  Moving the sequence viewer on does neither in ND AI Lab: that
+        distributes layers itself and never comes through here, so the
+        segmenter would answer with the previous image's embeddings.
+
+        Asking on the click that needs it, rather than on every image change,
+        also keeps embeddings from being computed for images only scrolled
+        past.
+        """
+        segmenter = getattr(self, "segmenter", None)
+        if segmenter is None or self.image_layer is None:
+            return
+        needs = getattr(segmenter, "needs_initialization", None)
+        if needs is None:
+            return
+        try:
+            parent_dir, image_name, _ = self._segmenter_target()
+        except (AttributeError, IndexError, TypeError, ValueError) as e:
+            print(f"Could not work out the segmenter target: {e}")
+            return
+        if needs(parent_dir, image_name):
+            print(f"Segmenter not initialized for {image_name} - initializing")
+            self._initialize_segmenter()
+
     def _initialize_segmenter(self):
         """Initialize predictor if an image is loaded and a segmenter exists."""
         if self.image_layer is None:
@@ -1394,24 +1440,7 @@ class NDEasyLabel(BaseNDApp):
             return
 
         try:
-            parent_dir = self.image_data_model.get_parent_directory()
-
-            image_paths = self.image_data_model.get_image_paths()
-            image_name = image_paths[self.current_image_index].stem
-
-            selected_axis = self.segmenter_parameter_form.get_selected_axis()
-
-            indices = get_current_slice_indices(
-                self.viewer.dims.current_step, selected_axis
-            )
-
-            image_data = self.image_layer.data[indices]
-
-            # Get current step tuple
-            step = self.viewer.dims.current_step
-
-            # Create artifact name from non-spatial dims
-            image_name = create_artifact_name(image_name, step, selected_axis)
+            parent_dir, image_name, image_data = self._segmenter_target()
 
             self.segmenter = (
                 self.segmenter_parameter_form.sync_nd_operation_instance(
@@ -1420,7 +1449,7 @@ class NDEasyLabel(BaseNDApp):
             )
 
             result = self.segmenter.initialize_predictor(
-                image_data, str(parent_dir), image_name
+                image_data, parent_dir, image_name
             )
             # result may be None for implementations that don't return a value
             if result is not None and not result.get("success", True):
@@ -1458,6 +1487,8 @@ class NDEasyLabel(BaseNDApp):
             if self.image_layer is None:
                 print("No image layer available")
                 return
+
+            self._ensure_segmenter_initialized()
 
             selected_axis = self.segmenter_parameter_form.get_selected_axis()
 

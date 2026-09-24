@@ -116,14 +116,30 @@ Instructions:
             save_path (str): Directory path where embeddings are saved/loaded
             image_name (str): Name of the image (without extension)
         """
-        # Create embedding directory path using Path
-        embedding_parent_path = Path(save_path) / "embeddings"
-        embedding_save_path = (
-            embedding_parent_path / image_name / self.model_type
-        )
+        parent, save = self._embedding_paths(save_path, image_name)
+        self.embedding_parent_path = parent
+        self.embedding_save_path = save
 
-        self.embedding_parent_path = str(embedding_parent_path)
-        self.embedding_save_path = str(embedding_save_path)
+    def _embedding_paths(self, save_path: str, image_name: str):
+        """Where this image's embeddings live, without recording anything."""
+        parent = Path(save_path) / "embeddings"
+        return str(parent), str(parent / image_name / self.model_type)
+
+    def needs_initialization(self, save_path, image_name):
+        """True when the predictor is missing, or holds another image.
+
+        The second case is the one that bites: moving the sequence viewer on
+        leaves the previous image's embeddings in place, so a mere None check
+        passes and ``prompt_segmentation`` then runs them against the wrong
+        shape.
+        """
+        if (
+            self.state is None
+            or getattr(self.state, "image_embeddings", None) is None
+        ):
+            return True
+        _, expected = self._embedding_paths(save_path, image_name)
+        return expected != self.embedding_save_path
 
     def initialize_predictor(self, image, save_path: str, image_name: str):
         """

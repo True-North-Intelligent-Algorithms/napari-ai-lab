@@ -43,6 +43,14 @@ class InteractiveSegmenterBase(SegmenterBase):
         cls.registry[name] = framework
         print(f"Registered interactive segmenter: {name}")
 
+    def needs_initialization(self, save_path, image_name):
+        """Whether this segmenter must be initialized before segmenting.
+
+        False here: most interactive segmenters hold nothing that depends on
+        which image is shown.  SAM3D overrides it, because its embeddings do.
+        """
+        return False
+
     def segment(self, image, points=None, shapes=None, **kwargs):
         """
         Perform interactive segmentation on the given image.
