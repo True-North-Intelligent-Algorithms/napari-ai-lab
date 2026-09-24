@@ -35,6 +35,38 @@ from ..Segmenters.InteractiveSegmenters import (
     SAMSphere3D,
 )
 
+# Segmenters left out of the default set for now.  Comment a line out to
+# bring one back; nothing else needs changing.  This is the only switch, and
+# it covers both entry points, because the napari menu and
+# ``launch_nd_ai_lab(register_all=True)`` both come through here.
+#
+# Matched against the class name, case-insensitively, so the spelling the UI
+# shows works too (it lists MicroSamYoloSegmenter as "MicrosamYoloSegmenter").
+# A flat deny-list is enough while the set is small and static.  When it needs
+# to depend on what is installed, or on the project, this is the thing to
+# replace.
+HIDDEN = {
+    # global
+    "MicroSamSegmenter",
+    "MonaiUNetSegmenter",
+    "MicroSamYoloSegmenter",
+    "SkImageWatershedSegmenter",
+    # interactive -- leaving Otsu2D and SAM3D only
+    "Otsu3D",
+    "SAMSphere3D",
+    "RegionGrow3D",
+    "FeatureRegionGrow3D",
+    "AnisotropicSphereFit3D",
+    "HoughSphereFit3D",
+}
+
+
+def _shown(seg):
+    """Whether *seg* should be registered.  None means its deps are missing."""
+    return seg is not None and seg.__name__.lower() not in {
+        n.lower() for n in HIDDEN
+    }
+
 
 def register_all():
     """Register the default augmenters and segmenters."""
@@ -50,7 +82,7 @@ def register_all():
         MicroSamYoloSegmenter,
         SkImageWatershedSegmenter,
     ):
-        if seg is not None:
+        if _shown(seg):
             seg.register()
 
     # Interactive segmenters
@@ -64,7 +96,8 @@ def register_all():
         AnisotropicSphereFit3D,
         HoughSphereFit3D,
     ):
-        seg.register()
+        if _shown(seg):
+            seg.register()
 
     # Augmenters
     SimpleAugmenter.register()
@@ -87,6 +120,10 @@ def _register_skop_segmenters():
         print(f"ℹ️  scikit-ops segmenters not registered: {exc}")
         return
 
-    StardistSkopSegmenter.register()
-    Cellpose3SkopSegmenter.register()
-    Cellpose4SkopSegmenter.register()
+    for seg in (
+        StardistSkopSegmenter,
+        Cellpose3SkopSegmenter,
+        Cellpose4SkopSegmenter,
+    ):
+        if _shown(seg):
+            seg.register()
