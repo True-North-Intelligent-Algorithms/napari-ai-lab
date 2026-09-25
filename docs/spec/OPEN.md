@@ -15,6 +15,62 @@ Ask "what else to do" in any session and this file is the answer.
 
 ---
 
+## "generator already executing" when adding a point
+
+**Status:** open -- seen once, not chased. Watching for a recurrence.
+
+napari's Points `add` drag generator re-entered while still running, raised
+from `mouse_move_callbacks` via superqt's throttled mouse-move. Something in
+the callback spins the Qt event loop, so the next mouse move arrives before
+the generator finishes.
+
+Nothing in this repo calls `processEvents`, so the suspects are both in the
+point-add path, and both arrived with 717bfb7:
+
+- `_ensure_segmenter_initialized()` at the top of `_on_points_changed` lets
+  micro_sam compute embeddings inside the drag generator -- seconds of work,
+  with a progress bar running.
+- `_initialize_segmenter` can raise `QMessageBox.critical`, and a modal dialog
+  runs a nested event loop by definition.
+
+Before 717bfb7 embeddings were computed on segmenter selection or on layer
+setup, never during a drag.
+
+If it comes back: a reentrancy guard on `_on_points_changed`, like the
+`_processing_image_change` lock in nd_ai_lab.py, stops the exception;
+deferring the init with `QTimer.singleShot(0, ...)` moves the heavy work out
+of the generator, at the cost of the triggering click not segmenting.
+
+---
+
+## nd_easy_segment still has its own interactive segmentation
+
+**Status:** decided: delete it, once the shipping launchers are settled.
+
+`NDEasySegment` carries a second interactive segmenter -- the
+`Interactive (Points/Shapes)` radio, `_on_points_changed`,
+`_setup_interactive_layers`, and three `is_interactive_mode()` branches. The
+label panel owns the complete version. 2421d19 hid the switch when embedded,
+so AI Lab no longer stacks two of them in one dock, but standalone still
+offers it.
+
+What it offers is a strict subset: shapes were never implemented there,
+despite the radio's name, and `nd_ai_lab.py` guards the connection with
+`hasattr(self.segment_widget, "_on_shapes_changed")`, which is always False.
+Every shipped entry point already forces Automatic, so nothing reaches it.
+
+Deleting it touches the mode widgets, the `Interactive Mode Methods` section,
+`_setup_interactive_layers`, the three call sites, the event-connect block in
+`nd_ai_lab.py`, and the `automatic_mode_btn.setChecked(True)` lines in
+`launch_nd_easy_segment.py`, `launch_nd_easy_local.py` and
+`tests/test_nd_easy_segment.py`.
+
+Waiting on which launchers go into the production version: the case for
+deleting rests on the labeling app shipping alongside the segment one, since
+that is where interactive segmentation would then only exist.
+
+---
+
 ## Vendored napari_bbox tracks napari's private API, one variant per release
 
 **Status:** open — a 0.9 variant exists; the pattern is the problem.
@@ -328,6 +384,35 @@ cause, and make the CPU fallback say so.
 Not chased yet: whether suspend/resume drops the nvidia kernel modules,
 whether `nvidia-persistenced` is running, and whether the same error appears
 outside the appose environments at the same moment.
+
+---
+
+## Three of the four bee test sets point at folders that do not exist
+
+**Status:** open — found while repointing `bees` at the i2k-2026 project.
+
+`tests/test_images/` contains no bee or comb folder at all. Of the four
+branches in `launch_nd_ai_lab.py` that name one, only `bees` resolves, and
+only because it was repointed away from `tests/test_images/`:
+
+| # | entry | path | |
+|---|---|---|---|
+| 17 | `bees` | `../i2k-2026/notebooks/data/bees` | exists |
+| 18 | `bees on comb` | `tests/test_images/bees on comb` | missing |
+| 19 | `bees on comb medium` | `tests/test_images/bees on comb medium` | missing |
+| 20 | `bees on comb test` | `tests/test_images/bees on comb test` | missing |
+
+Selecting 18, 19 or 20 fails at load, and nothing in the list says which of
+the twenty entries are live: `tests/test_images/` is gitignored, so the list
+is the only surviving record that the folders were ever there.
+
+What "medium" held is not recoverable from the tree — the string occurs
+nowhere but the list and its own branch. Either a downsample of the seven
+combs that was never generated, or a folder from another machine.
+
+Undecided whether to delete the three dead entries or regenerate the data.
+Deleting loses the only trace of what was once there; keeping them means the
+harness offers datasets that cannot load.
 
 ---
 

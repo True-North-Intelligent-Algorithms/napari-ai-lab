@@ -14,6 +14,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..models import ImageDataModel
@@ -148,12 +149,16 @@ class NDEasyLabel(BaseNDApp):
 
         # Combo: choose which layer drives live interactive segmentation.
         # Populated dynamically ("None" plus whatever box-like layers exist).
-        interactive_layer_row = QHBoxLayout()
+        # In a QWidget rather than a bare layout: a layout cannot be hidden,
+        # and a profile may drop this whole row.
+        self.interactive_layer_row = QWidget()
+        interactive_layer_row = QHBoxLayout(self.interactive_layer_row)
+        interactive_layer_row.setContentsMargins(0, 0, 0, 0)
         interactive_layer_row.addWidget(QLabel("Interactive Layer:"))
         self.interactive_layer_combo = QComboBox()
         self.interactive_layer_combo.addItem("None")
         interactive_layer_row.addWidget(self.interactive_layer_combo)
-        self.layout().addLayout(interactive_layer_row)
+        self.layout().addWidget(self.interactive_layer_row)
 
         # Button to add an interactive-label (ROI box) shapes layer
         self.add_interactive_layer_btn = QPushButton(
@@ -182,12 +187,14 @@ class NDEasyLabel(BaseNDApp):
         # Combo controls how the 2nd-viewer view is built: full volume vs
         # cropped to the active 3D bounding box (sliced views so live updates
         # in the primary viewer still propagate).
-        preview_row = QHBoxLayout()
+        self.label_preview_row = QWidget()
+        preview_row = QHBoxLayout(self.label_preview_row)
+        preview_row.setContentsMargins(0, 0, 0, 0)
         preview_row.addWidget(QLabel("Label preview layer:"))
         self.label_preview_combo = QComboBox()
         self.label_preview_combo.addItems(["None", "3D Bounding Box"])
         preview_row.addWidget(self.label_preview_combo)
-        self.layout().addLayout(preview_row)
+        self.layout().addWidget(self.label_preview_row)
 
         self.show_labels_in_second_viewer_btn = QPushButton(
             "Show labels in 2nd Napari"
@@ -232,6 +239,24 @@ class NDEasyLabel(BaseNDApp):
             self._on_copy_predictions_to_labels
         )
         self.layout().addWidget(self.copy_predictions_to_labels_btn)
+
+        # The optional GUI groups, by the keys profiles.FEATURES defines.
+        # Anything not listed here is always shown -- Commit/Erase, the point
+        # sign, and "Active box size", which tells you whether a box is big
+        # enough for the patch size you mean to train at.
+        self.feature_widgets = {
+            "interactive-layer": [
+                self.interactive_layer_row,
+                self.add_interactive_layer_btn,
+            ],
+            "label-preview": [
+                self.label_preview_row,
+                self.show_labels_in_second_viewer_btn,
+            ],
+            "local-ml": [self.local_ml_btn],
+            "edit-masks": [self.edit_masks_btn],
+            "copy-predictions": [self.copy_predictions_to_labels_btn],
+        }
 
         # Holder for the secondary viewer (kept alive across button clicks).
         self._second_viewer = None
@@ -281,6 +306,13 @@ class NDEasyLabel(BaseNDApp):
             # No frameworks registered
             self.segmenter_combo.addItem("No segmenters available")
             self.segmenter_combo.setEnabled(False)
+
+    def apply_profile_features(self, profile):
+        """Show only the GUI groups *profile* allows. See profiles.FEATURES."""
+        for key, widgets in getattr(self, "feature_widgets", {}).items():
+            visible = profile.allows_feature(key)
+            for widget in widgets:
+                widget.setVisible(visible)
 
     def _post_segmenter_selection(self):
         # Delegate the real work to the initializer

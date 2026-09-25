@@ -17,6 +17,7 @@ from ..Augmenters import (
 )
 from ..Segmenters.GlobalSegmenters import (
     CellCastStardistSegmenter,
+    GlobalSegmenterBase,
     MicroSamSegmenter,
     MicroSamYoloSegmenter,
     MonaiUNetSegmenter,
@@ -29,48 +30,35 @@ from ..Segmenters.InteractiveSegmenters import (
     AnisotropicSphereFit3D,
     FeatureRegionGrow3D,
     HoughSphereFit3D,
+    InteractiveSegmenterBase,
     Otsu2D,
     Otsu3D,
     RegionGrow3D,
     SAMSphere3D,
 )
-
-# Segmenters left out of the default set for now.  Comment a line out to
-# bring one back; nothing else needs changing.  This is the only switch, and
-# it covers both entry points, because the napari menu and
-# ``launch_nd_ai_lab(register_all=True)`` both come through here.
-#
-# Matched against the class name, case-insensitively, so the spelling the UI
-# shows works too (it lists MicroSamYoloSegmenter as "MicrosamYoloSegmenter").
-# A flat deny-list is enough while the set is small and static.  When it needs
-# to depend on what is installed, or on the project, this is the thing to
-# replace.
-HIDDEN = {
-    # global
-    "MicroSamSegmenter",
-    "MonaiUNetSegmenter",
-    "MicroSamYoloSegmenter",
-    "SkImageWatershedSegmenter",
-    # interactive -- leaving Otsu2D and SAM3D only
-    "Otsu3D",
-    "SAMSphere3D",
-    "RegionGrow3D",
-    "FeatureRegionGrow3D",
-    "AnisotropicSphereFit3D",
-    "HoughSphereFit3D",
-}
+from .profiles import get_profile
 
 
-def _shown(seg):
-    """Whether *seg* should be registered.  None means its deps are missing."""
-    return seg is not None and seg.__name__.lower() not in {
-        n.lower() for n in HIDDEN
-    }
+def register_all(profile=None):
+    """Register the augmenters and segmenters the profile allows.
 
+    *profile* is a name, a Profile, or None -- see apps/profiles.py, which
+    also documents the environment variable consulted when it is None. This
+    is the only switch, and it covers both entry points: the napari menu and
+    ``launch_nd_ai_lab(register_all=True)`` both come through here.
+    """
+    prof = get_profile(profile)
+    print(f"Registering profile: {prof.name}")
 
-def register_all():
-    """Register the default augmenters and segmenters."""
-    _register_skop_segmenters()
+    # Start from empty. The registries are class-level and live as long as the
+    # process, so without this, opening one profile's widget and then another's
+    # in the same napari session leaves the first profile's segmenters behind
+    # -- a profile could only ever add. A script that registers extras itself
+    # should do so after calling this.
+    GlobalSegmenterBase.registry.clear()
+    InteractiveSegmenterBase.registry.clear()
+
+    _register_skop_segmenters(prof)
 
     # Global segmenters — some are None when their optional deps are missing.
     for seg in (
@@ -82,7 +70,7 @@ def register_all():
         MicroSamYoloSegmenter,
         SkImageWatershedSegmenter,
     ):
-        if _shown(seg):
+        if prof.allows(seg, "global"):
             seg.register()
 
     # Interactive segmenters
@@ -96,15 +84,16 @@ def register_all():
         AnisotropicSphereFit3D,
         HoughSphereFit3D,
     ):
-        if _shown(seg):
+        if prof.allows(seg, "interactive"):
             seg.register()
 
     # Augmenters
-    SimpleAugmenter.register()
-    AlbumentationsAugmenter.register()
+    for aug in (SimpleAugmenter, AlbumentationsAugmenter):
+        if prof.allows(aug, "augmenter"):
+            aug.register()
 
 
-def _register_skop_segmenters():
+def _register_skop_segmenters(prof):
     """Register the scikit-ops segmenters, if scikit-ops is installed."""
     try:
         from ..Segmenters.GlobalSegmenters.Cellpose3SkopSegmenter import (
@@ -125,5 +114,5 @@ def _register_skop_segmenters():
         Cellpose3SkopSegmenter,
         Cellpose4SkopSegmenter,
     ):
-        if _shown(seg):
+        if prof.allows(seg, "global"):
             seg.register()

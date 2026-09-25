@@ -5,25 +5,19 @@ visibility: hidden
 # see https://napari.org/stable/plugins/technical_references/manifest.html#fields for valid categories
 # categories: []
 contributions:
+  # One entry per profile. The profile decides which segmenters and augmenters
+  # register and which parts of the GUI appear -- see apps/profiles.py. Adding
+  # one means a subclass in apps/nd_ai_lab_plugin.py plus a command and widget
+  # here.
   commands:
-    - id: napari-ai-lab.napari_easy_augment_batch_dl
-      python_name: napari_easy_augment_batch_dl.easy_augment_batch_dl:NapariEasyAugmentBatchDL
-      title: Easy Augment Batch DL
-    - id: napari-ai-lab.nd_easy_label
-      python_name: napari_ai_lab.apps.nd_easy_label:NDEasyLabel
-      title: ND Easy Label
-    - id: napari-ai-lab.nd_easy_segmentation
-      python_name: napari_ai_lab.apps.nd_easy_segmentation:NDEasySegmentation
-      title: ND Easy Segmentation (Unified)
     - id: napari-ai-lab.nd_ai_lab
       python_name: napari_ai_lab.apps.nd_ai_lab_plugin:NDAILabPlugin
       title: ND AI Lab
+    - id: napari-ai-lab.nd_ai_lab_instance_2d
+      python_name: napari_ai_lab.apps.nd_ai_lab_plugin:NDAILabInstance2D
+      title: 2D Instance AI Lab
   widgets:
-    - command: napari-ai-lab.napari_easy_augment_batch_dl
-      display_name: Easy Augment Batch DL
-    - command: napari-ai-lab.nd_easy_label
-      display_name: ND Easy Label
-    - command: napari-ai-lab.nd_easy_segmentation
-      display_name: ND Easy Segmentation (Unified)
     - command: napari-ai-lab.nd_ai_lab
       display_name: ND AI Lab
+    - command: napari-ai-lab.nd_ai_lab_instance_2d
+      display_name: 2D Instance AI Lab

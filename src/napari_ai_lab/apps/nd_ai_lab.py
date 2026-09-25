@@ -27,6 +27,7 @@ from ..models import ImageDataModel
 from .nd_easy_augment import NDEasyAugment
 from .nd_easy_label import NDEasyLabel
 from .nd_easy_segment import NDEasySegment
+from .profiles import get_profile
 
 
 class NDAILab(QWidget):
@@ -42,6 +43,7 @@ class NDAILab(QWidget):
         viewer: "napari.viewer.Viewer",
         image_data_model: ImageDataModel = None,
         axes_to_collapse: str | list[str] | None = None,
+        profile=None,
     ):
         """
         Initialize the combined AI Lab widget.
@@ -60,6 +62,9 @@ class NDAILab(QWidget):
         # Tracking for sequence viewer changes
         self._processing_image_change = False
         self.current_image_index = 0
+
+        # What this session offers. See apps/profiles.py.
+        self.profile = get_profile(profile)
 
         # Create sub-apps in EMBEDDED mode (no individual directory buttons)
         # Model can be set later via set_image_data_model()
@@ -82,6 +87,13 @@ class NDAILab(QWidget):
             training_widget_mode="embedded",  # Use embedded training form, not dialog
             axes_to_collapse=axes_to_collapse,
         )
+
+        # The profile's GUI groups depend on nothing but the profile, so
+        # settle them now. apply_mode() runs only from the launcher and from
+        # "Open Project" -- built from the napari menu, this widget would
+        # otherwise show every optional button until a project was opened.
+        if hasattr(self.label_widget, "apply_profile_features"):
+            self.label_widget.apply_profile_features(self.profile)
 
         # Back-reference so child widgets can call into NDAILab
         # (used by "Open Project" button, "Copy predictions to labels", ...).
@@ -305,8 +317,7 @@ class NDAILab(QWidget):
         # one apply_mode removes it, using this same condition. Requiring it
         # unconditionally made the check below fail on every 2D project, so
         # reuse never ran and every switch took the rebuild path.
-        model = self.image_data_model
-        if model is None or model.mode != "2d":
+        if self._wants_3d():
             layers.append(getattr(self, "boxes_3D_layer", None))
         if any(layer is None for layer in layers):
             return False
@@ -647,6 +658,28 @@ class NDAILab(QWidget):
             print("✅ Model created and shared across all tabs")
             # TODO Phase 3: Load images and create layers
 
+    def _wants_shapes(self):
+        """Whether the Shapes layer belongs in this session.
+
+        Profile only -- no project shape makes shape prompts inapplicable.
+        Asked here rather than inline so layer creation and the reuse check
+        cannot drift apart, which is what made every 2D switch rebuild.
+        """
+        return self.profile.show_shapes
+
+    def _wants_3d(self):
+        """Whether the 3D box layer and its button belong in this session.
+
+        Both the project and the profile get a veto: an ND project shows them,
+        unless the profile says not to.  One answer, used by apply_mode to
+        decide what to put in the viewer and by _update_layers_for_image to
+        decide what to expect there -- those two disagreeing is what made
+        every 2D switch take the slow path.
+        """
+        model = self.image_data_model
+        nd = model is None or model.mode != "2d"
+        return nd and self.profile.show_3d
+
     def apply_mode(self):
         """Show what this project needs, once one is loaded.
 
@@ -654,13 +687,18 @@ class NDAILab(QWidget):
         sequence, is decided here and nowhere else.
         """
         model = self.image_data_model
-        nd = model is None or model.mode != "2d"
+        nd = self._wants_3d()
         if hasattr(self, "boxes_3D_layer"):
             if nd and self.boxes_3D_layer not in self.viewer.layers:
                 self.viewer.add_layer(self.boxes_3D_layer)
             elif not nd and self.boxes_3D_layer in self.viewer.layers:
                 self.viewer.layers.remove(self.boxes_3D_layer)
         self.label_widget.add_interactive_3D_boxes_btn.setVisible(nd)
+
+        # The profile's own say over the optional GUI groups. Here, with
+        # everything else that decides what is visible.
+        if hasattr(self.label_widget, "apply_profile_features"):
+            self.label_widget.apply_profile_features(self.profile)
 
         sequence = model is not None and model.viewer_type == "sequence"
         self.segment_widget.segment_sequence_btn.setVisible(sequence)

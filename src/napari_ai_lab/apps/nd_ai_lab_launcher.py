@@ -27,8 +27,11 @@ def launch_nd_ai_lab(
     axes_to_collapse: str | None = None,
     axis_types: str | None = None,
     register_all: bool = False,
+    profile=None,
 ):
     """Create ImageDataModel, configure IO, attach viewers, and show NDAILab.
+
+    *profile* names what to offer -- see apps/profiles.py.
 
     Returns the tuple (nd_ai_lab_widget, sequence_viewer_or_None, model).
     """
@@ -38,7 +41,7 @@ def launch_nd_ai_lab(
     # Many scripts prefer selective registration; set register_all=True for the
     # convenience mode that mirrors the napari-plugin behavior.
     if register_all:
-        _register_all()
+        _register_all(profile)
 
     # Create model
     model = ImageDataModel(parent_dir)
@@ -57,7 +60,10 @@ def launch_nd_ai_lab(
 
     # Create combined widget WITH model
     nd_ai_lab_widget = NDAILab(
-        viewer, model, axes_to_collapse=axes_to_collapse
+        viewer,
+        model,
+        axes_to_collapse=axes_to_collapse,
+        profile=profile,
     )
     viewer.window.add_dock_widget(
         nd_ai_lab_widget, area="right", name="AI Lab"

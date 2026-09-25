@@ -5,8 +5,13 @@ from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.nd_sequence_viewer import NDSequenceViewer
 from napari_ai_lab.Segmenters.InteractiveSegmenters import (
     SAM3D,
+    AnisotropicSphereFit3D,
+    FeatureRegionGrow3D,
+    HoughSphereFit3D,
     Otsu2D,
     Otsu3D,
+    RegionGrow3D,
+    SAMSphere3D,
     Square2D,
 )
 
@@ -15,6 +20,11 @@ Square2D.register()
 Otsu2D.register()
 Otsu3D.register()
 SAM3D.register()
+SAMSphere3D.register()
+RegionGrow3D.register()
+FeatureRegionGrow3D.register()
+AnisotropicSphereFit3D.register()
+HoughSphereFit3D.register()
 
 viewer = napari.Viewer()
 

@@ -1,16 +1,18 @@
-"""
-napari-menu entry point for ND AI Lab.
+"""napari-menu entry points for ND AI Lab.
 
-When launched from the napari plugin menu we want the full set of
-augmenters and segmenters available, so this thin subclass registers
-everything before constructing NDAILab.
+One entry per profile.  Each registers every segmenter and augmenter its
+profile allows, then hands the profile to NDAILab so the GUI matches.
 
-Scripts that want selective registration use ``launch_nd_ai_lab.py``
-and instantiate :class:`NDAILab` directly.
+Why subclasses and not a factory function?  Napari's plugin loader only
+performs viewer-injection for **class** widget contributions; plain functions
+are assumed to be magicgui widgets and receive no viewer.  So a profile is
+bound by declaring a class, and ``napari.yaml`` names it.
 
-Why a subclass and not a factory function?  Napari's plugin loader only
-performs viewer-injection for **class** widget contributions; plain
-functions are assumed to be magicgui widgets and receive no viewer.
+Adding a menu entry for a new profile is two steps: a subclass here, and a
+command plus widget in ``napari.yaml``.
+
+Scripts want ``launch_nd_ai_lab(..., profile=...)`` instead, which takes the
+profile directly.
 """
 
 from napari.viewer import Viewer
@@ -19,9 +21,28 @@ from .nd_ai_lab import NDAILab
 from .register_all import register_all
 
 
-class NDAILabPlugin(NDAILab):
-    """NDAILab variant that registers every segmenter/augmenter on launch."""
+class ProfiledAILab(NDAILab):
+    """NDAILab bound to the profile named by the class attribute."""
+
+    #: Profile name, or None to take NAPARI_AI_LAB_PROFILE, then "all".
+    profile_name: str | None = None
 
     def __init__(self, viewer: Viewer):
-        register_all()
-        super().__init__(viewer)
+        register_all(self.profile_name)
+        super().__init__(viewer, profile=self.profile_name)
+
+
+class NDAILabPlugin(ProfiledAILab):
+    """Everything installed.
+
+    Left unpinned so NAPARI_AI_LAB_PROFILE can still redirect this entry;
+    without it the profile resolves to "all".
+    """
+
+    profile_name = None
+
+
+class NDAILabInstance2D(ProfiledAILab):
+    """2D instance segmentation, global segmenters restricted to scikit-ops."""
+
+    profile_name = "2d-instance-skop"
