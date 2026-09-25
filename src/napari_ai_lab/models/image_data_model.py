@@ -2197,11 +2197,15 @@ class ImageDataModel:
             self.augmenter.compute_global_normalization_stats(image_crop)
 
             for _ in range(self.num_patches):
+                # Name patches after the crop they came from, so a patch can
+                # be traced back to its image. The crops are already named
+                # after theirs -- comb_03_00000.tif -- by
+                # crop_and_save_label_patches.
                 self.augmenter.augment_and_save(
                     image_crop,
                     truth_crop,
                     str(patches_dir),
-                    "patch",
+                    image_path.stem,
                     self.patch_size,
                     axis=None,
                 )
