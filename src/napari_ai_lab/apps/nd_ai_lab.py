@@ -298,9 +298,16 @@ class NDAILab(QWidget):
             getattr(self, "points_layer", None),
             getattr(self, "shapes_layer", None),
             getattr(self, "boxes_layer", None),
-            getattr(self, "boxes_3D_layer", None),
             *annotations_layers.values(),
         ]
+
+        # The 3D box layer is only in the viewer for an ND project -- for a 2D
+        # one apply_mode removes it, using this same condition. Requiring it
+        # unconditionally made the check below fail on every 2D project, so
+        # reuse never ran and every switch took the rebuild path.
+        model = self.image_data_model
+        if model is None or model.mode != "2d":
+            layers.append(getattr(self, "boxes_3D_layer", None))
         if any(layer is None for layer in layers):
             return False
         if any(layer not in self.viewer.layers for layer in layers):
