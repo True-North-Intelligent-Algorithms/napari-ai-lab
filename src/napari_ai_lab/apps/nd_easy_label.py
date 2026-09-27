@@ -2195,12 +2195,20 @@ class NDEasyLabel(BaseNDApp):
             or self.annotation_layer is None
         ):
             return
-        self.image_data_model.crop_and_save_label_patches(
-            boxes_layer.data,
-            self.image_layer.data,
-            self.annotation_layer.data,
-            self.current_image_index,
-        )
+        # Same split as _on_save_project: in sequence mode the layer holds
+        # only the current image's boxes, and the live-layer call would wipe
+        # every other image's crops.
+        if not self.image_data_model._is_stacked_sequence():
+            self.image_data_model.crop_and_save_all_label_patches(
+                annotation_name=self._active_annotation_name()
+            )
+        else:
+            self.image_data_model.crop_and_save_label_patches(
+                boxes_layer.data,
+                self.image_layer.data,
+                self.annotation_layer.data,
+                self.current_image_index,
+            )
         print("Label patches saved on close.")
 
         # Also save 3D boxes + 3D patches on close (mirrors _on_save_project).
