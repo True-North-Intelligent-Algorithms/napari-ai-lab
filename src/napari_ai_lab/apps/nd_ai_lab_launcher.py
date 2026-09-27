@@ -26,21 +26,18 @@ def launch_nd_ai_lab(
     viewer_type: str = "none",
     axes_to_collapse: str | None = None,
     axis_types: str | None = None,
-    register_all: bool = False,
-    profile=None,
+    profile="all",
 ):
     """Create ImageDataModel, configure IO, attach viewers, and show NDAILab.
 
-    *profile* names what to offer -- see apps/profiles.py.
+    *profile* names what to register and offer -- see apps/profiles.py.
+    None registers nothing, for scripts that register their own segmenters.
 
     Returns the tuple (nd_ai_lab_widget, sequence_viewer_or_None, model).
     """
     parent_dir = Path(parent_dir)
 
-    # Optionally register all augmenters/segmenters so the UI lists them.
-    # Many scripts prefer selective registration; set register_all=True for the
-    # convenience mode that mirrors the napari-plugin behavior.
-    if register_all:
+    if profile is not None:
         _register_all(profile)
 
     # Create model

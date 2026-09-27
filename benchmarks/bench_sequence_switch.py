@@ -95,6 +95,7 @@ def main() -> None:
         viewer_type=VIEWER_TYPE,
         axes_to_collapse=AXES_TO_COLLAPSE,
         axis_types=AXIS_TYPES,
+        profile=None,  # register nothing
     )
     launch_seconds = time.perf_counter() - launch_start
 

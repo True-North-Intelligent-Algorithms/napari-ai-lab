@@ -294,6 +294,7 @@ nd_ai_lab_widget, nd_sequence_viewer_widget, model = launch_nd_ai_lab(
     viewer_type=viewer_type,
     axes_to_collapse=axes_to_collapse,
     axis_types=axis_types if "axis_types" in locals() else None,
+    profile=None,  # registered above
 )
 
 print("✨ ND AI Lab launched successfully!")

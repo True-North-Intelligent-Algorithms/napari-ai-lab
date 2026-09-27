@@ -45,7 +45,7 @@ def register_all(profile=None):
     *profile* is a name, a Profile, or None -- see apps/profiles.py, which
     also documents the environment variable consulted when it is None. This
     is the only switch, and it covers both entry points: the napari menu and
-    ``launch_nd_ai_lab(register_all=True)`` both come through here.
+    ``launch_nd_ai_lab(profile=...)`` both come through here.
     """
     prof = get_profile(profile)
     print(f"Registering profile: {prof.name}")
