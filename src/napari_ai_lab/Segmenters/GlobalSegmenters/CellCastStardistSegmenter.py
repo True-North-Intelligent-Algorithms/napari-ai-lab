@@ -11,13 +11,15 @@ import numpy as np
 
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
-# Try to import cellcast at module level
+# Try to import cellcast at module level. 0.3 replaced the stardist_2d
+# functions with a StarDist2D model class.
 try:
-    import cellcast.models.stardist_2d as sd
+    import cellcast
 
+    StarDist2D = cellcast.models.StarDist2D
     _is_cellcast_available = True
-except ImportError:
-    sd = None
+except (ImportError, AttributeError):
+    StarDist2D = None
     _is_cellcast_available = False
 
 
@@ -42,9 +44,10 @@ CellCast StarDist Automatic Segmentation:
         super().__init__()
         self._supported_axes = ["YX", "YXC", "ZYX", "ZYXC"]
         self._potential_axes = ["YX", "YXC", "ZYX", "ZYXC"]
+        # Built on first use: init_fluo loads and pre-warms the model.
+        self._model = None
 
-    @staticmethod
-    def is_available():
+    def are_dependencies_available(self) -> bool:
         """Check if CellCast is available."""
         return _is_cellcast_available
 
@@ -61,11 +64,13 @@ CellCast StarDist Automatic Segmentation:
         """
         if not _is_cellcast_available:
             raise ImportError(
-                "CellCast is not available. Please install it with: pip install cellcast"
+                'CellCast is not available. Please install it with: pip install "cellcast>=0.3"'
             )
 
-        # Run CellCast prediction
-        labels = sd.predict_versatile_fluo(image, gpu=True)
+        if self._model is None:
+            self._model = StarDist2D.init_fluo(gpu=True)
+
+        labels = self._model.predict_fluo(image)
 
         print(f"✅ CellCast: Found {labels.max()} objects")
 
