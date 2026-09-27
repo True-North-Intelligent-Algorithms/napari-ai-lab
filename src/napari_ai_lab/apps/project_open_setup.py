@@ -54,6 +54,8 @@ class ProjectOpenDialog(QDialog):
         # Viewer type
         self.viewer_combo = QComboBox()
         self.viewer_combo.addItems(self.VIEWER_TYPES)
+        # A folder of images is the usual project.
+        self.viewer_combo.setCurrentText("sequence")
         form.addRow("Viewer type:", self.viewer_combo)
 
         # axes_to_collapse
