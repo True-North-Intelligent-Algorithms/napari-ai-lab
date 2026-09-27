@@ -7,12 +7,12 @@ adding the layer raises AttributeError from _vispy/utils/text.py.
 
 import numpy as np
 
-from ..napari_0_8_0.bounding_boxes import (
-    BoundingBoxLayer as BoundingBoxLayer_0_8_0,
+from ..napari_0_7_0.bounding_boxes import (
+    BoundingBoxLayer as BoundingBoxLayer_0_7_0,
 )
 
 
-class BoundingBoxLayer(BoundingBoxLayer_0_8_0):
+class BoundingBoxLayer(BoundingBoxLayer_0_7_0):
     @property
     def _view_indices(self):
         return np.where(self._data_view._displayed)[0]

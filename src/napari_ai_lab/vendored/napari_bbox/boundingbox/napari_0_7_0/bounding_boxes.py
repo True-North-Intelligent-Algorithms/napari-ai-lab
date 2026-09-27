@@ -1,6 +1,6 @@
-"""What napari 0.8 requires of the bounding box *model*.
+"""What napari 0.7 requires of the bounding box *model*.
 
-napari 0.8 moved layer slicing behind a state object: ``Layer`` gained a new
+napari 0.7 moved layer slicing behind a state object: ``Layer`` gained a new
 ``@abstractmethod``, ``_get_layer_slicing_state``. Because it is abstract,
 adding it is a breaking change for every existing subclass -- the layer cannot
 be instantiated at all until it is implemented:
@@ -20,7 +20,7 @@ from ..napari_0_6_0.bounding_boxes import (
 
 
 class _BoundingBoxSlicingState(_LayerSlicingState):
-    """Routes napari >= 0.8 slicing back to the layer's own _set_view_slice."""
+    """Routes napari >= 0.7 slicing back to the layer's own _set_view_slice."""
 
     def _set_view_slice(self):
         self.layer._set_view_slice()

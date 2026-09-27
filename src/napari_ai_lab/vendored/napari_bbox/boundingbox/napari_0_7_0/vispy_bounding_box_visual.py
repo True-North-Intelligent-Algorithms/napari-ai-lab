@@ -1,4 +1,4 @@
-"""What napari 0.8 requires of the bounding box *visual node*.
+"""What napari 0.7 requires of the bounding box *visual node*.
 
 ``ClippingPlanesMixin.__init__`` gained a required keyword-only ``font_info``
 argument, so constructing the compound visual without it fails:

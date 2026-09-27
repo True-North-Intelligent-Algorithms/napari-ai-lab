@@ -1,4 +1,4 @@
-"""What napari 0.8 requires of the bounding box *visual layer*.
+"""What napari 0.7 requires of the bounding box *visual layer*.
 
 ``VispyBaseLayer.__init__`` gained a required ``font_info`` argument, which the
 Qt viewer passes when it builds the visual for every layer:
