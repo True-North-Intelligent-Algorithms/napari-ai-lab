@@ -84,8 +84,9 @@ PROFILES: dict[str, Profile] = {
     "2d-instance-skop": Profile(
         name="2d-instance-skop",
         description=(
-            "2D instance segmentation, with the global segmenters restricted "
-            "to the scikit-ops ones that run in their own environments. The "
+            "2D instance segmentation. Global segmenters are the scikit-ops "
+            "ones, which run in their own environments, where a scikit-ops "
+            "version exists; CellCast has none, so it runs in the host. The "
             "interactive segmenters are host-side by necessity: interactive "
             "SAM keeps the image embedding resident between clicks, so it "
             "cannot run out of process."
@@ -94,6 +95,7 @@ PROFILES: dict[str, Profile] = {
             "StardistSkopSegmenter",
             "Cellpose3SkopSegmenter",
             "Cellpose4SkopSegmenter",
+            "CellCastStardistSegmenter",
         ),
         interactive_segmenters=(
             "Otsu2D",
