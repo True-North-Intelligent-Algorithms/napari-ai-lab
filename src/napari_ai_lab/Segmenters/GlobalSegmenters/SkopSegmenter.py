@@ -24,12 +24,12 @@ from dataclasses import dataclass
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 try:
-    from skop import spec
+    from skop import OpSpec
     from skop.runner import Runner
 
     _is_skop_available = True
 except ImportError:  # optional dependency, see docs/spec/0003
-    spec = None
+    OpSpec = None
     Runner = None
     _is_skop_available = False
 
@@ -146,7 +146,7 @@ scikit-ops segmenter:
     def _env_id(self) -> str:
         """The environment this op declares, or "unknown"."""
         try:
-            return spec(self.op).env or "unknown"
+            return OpSpec.from_op(self.op).env or "unknown"
         except Exception:  # noqa: BLE001 - informational only
             return "unknown"
 
