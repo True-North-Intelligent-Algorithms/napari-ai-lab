@@ -37,9 +37,9 @@ import time
 from pathlib import Path
 
 import numpy as np
+from oprunner import Runner
 from skimage.io import imread
 from skop.ops.segment.stardist2d import stardist2d_fluo
-from skop.runner import Runner
 
 PROJECT_ROOT = Path(__file__).parent.parent
 IMAGE = (

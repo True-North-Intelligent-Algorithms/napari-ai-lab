@@ -24,8 +24,8 @@ from dataclasses import dataclass
 from .GlobalSegmenterBase import GlobalSegmenterBase
 
 try:
-    from skop import OpSpec
-    from skop.runner import Runner
+    from oprunner import Runner
+    from opspec.op import OpSpec
 
     _is_skop_available = True
 except ImportError:  # optional dependency, see docs/spec/0003
