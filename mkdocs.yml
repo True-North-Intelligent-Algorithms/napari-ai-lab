@@ -1,0 +1,34 @@
+site_name: napari-ai-lab
+repo_url: https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab
+theme:
+  name: material
+  palette:
+    scheme: default
+    primary: blue
+  features:
+    - navigation.instant
+    - search.highlight
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Get data: get-data.md
+  - Launch: launch.md
+  - Label: label.md
+  - Augment: augment.md
+  - Segment: segment.md
+  - Train: train.md
+  - Troubleshooting: troubleshooting.md
+
+exclude_docs: |
+  dev/
+  spec/
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.emoji
+
+extra:
+  generator: false

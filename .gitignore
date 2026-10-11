@@ -94,3 +94,4 @@ tests/test_images/
 
 # ignore temp scrips
 temp_scripts/
+site/
