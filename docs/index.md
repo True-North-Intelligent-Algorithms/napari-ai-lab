@@ -3,6 +3,8 @@
 !!! warning "Under construction"
     Very new. Expect changes.
 
+![AI Lab after opening the bees project](images/ai_lab_open.png)
+
 ## What AI Lab does
 
 - Folders of images, one sequence.
