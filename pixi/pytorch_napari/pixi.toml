@@ -130,6 +130,15 @@ scikit-ops = { path = "../../../scikit-ops", editable = true }
 # reports, and under what name, is unresolved -- see docs/spec/OPEN.md.
 appose = { path = "../../../appose-python", editable = true }
 
+# scikit-ops' own packages, editable too. Without these the current skop
+# fails to import, and pixi would otherwise install stale one-off copies.
+opspec = { path = "../../../scikit-ops/opspec", editable = true }
+ophelper = { path = "../../../scikit-ops/ophelper", editable = true }
+oprunner = { path = "../../../scikit-ops/oprunner", editable = true }
+
+# The test suite runs here (pyproject's `testing` group).
+pytest = "*"
+pytest-qt = "*"
 
 # Deliberately absent: zarr. The app must run without it (docs/spec/0003).
 # albumentations used to be listed here too; it is now installed above, and
@@ -162,6 +171,10 @@ lab = "python ../../src/launch_nd_ai_lab.py"
 lab-stacked = "python ../../src/launch_nd_ai_lab.py --stacked"
 lab-sequence = "python ../../src/launch_nd_ai_lab.py --sequence"
 poc = "python ../../experiments/skop_stardist_poc.py"
+# Course datasets from the sibling i2k-2026 checkout, with this editable ai-lab.
+wildlife = "python ../../../i2k-2026/pixi/launch_lab.py wildlife 2d-detect-skop"
+# One big 2D EM image (IDR idr0083A/9822152, level 2) for tiled YOLO.
+big = "python ../../../i2k-2026/pixi/launch_lab.py big 2d-detect-skop"
 
 # Register the environment as a Jupyter kernel for use in VS Code and Jupyter
 # Not `ipykernel install`: that writes a bare-interpreter argv, which dies in
