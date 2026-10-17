@@ -287,7 +287,10 @@ Albumentations Advanced Augmentation:
         }
 
     def _create_augmentation_pipeline(
-        self, patch_size: int, min_max_height: tuple[int, int] | None = None
+        self,
+        patch_size: int,
+        min_max_height: tuple[int, int] | None = None,
+        bbox_params: A.BboxParams | None = None,
     ) -> A.Compose:
         """
         Create the Albumentations augmentation pipeline.
@@ -296,6 +299,9 @@ Albumentations Advanced Augmentation:
         ----------
         patch_size : int
             Size of the patch (assumes square patches)
+        bbox_params : A.BboxParams, optional
+            Set when the pipeline carries boxes as well as the image, so
+            every transform moves them too.
 
         Returns
         -------
@@ -370,7 +376,7 @@ Albumentations Advanced Augmentation:
         if self.do_random_gamma:
             augmentations.append(A.RandomGamma(p=0.5))
 
-        return A.Compose(augmentations)
+        return A.Compose(augmentations, bbox_params=bbox_params)
 
     def _report_once(self, message: str) -> None:
         """Print a message the first time only. Patch generation runs hundreds
@@ -407,7 +413,15 @@ Albumentations Advanced Augmentation:
         if not lengths:
             return None
 
-        longest = max(lengths)
+        return self._crop_range_for(max(lengths), patch_size, mask.shape)
+
+    def _crop_range_for(
+        self, longest, patch_size, image_shape
+    ) -> tuple[int, int] | None:
+        """The crop size for a largest object of long axis *longest*.
+
+        Shared by masks and boxes; see ``_crop_range`` for the reasoning.
+        """
         if longest <= 0:
             return None
 
@@ -420,7 +434,7 @@ Albumentations Advanced Augmentation:
         # is only so much image. Say so rather than quietly narrowing the
         # range: a request that cannot be met is worth knowing before training,
         # not after wondering why the small end is empty.
-        limit = min(mask.shape[-2:])
+        limit = min(image_shape[-2:])
         if high > limit:
             reachable = int(round(longest * patch_size[0] / limit))
             self._report_once(
@@ -549,3 +563,84 @@ Albumentations Advanced Augmentation:
             augmented_mask = np.stack(aug_mask_slices, axis=0)
 
         return augmented_im, augmented_mask
+
+    def augment_boxes(
+        self,
+        im: np.ndarray,
+        boxes: np.ndarray,
+        classes: np.ndarray,
+        patch_size: tuple[int, ...],
+        min_visibility: float = 0.3,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Augment a 2D image and its boxes together, for YOLO training.
+
+        The same flips, rotations, crop and colour changes as ``augment``,
+        with each box moved along with the image. A box mostly cut off by
+        the crop -- less than *min_visibility* of it left -- is dropped, and
+        its class with it.
+
+        An image with no boxes is still augmented, and comes back with none:
+        a background example, which YOLO learns "nothing here" from.
+
+        Parameters
+        ----------
+        im : np.ndarray
+            A YX or YXC image.
+        boxes : np.ndarray
+            (n, 4) boxes in YOLO form: centre x, centre y, width, height,
+            each as a fraction of the image size.
+        classes : np.ndarray
+            (n,) class id of each box.
+        patch_size : tuple[int, ...]
+            Size of the patch; the last two values are used.
+        min_visibility : float
+            Fraction of a box that must survive the crop for it to be kept.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            The augmented image, its boxes in YOLO form, and their classes.
+        """
+        is_rgb = im.ndim == 3 and im.shape[-1] in (3, 4)
+        if im.ndim != 2 and not is_rgb:
+            raise ValueError(
+                f"Box augmentation is 2D only (YX or YXC); got shape {im.shape}"
+            )
+
+        boxes = np.asarray(boxes, dtype=float).reshape(-1, 4)
+        classes = np.asarray(classes, dtype=int).reshape(-1)
+        patch_size_2d = tuple(patch_size[-2:])
+
+        # Crop size from the largest box, as _crop_range does from the
+        # largest labelled object. With no boxes, a plain patch-sized crop.
+        height, width = im.shape[:2]
+        crop = None
+        if len(boxes):
+            longest = max(
+                np.max(boxes[:, 2]) * width, np.max(boxes[:, 3]) * height
+            )
+            crop = self._crop_range_for(longest, patch_size_2d, im.shape[:2])
+        elif self.do_random_sized_crop:
+            size = min(patch_size_2d[0], height, width)
+            crop = (size, size)
+
+        transform = self._create_augmentation_pipeline(
+            patch_size_2d,
+            crop,
+            bbox_params=A.BboxParams(
+                format="yolo",
+                label_fields=["classes"],
+                min_visibility=min_visibility,
+                # Rounding in a saved txt can put an edge at 1.000001.
+                clip=True,
+            ),
+        )
+
+        # See augment: ColorJitter takes only uint8 and float32.
+        if self.do_color_jitter and im.dtype not in (np.uint8, np.float32):
+            im = im.astype(np.float32)
+
+        augmented = transform(image=im, bboxes=boxes, classes=classes)
+        out_boxes = np.asarray(augmented["bboxes"], dtype=float).reshape(-1, 4)
+        out_classes = np.asarray(augmented["classes"], dtype=int).reshape(-1)
+        return augmented["image"], out_boxes, out_classes

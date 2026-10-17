@@ -109,10 +109,19 @@ def _register_skop_segmenters(prof):
         print(f"ℹ️  scikit-ops segmenters not registered: {exc}")
         return
 
+    from ..Segmenters.GlobalSegmenters.SkopDetector import (
+        FastSamSkopDetector,
+        JdllYoloSkopDetector,
+        ObjectAwareYoloSkopDetector,
+    )
+
     for seg in (
         StardistSkopSegmenter,
         Cellpose3SkopSegmenter,
         Cellpose4SkopSegmenter,
+        JdllYoloSkopDetector,
+        FastSamSkopDetector,
+        ObjectAwareYoloSkopDetector,
     ):
         if prof.allows(seg, "global"):
             seg.register()

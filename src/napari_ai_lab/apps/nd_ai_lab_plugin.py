@@ -46,3 +46,9 @@ class NDAILabInstance2D(ProfiledAILab):
     """2D instance segmentation, global segmenters restricted to scikit-ops."""
 
     profile_name = "2d-instance-skop"
+
+
+class NDAILabDetect2D(ProfiledAILab):
+    """2D object detection: box annotations, scikit-ops detectors."""
+
+    profile_name = "2d-detect-skop"

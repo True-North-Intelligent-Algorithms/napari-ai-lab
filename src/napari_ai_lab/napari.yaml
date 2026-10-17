@@ -16,8 +16,13 @@ contributions:
     - id: napari-ai-lab.nd_ai_lab_instance_2d
       python_name: napari_ai_lab.apps.nd_ai_lab_plugin:NDAILabInstance2D
       title: 2D Instance AI Lab
+    - id: napari-ai-lab.nd_ai_lab_detect_2d
+      python_name: napari_ai_lab.apps.nd_ai_lab_plugin:NDAILabDetect2D
+      title: 2D Detect AI Lab
   widgets:
     - command: napari-ai-lab.nd_ai_lab
       display_name: ND AI Lab
     - command: napari-ai-lab.nd_ai_lab_instance_2d
       display_name: 2D Instance AI Lab
+    - command: napari-ai-lab.nd_ai_lab_detect_2d
+      display_name: 2D Detect AI Lab

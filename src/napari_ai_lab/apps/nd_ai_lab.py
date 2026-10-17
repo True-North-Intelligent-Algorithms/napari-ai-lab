@@ -24,10 +24,11 @@ from qtpy.QtWidgets import (
 from superqt import ensure_main_thread
 
 from ..models import ImageDataModel
+from ..utilities.image_util import compute_collapsed_shape
 from .nd_easy_augment import NDEasyAugment
 from .nd_easy_label import NDEasyLabel
 from .nd_easy_segment import NDEasySegment
-from .profiles import get_profile
+from .profiles import BOX_ANNOTATIONS, get_profile
 
 
 class NDAILab(QWidget):
@@ -110,6 +111,21 @@ class NDAILab(QWidget):
         # Setup UI
         self._setup_ui()
 
+        # The sub-apps' close handler saves only when there is a labels
+        # layer, which a detect profile does not have; box annotations are
+        # saved here, ahead of it, without asking.
+        try:
+            qt_window = viewer.window._qt_window
+            original_close_event = qt_window.closeEvent
+
+            def close_event(event):
+                self._save_box_annotations()
+                original_close_event(event)
+
+            qt_window.closeEvent = close_event
+        except (AttributeError, RuntimeError) as e:
+            print(f"Could not connect to viewer closing: {e}")
+
     def set_image_data_model(self, image_data_model: ImageDataModel):
         """
         Set the shared image data model and propagate to all sub-apps.
@@ -151,10 +167,14 @@ class NDAILab(QWidget):
         # subdirectory under ``annotations/`` becomes a separate labels
         # layer.  Falls back to a single ``"Labels (Persistent)"`` layer
         # when no subdirectories exist yet.
+        # A box-annotation profile has none of them: no annotations, no
+        # working layer. See Profile.show_labels.
         annotation_names = (
             self.image_data_model.list_annotation_subdirectories()
             or ["Labels (Persistent)"]
         )
+        if not self.profile.show_labels:
+            annotation_names = []
         self.annotations_layers = {}
         for ann_name in annotation_names:
             data = self.image_data_model.load_existing_annotations(
@@ -169,18 +189,22 @@ class NDAILab(QWidget):
                 scale=annotation_scale,
             )
         # Pick the first as the active layer (backwards-compatible ref).
-        self.annotations_layer = next(iter(self.annotations_layers.values()))
+        self.annotations_layer = next(
+            iter(self.annotations_layers.values()), None
+        )
 
         # Working / scratch labels layer for interactive segmenter output.
         # Always uses WORKING_LABEL_INDEX (7) so its colour is consistent.
         import numpy as _np
 
-        working_data = _np.zeros_like(self.annotations_layer.data)
-        self.working_layer = self.viewer.add_labels(
-            working_data,
-            name="Labels (Working)",
-            scale=annotation_scale,
-        )
+        self.working_layer = None
+        if self.profile.show_labels:
+            working_data = _np.zeros_like(self.annotations_layer.data)
+            self.working_layer = self.viewer.add_labels(
+                working_data,
+                name="Labels (Working)",
+                scale=annotation_scale,
+            )
 
         # Dictionary to hold prediction layers for different segmenters
         # Key: segmenter name (e.g., "CellposeSegmenter", "StarDist")
@@ -192,15 +216,16 @@ class NDAILab(QWidget):
         # previous image's index finds nothing and creates no layer -- which
         # looks like a saved segmentation having vanished.
         self.segment_widget.current_image_index = self.current_image_index
-        self.segment_widget._load_existing_prediction_layers(
-            self.image_layer.data.shape
-        )
+        if self.profile.show_labels:
+            self.segment_widget._load_existing_prediction_layers(
+                self.image_layer.data.shape
+            )
         self.predictions_layers = self.segment_widget.predictions_layers
 
         # Create points layer for interactive segmentation
         self._point_choices = ["positive", "negative"]
         LABEL_COLOR_CYCLE = ["red", "blue"]
-        annotation_ndim = len(self.annotations_layer.data.shape)
+        annotation_ndim = len(self._annotation_shape(image_layer.data.shape))
 
         self.points_layer = self.viewer.add_points(
             name="Point Layer",
@@ -215,15 +240,37 @@ class NDAILab(QWidget):
             scale=annotation_scale,
         )
 
-        # Create shapes layer for segment widget (if in interactive mode)
-        self.shapes_layer = self.viewer.add_shapes(
-            name="Shapes Layer",
-            edge_color="green",
-            face_color="transparent",
-            edge_width=2,
-            ndim=annotation_ndim,
-            scale=annotation_scale,
-        )
+        # Create shapes layer for segment widget (if in interactive mode).
+        # Without labels it holds the annotations themselves, one class per
+        # box, drawn with its name from the project's classes.yaml.
+        if self.profile.show_labels:
+            self.shapes_layer = self.viewer.add_shapes(
+                name="Shapes Layer",
+                edge_color="green",
+                face_color="transparent",
+                edge_width=2,
+                ndim=annotation_ndim,
+                scale=annotation_scale,
+            )
+        else:
+            self.shapes_layer = self.viewer.add_shapes(
+                name=BOX_ANNOTATIONS,
+                edge_color="yellow",
+                face_color="transparent",
+                edge_width=3,
+                ndim=annotation_ndim,
+                scale=annotation_scale,
+                features={
+                    "class": _np.zeros(0, dtype=int),
+                    "name": _np.zeros(0, dtype=object),
+                },
+                feature_defaults={"class": 0, "name": "0"},
+                text={"string": "{name}", "size": 12, "color": "yellow"},
+            )
+            self.shapes_layer.events.highlight.connect(
+                self._on_box_selection_changed
+            )
+            self._load_box_annotations(image_layer.data.shape)
 
         # Create boxes layer for label widget (bounding-box annotations)
         self.boxes_layer = self.viewer.add_shapes(
@@ -301,17 +348,23 @@ class NDAILab(QWidget):
 
         # Nothing to reuse on the first image of a session, when these
         # attributes do not exist yet.
+        # Without labels there are none to find, so the points layer stands
+        # in as the sign that a first image has been set up.
+        show_labels = self.profile.show_labels
         annotations_layers = getattr(self, "annotations_layers", None)
-        if not annotations_layers:
+        if show_labels and not annotations_layers:
+            return False
+        if getattr(self, "points_layer", None) is None:
             return False
 
         layers = [
-            getattr(self, "working_layer", None),
             getattr(self, "points_layer", None),
             getattr(self, "shapes_layer", None),
             getattr(self, "boxes_layer", None),
             *annotations_layers.values(),
         ]
+        if show_labels:
+            layers.append(getattr(self, "working_layer", None))
 
         # The 3D box layer is only in the viewer for an ND project -- for a 2D
         # one apply_mode removes it, using this same condition. Requiring it
@@ -330,16 +383,18 @@ class NDAILab(QWidget):
             self.image_data_model.list_annotation_subdirectories()
             or ["Labels (Persistent)"]
         )
-        if set(annotation_names) != set(self.annotations_layers):
+        if show_labels and set(annotation_names) != set(
+            self.annotations_layers
+        ):
             return False
 
         # The auxiliary layers -- points, shapes, boxes -- were constructed
         # with a fixed ndim, so a change in dimensionality needs new ones. A
         # change in *size* does not: assigning .data handles that.
         image_shape = image_layer.data.shape
-        first = next(iter(annotations_layers.values()))
-        annotation_ndim = first.data.ndim
-        if len(image_shape) != first.data.ndim + len(
+        first = next(iter(annotations_layers.values()), None)
+        annotation_ndim = self.points_layer.ndim
+        if len(image_shape) != annotation_ndim + len(
             self.axes_to_collapse or ""
         ):
             return False
@@ -375,8 +430,11 @@ class NDAILab(QWidget):
             layer.refresh()
         self.annotations_layer = first
 
-        self.working_layer.data = _np.zeros_like(self.annotations_layer.data)
-        self.working_layer.refresh()
+        if self.working_layer is not None:
+            self.working_layer.data = _np.zeros_like(
+                self.annotations_layer.data
+            )
+            self.working_layer.refresh()
 
         # Per-image annotations that are not persisted here start empty, as
         # they did when these layers were recreated.
@@ -391,8 +449,16 @@ class NDAILab(QWidget):
             self.boxes_3D_layer,
         ):
             layer.refresh()
+        if not show_labels:
+            self._load_box_annotations(image_shape)
 
-        self._update_prediction_layers(image_shape)
+        if show_labels:
+            self._update_prediction_layers(image_shape)
+        # Box predictions are not saved yet, so the new image starts with none.
+        for layer in self.segment_widget.box_predictions_layers.values():
+            if layer in self.viewer.layers:
+                layer.data = []
+                layer.refresh()
 
         self._distribute_layers_to_sub_apps()
         self.augment_widget.sync_augmenter_parameters()
@@ -596,6 +662,29 @@ class NDAILab(QWidget):
         self.dir_btn.clicked.connect(self._on_open_directory)
         layout.addWidget(self.dir_btn)
 
+        # Class of the next box drawn, or of the selected boxes. Type a name
+        # to add a class; it is added on Enter or when you click away.
+        # Only for box annotations.
+        class_row = QWidget()
+        class_layout = QHBoxLayout(class_row)
+        class_layout.setContentsMargins(0, 0, 0, 0)
+        class_layout.addWidget(QLabel("Box class:"))
+        self.class_combo = QComboBox()
+        self.class_combo.setEditable(True)
+        # Not Qt's own insert, which only happens on Enter.
+        self.class_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.class_combo.lineEdit().setPlaceholderText("type a class name")
+        self.class_combo.setToolTip(
+            "Class of the next box. Type a new name to add a class."
+        )
+        self.class_combo.lineEdit().editingFinished.connect(
+            self._on_class_typed
+        )
+        self.class_combo.currentIndexChanged.connect(self._on_class_chosen)
+        class_layout.addWidget(self.class_combo, 1)
+        class_row.setVisible(not self.profile.show_labels)
+        layout.addWidget(class_row)
+
         def _make_scroll(widget):
             scroll = QScrollArea()
             scroll.setWidget(widget)
@@ -657,6 +746,197 @@ class NDAILab(QWidget):
 
             print("✅ Model created and shared across all tabs")
             # TODO Phase 3: Load images and create layers
+
+    def _annotation_shape(self, image_shape):
+        """Shape of an annotation for an image of *image_shape*.
+
+        The labels layer's shape when there is one; otherwise worked out the
+        way an empty annotation would be, so a profile without labels still
+        gets points and shapes of the right dimensionality.
+        """
+        if self.annotations_layer is not None:
+            return self.annotations_layer.data.shape
+        # Colour is never a box axis, whatever "Axes to collapse" says.
+        return compute_collapsed_shape(
+            image_shape,
+            self.image_data_model.axis_types,
+            [*(self.axes_to_collapse or ""), "C"],
+        )
+
+    def _load_box_annotations(self, image_shape):
+        """Fill the box annotations layer from this image's YOLO txt file.
+
+        Each box gets its class id and the name classes.yaml gives it. 2D
+        only for now: a YOLO txt file has no axis beyond y and x.
+        """
+        from ..utilities.box_annotations import (
+            BOX_ANNOTATIONS_DIR,
+            read_class_names,
+            read_yolo_boxes,
+        )
+
+        layer = self.shapes_layer
+        project = self.image_data_model.parent_directory
+        names = read_class_names(project)
+
+        shape = self._annotation_shape(image_shape)
+        boxes, classes = [], np.zeros(0, dtype=int)
+        if len(shape) == 2:
+            image_path = self.image_data_model.get_image_paths()[
+                self.current_image_index
+            ]
+            txt = project / BOX_ANNOTATIONS_DIR / f"{image_path.stem}.txt"
+            boxes, classes = read_yolo_boxes(txt, *shape)
+
+        layer.data = []
+        if boxes:
+            layer.add_rectangles(boxes)
+        layer.features = {
+            "class": classes,
+            "name": np.array(
+                [names.get(c, str(c)) for c in classes], dtype=object
+            ),
+        }
+        # After the features: setting them resets the next box's class.
+        self._fill_class_combo(names)
+        layer.refresh()
+
+    def _fill_class_combo(self, names):
+        """List *names* in the class combo, keeping the current choice.
+
+        Each item carries its class id, since classes.yaml may skip ids.
+        """
+        combo = self.class_combo
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        for class_id, name in sorted(names.items()):
+            combo.addItem(name, class_id)
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+        self._set_next_box_class()
+
+    def _set_next_box_class(self):
+        """Give the next box drawn the class showing in the combo."""
+        combo = self.class_combo
+        class_id = combo.currentData()
+        if class_id is None:
+            class_id, name = 0, "0"
+        else:
+            name = combo.currentText()
+        self.shapes_layer.feature_defaults = {"class": class_id, "name": name}
+
+    def _class_names(self):
+        """Class id -> name, as the combo lists them."""
+        combo = self.class_combo
+        return {
+            combo.itemData(i): combo.itemText(i)
+            for i in range(combo.count())
+            if combo.itemData(i) is not None
+        }
+
+    def _on_class_typed(self):
+        """Choose the class typed into the combo, adding it if it is new.
+
+        Runs on Enter and when the combo loses focus, so a name typed and
+        then left behind by a click on the image still counts.
+        """
+        combo = self.class_combo
+        name = combo.lineEdit().text().strip()
+        if not name:
+            # Nothing typed: show the current class again.
+            combo.lineEdit().setText(combo.itemText(combo.currentIndex()))
+            return
+        index = combo.findText(name)
+        if index < 0:
+            combo.addItem(name)  # no id yet; _on_class_chosen gives it one
+            index = combo.count() - 1
+        if index != combo.currentIndex():
+            combo.setCurrentIndex(index)
+
+    def _on_class_chosen(self, index):
+        """Make the chosen class the next box's, and the selected boxes'.
+
+        A name typed into the combo is a new class: it gets the next free id
+        and is written to classes.yaml.
+        """
+        from ..utilities.box_annotations import write_class_names
+
+        combo = self.class_combo
+        if index < 0:
+            class_id, name = 0, "0"
+        else:
+            name = combo.itemText(index)
+            class_id = combo.itemData(index)
+            if class_id is None:
+                names = self._class_names()
+                class_id = max(names, default=-1) + 1
+                combo.setItemData(index, class_id)
+                names[class_id] = name
+                project = self.image_data_model.parent_directory
+                if project:
+                    write_class_names(project, names)
+
+        layer = getattr(self, "shapes_layer", None)
+        if layer is None or self.profile.show_labels:
+            return
+        selected = list(layer.selected_data)
+        if selected:
+            features = layer.features.copy()
+            features.loc[selected, "class"] = class_id
+            features.loc[selected, "name"] = name
+            layer.features = features
+        # Last: setting the features resets the next box's class.
+        layer.feature_defaults = {"class": class_id, "name": name}
+
+    def _on_box_selection_changed(self, event=None):
+        """Show the class of a single selected box in the combo."""
+        layer = self.shapes_layer
+        if len(layer.selected_data) != 1:
+            return
+        (row,) = layer.selected_data
+        index = self.class_combo.findData(int(layer.features["class"][row]))
+        if index >= 0 and index != self.class_combo.currentIndex():
+            self.class_combo.blockSignals(True)
+            self.class_combo.setCurrentIndex(index)
+            self.class_combo.blockSignals(False)
+            # The next box drawn takes this class too.
+            self._set_next_box_class()
+
+    def _save_box_annotations(self):
+        """Write the box annotations layer to this image's YOLO txt file.
+
+        An image that never had boxes gets no file; one whose boxes were all
+        deleted gets an empty file, so they stay deleted.
+        """
+        from ..utilities.box_annotations import (
+            BOX_ANNOTATIONS_DIR,
+            write_yolo_boxes,
+        )
+
+        layer = getattr(self, "shapes_layer", None)
+        project = (
+            self.image_data_model and self.image_data_model.parent_directory
+        )
+        if self.profile.show_labels or layer is None or not project:
+            return
+
+        image_path = self.image_data_model.get_image_paths()[
+            self.current_image_index
+        ]
+        txt = project / BOX_ANNOTATIONS_DIR / f"{image_path.stem}.txt"
+        if len(layer.data) == 0 and not txt.exists():
+            return
+
+        shape = self._annotation_shape(self.image_layer.data.shape)
+        if len(shape) != 2:
+            return
+        try:
+            write_yolo_boxes(txt, layer.data, layer.features["class"], *shape)
+            print(f"   Saved {len(layer.data)} boxes to {txt.name}")
+        except OSError as e:
+            print(f"   Failed to save boxes to {txt}: {e}")
 
     def _wants_shapes(self):
         """Whether the Shapes layer belongs in this session.
@@ -742,8 +1022,10 @@ class NDAILab(QWidget):
         # docs/spec/0005-ai-lab-cleanup.md.
         #
         # getattr: on the first image of a session there are no layers yet.
+        # Not keyed on annotations_layers, which is empty without labels and
+        # would skip the box save below with it.
         if (
-            getattr(self, "annotations_layers", None)
+            getattr(self, "points_layer", None) is not None
             and self.image_data_model.parent_directory
         ):
             # Every layer, under its own name. Annotations are a collection --
@@ -765,6 +1047,7 @@ class NDAILab(QWidget):
 
             # Save boxes at the same time as annotations
             self._save_boxes()
+            self._save_box_annotations()
             self._save_label_patches_on_close()
 
         # Update current image index
@@ -838,6 +1121,9 @@ class NDAILab(QWidget):
             layers_to_remove.append(("Labels (Working)", self.working_layer))
         if hasattr(self, "boxes_3D_layer") and self.boxes_3D_layer:
             layers_to_remove.append(("3D Bounding Boxes", self.boxes_3D_layer))
+        for name, layer in self.segment_widget.box_predictions_layers.items():
+            layers_to_remove.append((name, layer))
+        self.segment_widget.box_predictions_layers.clear()
 
         # Remove layers from viewer
         for layer_name, layer in layers_to_remove:

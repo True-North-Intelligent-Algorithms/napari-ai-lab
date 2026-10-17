@@ -35,6 +35,7 @@ from ..utility import get_current_slice_indices
 from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
 from .base_nd_app import BaseNDApp
+from .profiles import box_predictions_name
 
 
 class NDEasySegment(BaseNDApp):
@@ -70,6 +71,8 @@ class NDEasySegment(BaseNDApp):
         self.embedded = embedded
         self.training_widget_mode = training_widget_mode
         self.axes_to_collapse = axes_to_collapse
+        # Shapes layers of detected boxes, keyed by layer name. Not saved yet.
+        self.box_predictions_layers = {}
 
         # Models this session has trained. Training into one of them again is
         # the tuning loop -- label a bit more, train a bit more -- and needs
@@ -705,7 +708,7 @@ class NDEasySegment(BaseNDApp):
         # MicroSamYoloSegmenter), show it as a separate labels layer.
         # Only done in single-slice mode (not during _on_segment_range).
         stacked = getattr(self.segmenter, "last_stacked_labels", None)
-        if stacked is not None:
+        if stacked is not None and self._shows_labels():
             self._show_stacked_labels_layer(stacked)
 
         self.segment_progress_logger.update_progress(2, 2, "\u2705 Complete")
@@ -969,25 +972,27 @@ class NDEasySegment(BaseNDApp):
                 ignore_channel=True,
                 shape=mask.shape,
             )
-            # Get or create the predictions layer for this segmenter
-            predictions_layer = self._get_or_create_predictions_layer(
-                segmenter_name, self.annotation_layer.data.shape
-            )
+            # Get or create the predictions layer for this segmenter.
+            # Without labels the mask is dropped and only boxes are kept.
+            if self._shows_labels():
+                predictions_layer = self._get_or_create_predictions_layer(
+                    segmenter_name, self.annotation_layer.data.shape
+                )
 
-            # Update the layer with new predictions
-            predictions_layer.data[segmentation_indices] = mask
+                # Update the layer with new predictions
+                predictions_layer.data[segmentation_indices] = mask
 
-            predictions_layer.refresh()
-            print(
-                f"Automatic segmentation completed - updated layer: {segmenter_name}"
-            )
+                predictions_layer.refresh()
+                print(
+                    f"Automatic segmentation completed - updated layer: {segmenter_name}"
+                )
 
             # If the segmenter produced predicted object boxes, add them to a
             # dedicated shapes layer at the correct slice position.
             boxes = getattr(self.segmenter, "last_napari_boxes", None)
             if boxes is not None and len(boxes) > 0:
                 self._add_predicted_boxes(
-                    boxes, current_step, segmentation_axis
+                    boxes, current_step, segmentation_axis, segmenter_name
                 )
 
         except (
@@ -1548,15 +1553,28 @@ class NDEasySegment(BaseNDApp):
             self.viewer.layers.remove(layer_name)
         self.viewer.add_labels(stacked_labels, name=layer_name)
 
-    def _add_predicted_boxes(self, boxes, current_step, segmentation_axis):
-        """Add predicted object boxes to a 'predicted object boxes' shapes layer.
+    def _shows_labels(self):
+        """Whether this session has labels layers. See Profile.show_labels.
+
+        Standalone, with no NDAILab and so no profile, it always does.
+        """
+        ai_lab = getattr(self, "ai_lab", None)
+        return ai_lab is None or ai_lab.profile.show_labels
+
+    def _add_predicted_boxes(
+        self, boxes, current_step, segmentation_axis, segmenter_name
+    ):
+        """Add predicted object boxes to a "Box predictions (<segmenter>)" layer.
 
         Boxes from the segmenter are 2D (YX). For ND images, leading
         non-spatial step indices are prepended to each vertex so the boxes
         appear on the correct slice.
         """
-        layer_name = "predicted object boxes"
-        image_ndim = len(self.image_layer.data.shape)
+        layer_name = box_predictions_name(segmenter_name)
+        # The layer's ndim, not len(data.shape): an RGB image's colour axis is
+        # not a dimension. Counting it made a 3-D shapes layer, which added a
+        # slider, whose index then sliced the next image down to one row.
+        image_ndim = self.image_layer.ndim
 
         # Determine number of leading (non-spatial) dims for the segmentation axis.
         axis = segmentation_axis.replace("C", "")
@@ -1575,15 +1593,15 @@ class NDEasySegment(BaseNDApp):
             nd_boxes.append(arr)
 
         # Get or create the shapes layer
-        if layer_name in self.viewer.layers:
-            shapes_layer = self.viewer.layers[layer_name]
-            shapes_layer.add_rectangles(nd_boxes)
+        layer = self.box_predictions_layers.get(layer_name)
+        if layer is not None and layer in self.viewer.layers:
+            layer.add_rectangles(nd_boxes)
         else:
-            self.viewer.add_shapes(
+            self.box_predictions_layers[layer_name] = self.viewer.add_shapes(
                 nd_boxes,
                 name=layer_name,
                 shape_type="rectangle",
-                edge_color="green",
+                edge_color="cyan",
                 face_color="transparent",
                 edge_width=2,
                 ndim=image_ndim,

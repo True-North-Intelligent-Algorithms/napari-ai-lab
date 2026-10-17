@@ -26,6 +26,16 @@ ENV_VAR = "NAPARI_AI_LAB_PROFILE"
 
 DEFAULT = "all"
 
+#: Layer names for a profile without labels (show_labels=False). The words
+#: are the ones the labels side uses: annotations are what you drew,
+#: predictions what a model found.
+BOX_ANNOTATIONS = "Box annotations"
+
+
+def box_predictions_name(detector: str) -> str:
+    """The layer holding *detector*'s boxes, e.g. "Box predictions (yolo)"."""
+    return f"Box predictions ({detector})"
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -40,6 +50,10 @@ class Profile:
     show_3d: bool = True
     #: False leaves the Shapes layer uncreated. Shape prompts go with it.
     show_shapes: bool = True
+    #: False drops every labels layer -- annotations, working, predictions --
+    #: for a project whose annotations are boxes. The Shapes layer becomes
+    #: "Box annotations" and a detector's output "Box predictions (<name>)".
+    show_labels: bool = True
     #: Optional GUI groups to keep, by key -- see FEATURES. None keeps all.
     features: tuple[str, ...] | None = None
 
@@ -110,6 +124,27 @@ PROFILES: dict[str, Profile] = {
         # None of the optional groups. "Active box size" is not among them --
         # it stays, because the box size is what tells you whether a box is
         # big enough for the patch size you mean to train at.
+        features=(),
+    ),
+    "2d-detect-skop": Profile(
+        name="2d-detect-skop",
+        description=(
+            "2D object detection, the YOLO kind. You draw boxes on the "
+            "Shapes layer, and those boxes are the annotations -- not "
+            "prompts, so no interactive segmenter is offered to turn them "
+            "into masks. The global segmenter is the one that detects boxes."
+        ),
+        global_segmenters=(
+            "JdllYoloSkopDetector",
+            "FastSamSkopDetector",
+            "ObjectAwareYoloSkopDetector",
+            "MicroSamYoloSegmenter",
+        ),
+        interactive_segmenters=(),
+        augmenters=(),
+        show_3d=False,
+        show_shapes=True,
+        show_labels=False,
         features=(),
     ),
 }
