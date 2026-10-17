@@ -387,6 +387,58 @@ outside the appose environments at the same moment.
 
 ---
 
+## Eight tests fail in pytorch_napari
+
+**Status:** open — found 2026-10-16, the first suite run in this environment.
+
+`pytest -m "not bioio"`: 8 failed, 44 passed, 11 skipped. The same 8 fail at
+7002d10, before the detect-mode commit, so none is new.
+
+- Missing from the environment: MONAI (`test_segment.py` ×2,
+  `test_training.py::test_monai_training`) and CellCast
+  (`test_cellcast_segmenter.py`). Install them, or skip when absent.
+- Broken: the vendored `napari_bbox` `test_reader`, two
+  `TestSimpleAugmenter` error checks in `test_augmenters.py`, and
+  `test_nd_easy_segment_creates_prediction`.
+
+---
+
+## jdll_yolo drops a model's classes and class names
+
+**Status:** open
+
+Detect mode shows every YOLO box as class 0. The scikit-ops `jdll_yolo` op
+returns `Boxes` only, dropping classes deliberately until scikit-ops has a
+per-object features role (its `detect/_result.py`). Its `yolo` op does
+return `Detections` with classes. Neither returns the model's id → name
+table (`results[0].names`), so even with ids the boxes would read `22`, not
+`zebra`. `SkopDetector` reads only `result.boxes` either way.
+
+---
+
+## A plain script using the runner does not exit
+
+**Status:** open
+
+A script that runs `jdll_yolo` through `_get_runner()` finished its
+detections and then hung until killed. The scikit-ops worker apparently
+outlives the script. AI Lab itself is unaffected.
+`pkill -f "share/appose/skop-"` clears leftovers.
+
+---
+
+## Box annotations silently skip a non-2D image
+
+**Status:** open
+
+`_save_box_annotations` and `_load_box_annotations` in `nd_ai_lab.py` do
+nothing, and say nothing, when the image's box frame is not 2D. That is how
+an RGB image opened without collapsing C lost its boxes; colour is now always
+dropped, but a Z stack would still lose them without a word. At least print
+that the boxes were not saved.
+
+---
+
 ## Three of the four bee test sets point at folders that do not exist
 
 **Status:** open — found while repointing `bees` at the i2k-2026 project.
