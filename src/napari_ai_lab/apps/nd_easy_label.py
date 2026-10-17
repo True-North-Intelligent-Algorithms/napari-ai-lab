@@ -130,8 +130,13 @@ class NDEasyLabel(BaseNDApp):
         commit_row.addWidget(self.commit_working_btn)
         # k for "keep", n for the sign of the next point. Through napari
         # rather than Qt, so they fire on the canvas and not while typing.
-        self.viewer.bind_key("k", lambda _viewer: self._on_commit_working())
-        self.viewer.bind_key("n", lambda _viewer: self._toggle_point_sign())
+        # overwrite: a second AI Lab in the same viewer takes the keys over.
+        self.viewer.bind_key(
+            "k", lambda _viewer: self._on_commit_working(), overwrite=True
+        )
+        self.viewer.bind_key(
+            "n", lambda _viewer: self._toggle_point_sign(), overwrite=True
+        )
 
         self.erase_working_btn = QPushButton("Erase")
         self.erase_working_btn.setToolTip(
