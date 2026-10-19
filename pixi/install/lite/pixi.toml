@@ -1,0 +1,34 @@
+[workspace]
+name = "napari-ai-lab-lite"
+description = "napari-ai-lab for users, lite: no micro_sam, so a much smaller download."
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
+version = "0.1.0"
+
+# Canonical install, meant to be downloaded on its own: nothing here reads a
+# local checkout. napari-ai-lab and appose come from PyPI; scikit-ops is not
+# on PyPI yet, so it comes from its public git repo, pinned.
+#
+# Lite: no micro_sam, torch or CUDA, so interactive SAM is off. Models still
+# run, through scikit-ops, each in its own environment built on first use.
+
+[dependencies]
+python = "3.12.*"
+napari = ">=0.9.1"  # ai-lab's vendored bbox layer needs >=0.8
+pyqt6 = "*"
+ipykernel = "<7"  # napari-console requires <7
+jupyterlab = "*"
+matplotlib = "*"
+tifffile = "*"
+
+[pypi-dependencies]
+napari-ai-lab = ">=0.1.0a7"
+tnia-python = "*"
+# From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
+albumentations = "*"
+appose = ">=0.12"
+scikit-ops = { git = "https://github.com/apposed/scikit-ops", rev = "69771a9" }
+
+[tasks]
+napari = "napari"
+jupyter = "jupyter lab"

@@ -38,8 +38,8 @@ src/napari_ai_lab/artifact_io/  saving and loading
 src/napari_ai_lab/datasets/     dataset handling
 src/napari_ai_lab/vendored/     vendored third-party code (napari_bbox)
 src/launch_*.py                 top-level launchers, one per app
-pixi/<name>/pixi.toml           environments: stardist, stardist8,
-                                microsam_cellposesam_czi, cellcast_test
+pixi/install/<flavour>/         user installs from PyPI: lite, microsam
+pixi/dev/editable/              development: editable checkouts, tests, docs
 docs/, design/                  loose notes plus docs/spec/
 notebooks/, experiments/, scripts/, temp_scripts/
 ```
@@ -67,12 +67,14 @@ python src/launch_nd_ai_lab.py      # and the other launch_*.py, one per app
 python src/launch_nd_ai_lab.py --stacked   # force stacked; --sequence forces sequence
 pytest                              # dependency group is `testing`, not `dev`
 pytest -m "not bioio"               # skip the slow bioio tests
+cd pixi/dev/editable && pixi run test   # the suite, in the dev env
+cd pixi/dev/editable && pixi run docs   # serve the docs site
 ```
 
-Environments are pixi projects under `pixi/`, one per model stack. Several are
-registered as Jupyter kernels user-wide (`stardist`, `microsam_cellposesam`,
-`microsam_cellposesam_czi`, `segment_everything`), so they show up in every
-notebook kernel picker on this machine, including other projects'.
+Environments are pixi projects under `pixi/`: `install/lite` and
+`install/microsam` are what users download, `dev/editable` is for work here.
+Model stacks are not host environments; scikit-ops builds each on first use.
+Kernels registered user-wide show up in every notebook picker on this machine.
 
 ## Facts worth not rediscovering
 

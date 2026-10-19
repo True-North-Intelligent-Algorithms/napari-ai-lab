@@ -1,0 +1,75 @@
+[workspace]
+name = "napari-ai-lab-editable"
+description = "napari-ai-lab development: editable sibling checkouts, plus tests and docs."
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
+version = "0.1.0"
+
+# pixi/install/microsam, except napari-ai-lab, scikit-ops (with opspec,
+# ophelper, oprunner) and appose are editable installs of the sibling
+# checkouts, so edits show up without reinstalling. Assumes those checkouts
+# sit next to napari-ai-lab/. Also carries pytest and mkdocs: the test suite
+# and the docs site both run from here.
+#
+# Declare each of scikit-ops' packages here, in exactly one place: left to
+# come in transitively, uv drops `editable` and installs stale copies.
+
+[dependencies]
+python = "3.12.*"
+napari = ">=0.9.1"  # ai-lab's vendored bbox layer needs >=0.8
+pyqt6 = "*"
+ipykernel = "<7"  # napari-console requires <7
+jupyterlab = "*"
+matplotlib = "*"
+tifffile = "*"
+# Interactive SAM: most of the download. micro_sam brings segment-anything.
+micro_sam = ">=1.8"
+torchvision = "*"
+# Docs: `pixi run docs` serves the site from mkdocs.yml.
+mkdocs-material = "*"
+
+[pypi-dependencies]
+napari-ai-lab = { path = "../../..", editable = true }
+tnia-python = "*"
+# From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
+albumentations = "*"
+appose = { path = "../../../../appose-python", editable = true }
+scikit-ops = { path = "../../../../scikit-ops", editable = true }
+opspec = { path = "../../../../scikit-ops/opspec", editable = true }
+ophelper = { path = "../../../../scikit-ops/ophelper", editable = true }
+oprunner = { path = "../../../../scikit-ops/oprunner", editable = true }
+# pyproject's `testing` group.
+pytest = "*"
+pytest-qt = "*"
+
+[system-requirements]
+cuda = "12.0"
+
+[target.linux-64.dependencies]
+pytorch-gpu = "*"
+cudnn = "*"
+cuda-version = "12.2.*"
+
+[target.win-64.dependencies]
+pytorch-gpu = "*"
+cudnn = "*"
+
+[target.osx-arm64.dependencies]
+pytorch = "*"
+
+[tasks]
+napari = "napari"
+jupyter = { cmd = "jupyter lab", cwd = "../../.." }
+lab = { cmd = "python src/launch_nd_ai_lab.py", cwd = "../../.." }
+lab-stacked = { cmd = "python src/launch_nd_ai_lab.py --stacked", cwd = "../../.." }
+lab-sequence = { cmd = "python src/launch_nd_ai_lab.py --sequence", cwd = "../../.." }
+poc = { cmd = "python experiments/skop_stardist_poc.py", cwd = "../../.." }
+test = { cmd = "pytest -m 'not bioio'", cwd = "../../.." }
+docs = { cmd = "mkdocs serve", cwd = "../../.." }
+docs-build = { cmd = "mkdocs build --strict", cwd = "../../.." }
+# Course datasets from the sibling i2k-2026 checkout, in detect mode.
+wildlife = "python ../../../../i2k-2026/pixi/launch_lab.py wildlife 2d-detect"
+big = "python ../../../../i2k-2026/pixi/launch_lab.py big 2d-detect"
+# Not `ipykernel install`: that writes a bare-interpreter argv, which dies in
+# VS Code on import skimage. See ../../register_kernel.py.
+register-kernel = { cmd = "python ../../register_kernel.py --name napari-ai-lab-editable --display-name 'AI-LAB (editable)'", cwd = "." }

@@ -330,7 +330,7 @@ it is about whether the ND indexing gets exercised anywhere. Decide that first.
 Reproduce with the same images through both paths:
 
 ```sh
-cd pixi/pytorch_napari
+cd pixi/dev/editable
 pixi run lab-sequence
 pixi run lab-stacked
 ```
@@ -384,6 +384,19 @@ cause, and make the CPU fallback say so.
 Not chased yet: whether suspend/resume drops the nvidia kernel modules,
 whether `nvidia-persistenced` is running, and whether the same error appears
 outside the appose environments at the same moment.
+
+---
+
+## Not on napari hub: hidden, and blocked on scikit-ops reaching PyPI
+
+**Status:** decided: go public once scikit-ops is on PyPI.
+
+`napari.yaml` has `visibility: hidden` (from the template, since the initial
+commit), and npe2api skips any manifest that is not public — that, not the
+alpha versions, is why the hub has no page. Flipping it is one line plus a
+release. But the hub installs with plain `pip install napari-ai-lab`, and
+PyPI rejects git-URL dependencies, so scikit-ops (with opspec, ophelper and
+oprunner) must be published to PyPI first.
 
 ---
 

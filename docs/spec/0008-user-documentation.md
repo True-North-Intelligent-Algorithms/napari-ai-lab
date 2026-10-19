@@ -24,8 +24,8 @@ Two things to fix while copying: its `repo_url` is still the placeholder
 `https://github.com/myrepo`, and its built `site/` directory is committed —
 that should be git-ignored.
 
-mkdocs is not a runtime dependency. It belongs in a docs feature of
-`pixi/pytorch_napari/pixi.toml`, or its own small environment.
+mkdocs is not a runtime dependency. It is in `pixi/dev/editable`
+(`pixi run docs`).
 
 ## Why a site is needed at all, and not just better panel text
 

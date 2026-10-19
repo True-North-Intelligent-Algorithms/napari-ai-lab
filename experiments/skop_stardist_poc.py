@@ -12,7 +12,7 @@ It also answers two questions the spec leaves open:
 
 Run it from the host environment:
 
-    cd pixi/pytorch_napari
+    cd pixi/dev/editable
     pixi run poc
 
 The first run builds the stardist-tf environment -- minutes and gigabytes, with

@@ -11,10 +11,11 @@ Test image can be found on dropbox [here](https://www.dropbox.com/scl/fo/j9hfhja
 Before running tests, you need to activate the appropriate pixi environment:
 
 ```bash
-# Navigate to the pixi environment directory
-cd pixi/microsam_cellposesam_czi
+# The development environment
+cd pixi/dev/editable
 
-# Start the pixi shell
+# Run the suite, or start a shell
+pixi run test
 pixi shell
 ```
 

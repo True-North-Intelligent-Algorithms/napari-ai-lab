@@ -1,0 +1,54 @@
+[workspace]
+name = "napari-ai-lab-microsam"
+description = "napari-ai-lab for users, with micro_sam for interactive SAM."
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
+version = "0.1.0"
+
+# Canonical install, meant to be downloaded on its own: nothing here reads a
+# local checkout. napari-ai-lab and appose come from PyPI; scikit-ops is not
+# on PyPI yet, so it comes from its public git repo, pinned.
+#
+# Torch and micro_sam are in the host because interactive SAM keeps the image
+# embedding resident between clicks, so it cannot run out of process. Every
+# other model runs through scikit-ops, in its own environment built on first
+# use. pixi/install/lite is the same without micro_sam.
+
+[dependencies]
+python = "3.12.*"
+napari = ">=0.9.1"  # ai-lab's vendored bbox layer needs >=0.8
+pyqt6 = "*"
+ipykernel = "<7"  # napari-console requires <7
+jupyterlab = "*"
+matplotlib = "*"
+tifffile = "*"
+# Interactive SAM: most of the download. micro_sam brings segment-anything.
+micro_sam = ">=1.8"
+torchvision = "*"
+
+[pypi-dependencies]
+napari-ai-lab = ">=0.1.0a7"
+tnia-python = "*"
+# From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
+albumentations = "*"
+appose = ">=0.12"
+scikit-ops = { git = "https://github.com/apposed/scikit-ops", rev = "69771a9" }
+
+[system-requirements]
+cuda = "12.0"
+
+[target.linux-64.dependencies]
+pytorch-gpu = "*"
+cudnn = "*"
+cuda-version = "12.2.*"
+
+[target.win-64.dependencies]
+pytorch-gpu = "*"
+cudnn = "*"
+
+[target.osx-arm64.dependencies]
+pytorch = "*"
+
+[tasks]
+napari = "napari"
+jupyter = "jupyter lab"
