@@ -95,8 +95,8 @@ PROFILES: dict[str, Profile] = {
         name="all",
         description="Everything that is installed.",
     ),
-    "2d-instance-skop": Profile(
-        name="2d-instance-skop",
+    "2d-instance": Profile(
+        name="2d-instance",
         description=(
             "2D instance segmentation. Global segmenters are the scikit-ops "
             "ones, which run in their own environments, where a scikit-ops "
@@ -126,8 +126,8 @@ PROFILES: dict[str, Profile] = {
         # big enough for the patch size you mean to train at.
         features=(),
     ),
-    "2d-detect-skop": Profile(
-        name="2d-detect-skop",
+    "2d-detect": Profile(
+        name="2d-detect",
         description=(
             "2D object detection, the YOLO kind. You draw boxes on the "
             "Shapes layer, and those boxes are the annotations -- not "

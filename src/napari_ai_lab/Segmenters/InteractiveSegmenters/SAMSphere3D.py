@@ -54,7 +54,7 @@ class SAMSphere3D(SAM3D):
 
     instructions = """
 Instructions for SAMSphere3D:
-1. Activate Points layer.
+1. Activate the Point prompts layer.
 2. Click ONE point inside a roughly spherical object.
 3. SAM segments the full 3D volume (same as SAM3D).
 4. Each Z-plane is then checked:

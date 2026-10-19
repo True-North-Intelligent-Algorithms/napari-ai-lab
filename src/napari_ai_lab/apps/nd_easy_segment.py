@@ -1616,7 +1616,7 @@ class NDEasySegment(BaseNDApp):
         annotation_ndim = len(self.annotation_layer.data.shape)
 
         self.points_layer = self.viewer.add_points(
-            name="Point Layer",
+            name="Point prompts",
             property_choices={"label": self._point_choices},
             border_color="label",
             border_color_cycle=LABEL_COLOR_CYCLE,
@@ -1644,7 +1644,7 @@ class NDEasySegment(BaseNDApp):
         else:
             shapes_scale = None
         self.shapes_layer = self.viewer.add_shapes(
-            name="Shapes Layer",
+            name="Box prompts",
             edge_color="green",
             face_color="transparent",
             edge_width=2,

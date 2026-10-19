@@ -41,7 +41,7 @@ class SAM3D(InteractiveSegmenterBase):
 
     instructions = """
 Instructions:
-1. Activate Points layer
+1. Activate the Point prompts layer
 2. Draw points on objects
 3. SAM creates 3D segmentation
 4. Press 'K' to commit, Ctrl+Backspace to erase

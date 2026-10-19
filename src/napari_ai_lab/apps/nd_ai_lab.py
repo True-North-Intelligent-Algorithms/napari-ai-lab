@@ -229,7 +229,7 @@ class NDAILab(QWidget):
         annotation_ndim = len(self._annotation_shape(image_layer.data.shape))
 
         self.points_layer = self.viewer.add_points(
-            name="Point Layer",
+            name="Point prompts",
             property_choices={"label": self._point_choices},
             border_color="label",
             border_color_cycle=LABEL_COLOR_CYCLE,
@@ -244,16 +244,18 @@ class NDAILab(QWidget):
         # Create shapes layer for segment widget (if in interactive mode).
         # Without labels it holds the annotations themselves, one class per
         # box, drawn with its name from the project's classes.yaml.
-        if self.profile.show_labels:
+        # None when the profile drops shape prompts (show_shapes=False).
+        self.shapes_layer = None
+        if self.profile.show_labels and self._wants_shapes():
             self.shapes_layer = self.viewer.add_shapes(
-                name="Shapes Layer",
+                name="Box prompts",
                 edge_color="green",
                 face_color="transparent",
                 edge_width=2,
                 ndim=annotation_ndim,
                 scale=annotation_scale,
             )
-        else:
+        elif not self.profile.show_labels:
             self.shapes_layer = self.viewer.add_shapes(
                 name=BOX_ANNOTATIONS,
                 edge_color="yellow",
@@ -360,10 +362,11 @@ class NDAILab(QWidget):
 
         layers = [
             getattr(self, "points_layer", None),
-            getattr(self, "shapes_layer", None),
             getattr(self, "boxes_layer", None),
             *annotations_layers.values(),
         ]
+        if self._wants_shapes() or not show_labels:
+            layers.append(getattr(self, "shapes_layer", None))
         if show_labels:
             layers.append(getattr(self, "working_layer", None))
 
@@ -440,16 +443,17 @@ class NDAILab(QWidget):
         # Per-image annotations that are not persisted here start empty, as
         # they did when these layers were recreated.
         self.points_layer.data = _np.empty((0, annotation_ndim))
-        self.shapes_layer.data = []
         self.boxes_layer.data = []
         self.boxes_3D_layer.data = []
         for layer in (
             self.points_layer,
-            self.shapes_layer,
             self.boxes_layer,
             self.boxes_3D_layer,
         ):
             layer.refresh()
+        if self.shapes_layer is not None:
+            self.shapes_layer.data = []
+            self.shapes_layer.refresh()
         if not show_labels:
             self._load_box_annotations(image_shape)
 
@@ -647,7 +651,9 @@ class NDAILab(QWidget):
                 self.points_layer.events.data.connect(
                     self.segment_widget._on_points_changed
                 )
-            if hasattr(self.segment_widget, "_on_shapes_changed"):
+            if self.shapes_layer is not None and hasattr(
+                self.segment_widget, "_on_shapes_changed"
+            ):
                 self.shapes_layer.events.data.connect(
                     self.segment_widget._on_shapes_changed
                 )

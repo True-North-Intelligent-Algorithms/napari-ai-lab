@@ -2397,7 +2397,7 @@ class NDEasyLabel(BaseNDApp):
 
             # Add points layer and store reference
             self.points_layer = self.viewer.add_points(
-                name="Point Layer",
+                name="Point prompts",
                 property_choices={"label": self._point_choices},
                 border_color="label",
                 border_color_cycle=LABEL_COLOR_CYCLE,
@@ -2414,7 +2414,7 @@ class NDEasyLabel(BaseNDApp):
 
             # Add shapes layer for region annotation and store reference
             self.shapes_layer = self.viewer.add_shapes(
-                name="Shapes Layer",
+                name="Box prompts",
                 edge_color="green",
                 face_color="transparent",
                 edge_width=2,
