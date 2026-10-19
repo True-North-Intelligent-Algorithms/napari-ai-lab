@@ -15,9 +15,9 @@ nav:
   - Install: install.md
   - Get data: get-data.md
   - Launch: launch.md
+  - Segment: segment.md
   - Label: label.md
   - Augment: augment.md
-  - Segment: segment.md
   - Train: train.md
   - Troubleshooting: troubleshooting.md
 
