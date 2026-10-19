@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -662,6 +663,13 @@ class NDAILab(QWidget):
         self.dir_btn.clicked.connect(self._on_open_directory)
         layout.addWidget(self.dir_btn)
 
+        # Open/Save Project live on the label widget; shown here, above the
+        # tabs, so they are reachable whichever tab is first.
+        project_row = QHBoxLayout()
+        project_row.addWidget(self.label_widget.open_project_btn)
+        project_row.addWidget(self.label_widget.save_project_btn)
+        layout.addLayout(project_row)
+
         # Class of the next box drawn, or of the selected boxes. Type a name
         # to add a class; it is added on Enter or when you click away.
         # Only for box annotations.
@@ -693,9 +701,10 @@ class NDAILab(QWidget):
 
         # Tab widget
         self.tabs = QTabWidget()
+        # Segment first: if a ready-made model works, nothing else is needed.
+        self.tabs.addTab(_make_scroll(self.segment_widget), "Segment")
         self.tabs.addTab(_make_scroll(self.label_widget), "Label")
         self.tabs.addTab(_make_scroll(self.augment_widget), "Augment")
-        self.tabs.addTab(_make_scroll(self.segment_widget), "Segment")
 
         # Add training tab - shows training view of segment widget
         # Same widget, different controls (segmenter combo + training params only)
@@ -704,6 +713,9 @@ class NDAILab(QWidget):
         )
 
         layout.addWidget(self.tabs)
+        # Expanding, or napari pads the dock with a stretch and the tabs get
+        # only their size hint -- half the dock on some tabs.
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         # Sync patch_size_xy between Augment and Train tabs
         self._cross_connect_patch_size()
