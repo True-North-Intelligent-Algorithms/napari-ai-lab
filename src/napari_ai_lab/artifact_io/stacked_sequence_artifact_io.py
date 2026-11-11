@@ -11,7 +11,10 @@ from pathlib import Path
 import numpy as np
 from skimage import io
 
-from napari_ai_lab.utilities.image_util import compute_collapsed_shape
+from napari_ai_lab.utilities.image_util import (
+    compute_collapsed_shape,
+    read_image,
+)
 
 from ..utility import (
     collect_all_image_names,
@@ -97,7 +100,7 @@ class StackedSequenceArtifactIO(BaseArtifactIO):
 
         for name in image_names:
             path = dir_path / name
-            img = io.imread(str(path))
+            img = read_image(path)
             axis_info = get_axis_info(img)
             images.append(img)
             self._axes_infos.append(axis_info)

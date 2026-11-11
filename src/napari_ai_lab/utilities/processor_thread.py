@@ -104,3 +104,67 @@ class ProcessorThread:
     def start(self):
         """Start processing on the worker thread."""
         self.thread.start()
+
+
+class _CallWorker(QObject):
+    """Runs one callable on a worker thread; see CallThread."""
+
+    done = Signal(object)  # the callable's return value
+    error = Signal(str)
+    finished = Signal()
+
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def run(self):
+        try:
+            self.done.emit(self.fn())
+        # Broad for the same reason as _ProcessorWorker.run.
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            self.error.emit(f"{type(e).__name__}: {e}")
+        finally:
+            self.finished.emit()
+
+
+class CallThread:
+    """Run one callable off the GUI thread, ProcessorThread's way.
+
+    For a single long call -- segmenting the current image, which may first
+    build an environment for minutes -- so the window keeps painting and a
+    progress log can show what is happening. ``done`` carries the return
+    value to the GUI thread; touch layers and widgets there, not in *fn*.
+    """
+
+    _running: ClassVar[set] = set()
+
+    def __init__(self, fn):
+        self.thread = QThread()
+        self.worker = _CallWorker(fn)
+        self.worker.moveToThread(self.thread)
+
+        CallThread._running.add(self)
+        self.thread.finished.connect(lambda: CallThread._running.discard(self))
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.done = self.worker.done
+        self.error = self.worker.error
+        self.finished = self.thread.finished
+
+    def start(self):
+        self.thread.start()
+
+
+class BuildRelay(QObject):
+    """Carries environment-build news from a build's thread to the GUI's.
+
+    Pass ``relay.message.emit`` as the listener; a Qt signal emitted from
+    another thread is delivered on the receiver's own thread.
+    """
+
+    message = Signal(str)

@@ -42,7 +42,60 @@ def _get_runner():
     global _runner
     if _runner is None:
         _runner = Runner()
+        _runner.subscribe_build_progress(_BuildReporter())
     return _runner
+
+
+#: Callables taking one line of build news, e.g. a GUI log's. Called from
+#: whatever thread the build reports on, so a GUI listener must hop to its
+#: own thread (a Qt signal's emit does). One that raises is dropped.
+_build_listeners: list = []
+
+
+def add_build_listener(listener):
+    """Hear environment-build news as lines of text, as well as the terminal."""
+    if listener not in _build_listeners:
+        _build_listeners.append(listener)
+
+
+def remove_build_listener(listener):
+    if listener in _build_listeners:
+        _build_listeners.remove(listener)
+
+
+def _report(message: str):
+    """One line of build news: to the terminal, and to every listener."""
+    print(message, flush=True)
+    for listener in list(_build_listeners):
+        try:
+            listener(message)
+        except Exception:  # noqa: BLE001 - e.g. a closed widget's signal
+            remove_build_listener(listener)
+
+
+class _BuildReporter:
+    """Prints an environment build's progress to the terminal.
+
+    A first build takes minutes and gigabytes inside the segment call, with
+    nothing on screen to show for it. This says which phase it is in --
+    "Solving", "Installing conda packages", "Downloading PyPI packages" --
+    and how far along, at most every few seconds per phase.
+    """
+
+    def __init__(self, every_s: float = 5.0):
+        self.every_s = every_s
+        self._title = None
+        self._last = 0.0
+
+    def __call__(self, title: str, current: int, maximum: int):
+        import time
+
+        now = time.monotonic()
+        if title == self._title and now - self._last < self.every_s:
+            return
+        self._title, self._last = title, now
+        count = f" {current}/{maximum}" if maximum else ""
+        _report(f"[environment build] {title}{count}")
 
 
 @dataclass
@@ -120,26 +173,17 @@ scikit-ops segmenter:
     def _environment_exists(self) -> bool:
         """Whether skop's environment for this op has already been built.
 
-        Deliberately does not go through Runner.environment(), which *builds*
-        the environment when it is missing -- asking whether a build is needed
-        must not perform one. Instead it looks where appose keys them:
-        <appose_envs_dir>/skop-<env_id>, matching Runner.environment's
-        ``appose.pixi(config).name(f"skop-{env_id}")``.
+        Asks the runner where it builds this op's environment, via
+        Runner.env_for(op), which builds nothing. The folder name is the
+        runner's to decide: a copy of its naming here once said "already
+        built" about an old skop-<env> folder while the runner built
+        scikit-ops--<env>.
 
         Any failure counts as not-built. Warning about a build that turns out
         to be instant is better than a silent multi-minute pause.
         """
         try:
-            from pathlib import Path
-
-            try:
-                from appose.util.filepath import appose_envs_dir
-            except ImportError:  # older appose kept it next door
-                from appose.util.environment import appose_envs_dir
-
-            return (
-                Path(appose_envs_dir()) / f"skop-{self._env_id()}"
-            ).is_dir()
+            return _get_runner().env_for(self.op).folder.is_dir()
         except Exception:  # noqa: BLE001 - informational only
             return False
 
@@ -170,7 +214,20 @@ scikit-ops segmenter:
                 "This segmenter requires scikit-ops, which is not installed. "
                 "Install it with: pip install scikit-ops"
             )
-        return _get_runner().run(self.op, image=image, **self._op_params())
+        return self._run(image)
+
+    def _run(self, image):
+        """Run the op on *image*, saying first if its environment must be built."""
+        runner = _get_runner()
+        params = self._op_params()
+        if not self._environment_exists():
+            env = runner.env_for(self.op)
+            _report(
+                f"Building the '{env.name}' environment first, into "
+                f"{env.folder}. Minutes and gigabytes, once; later runs "
+                "reuse it."
+            )
+        return runner.run(self.op, image=image, **params)
 
     @classmethod
     def register_op(cls, op, name: str, potential_axes=None):

@@ -416,16 +416,16 @@ oprunner) must be published to PyPI first.
 
 ---
 
-## jdll_yolo drops a model's classes and class names
+## YOLO boxes show as class 0
 
 **Status:** open
 
-Detect mode shows every YOLO box as class 0. The scikit-ops `jdll_yolo` op
-returns `Boxes` only, dropping classes deliberately until scikit-ops has a
-per-object features role (its `detect/_result.py`). Its `yolo` op does
-return `Detections` with classes. Neither returns the model's id → name
-table (`results[0].names`), so even with ids the boxes would read `22`, not
-`zebra`. `SkopDetector` reads only `result.boxes` either way.
+Detect mode shows every YOLO box as class 0. The YOLO detector now runs
+scikit-ops' `yolo` op (it ran `jdll_yolo`, since retired, which dropped
+classes), and `yolo` returns `Detections` with a class per box -- but
+`SkopDetector` reads only `result.boxes` and `result.confidences`, and the
+op does not return the model's id → name table (`results[0].names`), so even
+with ids the boxes would read `22`, not `zebra`.
 
 ---
 
@@ -433,7 +433,7 @@ table (`results[0].names`), so even with ids the boxes would read `22`, not
 
 **Status:** open
 
-A script that runs `jdll_yolo` through `_get_runner()` finished its
+A script that runs a detect op (then `jdll_yolo`) through `_get_runner()` finished its
 detections and then hung until killed. The scikit-ops worker apparently
 outlives the script. AI Lab itself is unaffected.
 `pkill -f "share/appose/skop-"` clears leftovers.

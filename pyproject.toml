@@ -33,6 +33,7 @@ dependencies = [
     "magicgui",
     "qtpy",
     "scikit-image",
+    "pillow-heif",  # iPhone .heic photos; see utilities/image_util.read_image
 ]
 
 [project.urls]

@@ -12,6 +12,8 @@ IMAGE_EXTENSIONS = {
     ".tiff",
     ".bmp",
     ".czi",
+    ".heic",  # read by utilities.image_util.read_image, via pillow-heif
+    ".heif",
 }
 
 

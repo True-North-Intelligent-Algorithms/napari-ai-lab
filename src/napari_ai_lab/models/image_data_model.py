@@ -50,7 +50,10 @@ from pathlib import Path
 import numpy as np
 from skimage.io import imread
 
-from napari_ai_lab.utilities.image_util import compute_collapsed_shape
+from napari_ai_lab.utilities.image_util import (
+    compute_collapsed_shape,
+    read_image,
+)
 from napari_ai_lab.utility import (
     collect_all_image_names,
     create_empty_instance_image,
@@ -273,8 +276,8 @@ class ImageDataModel:
                         scale_by_axis[axis_letter] = microns
                         print(f"{axis_letter}: {microns:.4f} \u00b5m")
         else:
-            # Use skimage for other formats
-            self.image_data = imread(str(image_path))
+            # skimage for most formats; HEIC through pillow-heif
+            self.image_data = read_image(image_path)
             self.axis_types = get_axis_info_from_shape(self.image_data.shape)
 
         # Remove axis characters corresponding to trivial dimensions
@@ -1807,6 +1810,41 @@ class ImageDataModel:
         return io.save(
             str(annotation_dir), dataset_name, labels_to_save, current_step
         )
+
+    def save_box_predictions(self, segmenter, image_index: int):
+        """Save the boxes *segmenter* just found, if any, for one image.
+
+        To ``box_predictions/<segmenter class>/<image stem>.txt``, with a
+        confidence per box where the segmenter gave them (see
+        utilities.box_annotations). Every run saves, replacing what the same
+        segmenter found on that image before.
+
+        Only for a 2D image -- YX, or YXC -- since a YOLO file has no axis
+        beyond y and x, and only when the segmenter returns boxes at all.
+        Returns the file written, or None.
+        """
+        from ..utilities.box_annotations import (
+            prediction_file,
+            write_yolo_boxes,
+        )
+
+        boxes = getattr(segmenter, "last_napari_boxes", None)
+        if boxes is None or self.axis_types not in ("YX", "YXC"):
+            return None
+        height, width = self.image_data.shape[:2]
+        stem = self.get_image_paths()[image_index].stem
+        path = prediction_file(
+            self.parent_directory, type(segmenter).__name__, stem
+        )
+        write_yolo_boxes(
+            path,
+            boxes,
+            [0] * len(boxes),
+            height,
+            width,
+            confidences=getattr(segmenter, "last_box_scores", None),
+        )
+        return path
 
     def save_predictions(
         self,

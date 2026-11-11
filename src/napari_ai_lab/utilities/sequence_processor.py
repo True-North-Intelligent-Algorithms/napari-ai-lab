@@ -155,6 +155,9 @@ class SequenceProcessor:
                 selected_axis=self.segmentation_axis,
                 axes_to_collapse=self.axes_to_collapse,
             )
+            # A detector's boxes too, for every image -- not only the one on
+            # screen, which is all on_slice_done reaches.
+            self.source.save_box_predictions(self.segmenter, image_index)
             if on_slice_done:
                 on_slice_done(current_step, result)
 

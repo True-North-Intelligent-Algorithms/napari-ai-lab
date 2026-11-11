@@ -38,6 +38,9 @@ scikit-ops = { path = "../../../../scikit-ops", editable = true }
 opspec = { path = "../../../../scikit-ops/opspec", editable = true }
 ophelper = { path = "../../../../scikit-ops/ophelper", editable = true }
 oprunner = { path = "../../../../scikit-ops/oprunner", editable = true }
+# tnia-ops' ops (photo-enhance's people and bib detectors). Only their
+# declarations run here; the ops run in tnia-ops' own environments.
+tnia-ops = { path = "../../../../tnia-ops", editable = true }
 # pyproject's `testing` group.
 pytest = "*"
 pytest-qt = "*"
@@ -63,6 +66,8 @@ jupyter = { cmd = "jupyter lab", cwd = "../../.." }
 lab = { cmd = "python src/launch_nd_ai_lab.py", cwd = "../../.." }
 lab-stacked = { cmd = "python src/launch_nd_ai_lab.py --stacked", cwd = "../../.." }
 lab-sequence = { cmd = "python src/launch_nd_ai_lab.py --sequence", cwd = "../../.." }
+# Any folder: pixi run project "C:\path\to\photos" --profile 2d-detect
+project = { cmd = "python src/launch_project.py", cwd = "../../.." }
 poc = { cmd = "python experiments/skop_stardist_poc.py", cwd = "../../.." }
 test = { cmd = "pytest -m 'not bioio'", cwd = "../../.." }
 docs = { cmd = "mkdocs serve", cwd = "../../.." }

@@ -12,7 +12,37 @@ IMAGE_EXTENSIONS = {
     ".tiff",
     ".bmp",
     ".czi",
+    ".heic",
+    ".heif",
 }
+
+#: Phone formats skimage cannot read; read_image opens them with pillow-heif.
+HEIF_EXTENSIONS = {".heic", ".heif"}
+
+
+def read_image(path) -> np.ndarray:
+    """Read one image file as an array.
+
+    HEIC/HEIF (iPhone photos) go through Pillow with pillow-heif, turned
+    upright from their EXIF orientation and converted to RGB -- the same
+    pixels photo-enhance works on, so box coordinates agree between the two.
+    Everything else goes to skimage, as before.
+    """
+    path = Path(path)
+    if path.suffix.lower() not in HEIF_EXTENSIONS:
+        return io.imread(str(path))
+
+    try:
+        from pillow_heif import register_heif_opener
+    except ImportError:
+        raise ImportError(
+            f"Reading {path.name} needs pillow-heif: pip install pillow-heif"
+        ) from None
+    from PIL import Image, ImageOps
+
+    register_heif_opener()
+    with Image.open(path) as pil:
+        return np.asarray(ImageOps.exif_transpose(pil).convert("RGB"))
 
 
 def compute_collapsed_shape(

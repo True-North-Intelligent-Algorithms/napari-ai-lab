@@ -135,10 +135,13 @@ PROFILES: dict[str, Profile] = {
             "into masks. The global segmenter is the one that detects boxes."
         ),
         global_segmenters=(
-            "JdllYoloSkopDetector",
+            "YoloSkopDetector",
             "FastSamSkopDetector",
             "ObjectAwareYoloSkopDetector",
             "MicroSamYoloSegmenter",
+            # tnia-ops: photo-enhance's people and race-bib detectors.
+            "TniaPeopleDetector",
+            "TniaBibDetector",
         ),
         interactive_segmenters=(),
         augmenters=(),

@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (
 
 from ..models import ImageDataModel
 from ..utilities import QtProgressLogger
+from ..utilities.processor_thread import BuildRelay, CallThread
 from ..utilities.slice_processor import (
     SliceProcessor,
 )
@@ -696,23 +697,80 @@ class NDEasySegment(BaseNDApp):
         self._setup_segment_context()
 
         self.segment_progress_logger.update_progress(1, 2, "Processing...")
-        self.image_data_model.process_slice(
-            self.segmenter,
-            self.viewer.dims.current_step,
-            selected_axis,
-            self.axes_to_collapse,
-            self._on_segment_slice_done,
+        self._listen_for_builds()
+
+        # Off the GUI thread: a segmenter that runs in another environment
+        # may build it first, for minutes, and the log should show that as it
+        # happens. The result comes back to this thread, in done, to draw.
+        segmenter = self.segmenter
+        current_step = self.viewer.dims.current_step
+        finished = {}
+
+        def work():
+            self.image_data_model.process_slice(
+                segmenter,
+                current_step,
+                selected_axis,
+                self.axes_to_collapse,
+                lambda step, mask: finished.update(step=step, mask=mask),
+            )
+            return finished
+
+        thread = CallThread(work)
+        thread.done.connect(
+            lambda out: self._on_segment_current_done(segmenter, out)
         )
+        thread.error.connect(self._on_segment_current_error)
+        self.segment_current_btn.setEnabled(False)
+        self._segment_current_thread = thread
+        thread.start()
+
+    def _on_segment_current_done(self, segmenter, out):
+        """Draw and save the current image's result (GUI thread)."""
+        self.segment_current_btn.setEnabled(True)
+        self._segment_current_thread = None
+        self._on_segment_slice_done(out["step"], out["mask"])
 
         # If the segmenter produced a 3D "stacked labels" preview (e.g.
         # MicroSamYoloSegmenter), show it as a separate labels layer.
         # Only done in single-slice mode (not during _on_segment_range).
-        stacked = getattr(self.segmenter, "last_stacked_labels", None)
+        stacked = getattr(segmenter, "last_stacked_labels", None)
         if stacked is not None and self._shows_labels():
             self._show_stacked_labels_layer(stacked)
 
         self.segment_progress_logger.update_progress(2, 2, "\u2705 Complete")
         self.segment_progress_logger.log_info("\u2705 Segmentation complete")
+
+    def _on_segment_current_error(self, error_msg):
+        """Report a failed Segment current in the log, not only the terminal."""
+        self.segment_current_btn.setEnabled(True)
+        self._segment_current_thread = None
+        self.segment_progress_logger.update_progress(2, 2, "\u274c Failed")
+        self.segment_progress_logger.log_error(error_msg)
+        QMessageBox.critical(
+            self, "Error", f"Segmentation failed: {error_msg}"
+        )
+
+    def _listen_for_builds(self):
+        """Show environment-build news in the segment log, once per widget.
+
+        scikit-ops and tnia-ops segmenters build their environment on first
+        use. The news arrives on the build's thread; BuildRelay's signal
+        carries it to this one.
+        """
+        if getattr(self, "_build_relay", None) is not None:
+            return
+        try:
+            from ..Segmenters.GlobalSegmenters.SkopSegmenter import (
+                add_build_listener,
+            )
+        except ImportError:
+            return
+        self._build_relay = BuildRelay()
+        self._build_relay.message.connect(
+            self.segment_progress_logger.log_info
+        )
+        add_build_listener(self._build_relay.message.emit)
 
     def _on_segment_range(self):
         """Segment a range of slices in the ND data (threaded)."""
@@ -787,6 +845,7 @@ class NDEasySegment(BaseNDApp):
         self.segment_all_btn.setEnabled(False)
 
         # Connect thread signals and start
+        self._listen_for_builds()
         self._segment_thread = thread
         thread.progress.connect(self._on_segment_all_progress)
         thread.slice_done.connect(self._on_segment_slice_done)
@@ -852,6 +911,7 @@ class NDEasySegment(BaseNDApp):
         self.segment_sequence_btn.setEnabled(False)
         self.segment_all_btn.setEnabled(False)
 
+        self._listen_for_builds()
         self._segment_thread = thread
         self._sequence_processor = processor
         thread.progress.connect(self._on_segment_sequence_progress)
@@ -949,6 +1009,11 @@ class NDEasySegment(BaseNDApp):
                 selected_axis=self._seg_segmentation_axis,
                 axes_to_collapse=self.axes_to_collapse,
             )
+        # A detector's boxes are always saved: they are small, and a box
+        # project has no other record of what the detector found.
+        self.image_data_model.save_box_predictions(
+            self.segmenter, self.current_image_index
+        )
         self._show_slice_prediction(current_step, mask)
 
     def _show_slice_prediction(self, current_step, mask):
@@ -990,9 +1055,13 @@ class NDEasySegment(BaseNDApp):
             # If the segmenter produced predicted object boxes, add them to a
             # dedicated shapes layer at the correct slice position.
             boxes = getattr(self.segmenter, "last_napari_boxes", None)
-            if boxes is not None and len(boxes) > 0:
+            if boxes is not None:
                 self._add_predicted_boxes(
-                    boxes, current_step, segmentation_axis, segmenter_name
+                    boxes,
+                    current_step,
+                    segmentation_axis,
+                    segmenter_name,
+                    getattr(self.segmenter, "last_box_scores", None),
                 )
 
         except (
@@ -1561,19 +1630,72 @@ class NDEasySegment(BaseNDApp):
         ai_lab = getattr(self, "ai_lab", None)
         return ai_lab is None or ai_lab.profile.show_labels
 
-    def _add_predicted_boxes(
-        self, boxes, current_step, segmentation_axis, segmenter_name
-    ):
-        """Add predicted object boxes to a "Box predictions (<segmenter>)" layer.
+    def box_predictions_layer(self, source):
+        """The "Box predictions (<source>)" layer, made if it is missing.
 
-        Boxes from the segmenter are 2D (YX). For ND images, leading
-        non-spatial step indices are prepended to each vertex so the boxes
-        appear on the correct slice.
+        *source* is the segmenter's class name, or whatever else saved boxes
+        under box_predictions/ -- e.g. photo-enhance-bibs. Each box shows its
+        confidence, where the source gave one.
         """
-        layer_name = box_predictions_name(segmenter_name)
-        # The layer's ndim, not len(data.shape): an RGB image's colour axis is
-        # not a dimension. Counting it made a 3-D shapes layer, which added a
-        # slider, whose index then sliced the next image down to one row.
+        name = box_predictions_name(source)
+        layer = self.box_predictions_layers.get(name)
+        if layer is not None and layer in self.viewer.layers:
+            return layer
+        layer = self.viewer.add_shapes(
+            name=name,
+            shape_type="rectangle",
+            edge_color="cyan",
+            face_color="transparent",
+            edge_width=2,
+            # The layer's ndim, not len(data.shape): an RGB image's colour
+            # axis is not a dimension. Counting it made a 3-D shapes layer,
+            # whose slider then sliced the next image down to one row.
+            ndim=self.image_layer.ndim,
+            features={"score": np.zeros(0, dtype=object)},
+            feature_defaults={"score": ""},
+            text={"string": "{score}", "size": 10, "color": "cyan"},
+        )
+        self.box_predictions_layers[name] = layer
+        return layer
+
+    def show_box_predictions(self, source, boxes, confidences=None, add=False):
+        """Put *boxes* in *source*'s predictions layer, replacing what is there.
+
+        *add* keeps the boxes already shown -- for an ND image, where each
+        slice's boxes join the others'.
+        """
+        layer = self.box_predictions_layer(source)
+        if confidences is None:
+            confidences = [None] * len(boxes)
+        scores = [
+            "" if c is None or np.isnan(c) else f"{c:.2f}" for c in confidences
+        ]
+        if add:
+            scores = [*layer.features["score"], *scores]
+        else:
+            layer.data = []
+        if len(boxes):
+            layer.add_rectangles(list(boxes))
+        layer.features = {"score": np.array(scores, dtype=object)}
+        layer.refresh()
+        return layer
+
+    def _add_predicted_boxes(
+        self,
+        boxes,
+        current_step,
+        segmentation_axis,
+        segmenter_name,
+        confidences=None,
+    ):
+        """Show a segmenter's predicted boxes in its "Box predictions" layer.
+
+        Boxes from the segmenter are 2D (YX). For a 2D image they replace the
+        layer's, so running a detector again shows its latest boxes, not both
+        sets. For ND images, leading non-spatial step indices are prepended
+        to each vertex so the boxes appear on the correct slice, and each
+        slice's boxes are added to the others'.
+        """
         image_ndim = self.image_layer.ndim
 
         # Determine number of leading (non-spatial) dims for the segmentation axis.
@@ -1592,20 +1714,15 @@ class NDEasySegment(BaseNDApp):
                 arr = np.concatenate([pad, arr], axis=1)
             nd_boxes.append(arr)
 
-        # Get or create the shapes layer
-        layer = self.box_predictions_layers.get(layer_name)
-        if layer is not None and layer in self.viewer.layers:
-            layer.add_rectangles(nd_boxes)
-        else:
-            self.box_predictions_layers[layer_name] = self.viewer.add_shapes(
-                nd_boxes,
-                name=layer_name,
-                shape_type="rectangle",
-                edge_color="cyan",
-                face_color="transparent",
-                edge_width=2,
-                ndim=image_ndim,
+        # Run again after its layer was deleted: show it again.
+        ai_lab = getattr(self, "ai_lab", None)
+        if ai_lab is not None:
+            ai_lab.hidden_box_sources.discard(
+                box_predictions_name(segmenter_name)
             )
+        self.show_box_predictions(
+            segmenter_name, nd_boxes, confidences, add=bool(leading)
+        )
 
     def _setup_interactive_layers(self, image_data):
         """Setup interactive annotation layers (points and shapes)."""

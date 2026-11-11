@@ -111,17 +111,28 @@ def _register_skop_segmenters(prof):
 
     from ..Segmenters.GlobalSegmenters.SkopDetector import (
         FastSamSkopDetector,
-        JdllYoloSkopDetector,
         ObjectAwareYoloSkopDetector,
+        YoloSkopDetector,
     )
 
     for seg in (
         StardistSkopSegmenter,
         Cellpose3SkopSegmenter,
         Cellpose4SkopSegmenter,
-        JdllYoloSkopDetector,
+        YoloSkopDetector,
         FastSamSkopDetector,
         ObjectAwareYoloSkopDetector,
     ):
+        if prof.allows(seg, "global"):
+            seg.register()
+
+    # tnia-ops' detectors, run by the same runner. Optional: without tnia-ops
+    # installed here they are not offered.
+    from ..Segmenters.GlobalSegmenters import TniaOpsDetector as tnia
+
+    if tnia.detect_people is None:
+        print("ℹ️  tnia-ops detectors not registered: tnia-ops not installed")
+        return
+    for seg in (tnia.TniaPeopleDetector, tnia.TniaBibDetector):
         if prof.allows(seg, "global"):
             seg.register()

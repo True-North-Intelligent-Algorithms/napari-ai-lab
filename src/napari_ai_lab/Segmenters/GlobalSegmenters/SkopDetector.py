@@ -17,18 +17,18 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .GlobalSegmenterBase import GlobalSegmenterBase
-from .SkopSegmenter import SkopSegmenter, _get_runner
+from .SkopSegmenter import SkopSegmenter
 
-# One at a time: a scikit-ops without jdll_yolo should still offer the others.
+# One at a time: a scikit-ops without one of them should still offer the others.
 try:
     from skop.ops.detect import fastsam
     from skop.ops.detect.fastsam import PretrainedModel as FastSamModel
 except ImportError:
     fastsam = FastSamModel = None
 try:
-    from skop.ops.detect import jdll_yolo
+    from skop.ops.detect import yolo
 except ImportError:
-    jdll_yolo = None
+    yolo = None
 try:
     from skop.ops.detect import object_aware_yolo
 except ImportError:
@@ -83,48 +83,29 @@ class SkopDetector(SkopSegmenter):
                 "Install it with: pip install scikit-ops"
             )
         self.last_napari_boxes = None
-        result = _get_runner().run(self.op, image=image, **self._op_params())
+        self.last_box_scores = None
+        result = self._run(image)
         boxes = getattr(result, "boxes", result)
         self.last_napari_boxes = _to_napari(boxes)
+        # One confidence per box, where the op gives them: tnia-ops' people
+        # call them confidences, its bibs scores; skop's Boxes has neither.
+        for attr in ("scores", "confidences"):
+            scores = getattr(result, attr, None)
+            if scores is not None and len(scores) == len(
+                self.last_napari_boxes
+            ):
+                self.last_box_scores = [float(s) for s in scores]
+                break
         print(f"{type(self).__name__}: {len(self.last_napari_boxes)} boxes")
         return np.zeros(image.shape[:2], dtype=np.uint16)
 
 
-@dataclass
-class JdllYoloSkopDetector(SkopDetector):
-    """A trained YOLO model, as JDLL runs it.
+class PtModelPicker:
+    """A YOLO ``.pt`` chosen from the project's models/ folder, or browsed.
 
-    The model is picked from a combo of every ``.pt`` under the project's
-    ``models/`` directory, the way the Cellpose segmenters list theirs -- so
-    a stock download and a training run's ``weights/best.pt`` both show up
-    without browsing. A model kept anywhere else is picked with the model
-    file browser, the way the MONAI UNet takes one, and wins over the combo.
-    """
-
-    model_file_path: str = field(
-        default="",
-        metadata={
-            "type": "file",
-            "param_type": "inference",
-            "file_type": "file",
-            "default": "",
-        },
-    )
-    conf: float = _float_field(0.25)
-    iou: float = _float_field(0.7)
-    imgsz: int = _int_field(640, 32, 4096, 32)
-
-    instructions = """
-JDLL YOLO (scikit-ops):
-• model - any YOLO .pt in the project's models/ folder, subfolders included
-• model file path - a .pt from anywhere else; used instead of the combo
-  when set
-• a stock COCO model finds COCO things (elephant, zebra, ...); cells and
-  coins need a trained one
-• conf - lower finds more
-• iou - two boxes overlapping more than this count as one
-• imgsz - the image is resized to this; objects should end up near the size
-  the model was trained at
+    For a detector with a ``model_file_path`` field: the combo lists every
+    ``.pt`` under the project's ``models/`` directory, and a browsed file
+    wins over the combo. Shared by YOLO and tnia-ops' people detector.
     """
 
     def __post_init__(self):
@@ -174,23 +155,66 @@ JDLL YOLO (scikit-ops):
             )
         return files[name]
 
+
+@dataclass
+class YoloSkopDetector(PtModelPicker, SkopDetector):
+    """Any trained YOLO model, on the whole image or in tiles: skop's ``yolo``.
+
+    The main YOLO detector. FastSAM and object-aware YOLO are the special
+    ones, each with its own fixed model. The model is picked from a combo of every ``.pt`` under the project's
+    ``models/`` directory, the way the Cellpose segmenters list theirs -- so
+    a stock download and a training run's ``weights/best.pt`` both show up
+    without browsing. A model kept anywhere else is picked with the model
+    file browser, the way the MONAI UNet takes one, and wins over the combo.
+    """
+
+    model_file_path: str = field(
+        default="",
+        metadata={
+            "type": "file",
+            "param_type": "inference",
+            "file_type": "file",
+            "default": "",
+        },
+    )
+    conf: float = _float_field(0.25)
+    iou: float = _float_field(0.5)
+    object_size: int = _int_field(0, 0, 10_000_000, 100)
+    overlap: float = _float_field(0.15, 0.0, 0.95)
+
+    instructions = """
+YOLO (scikit-ops):
+• model - any YOLO .pt in the project's models/ folder, subfolders included
+• model file path - a .pt from anywhere else; used instead of the combo
+  when set
+• a stock COCO model finds COCO things (elephant, zebra, ...); cells and
+  coins need a trained one
+• conf - lower finds more
+• iou - two boxes overlapping more than this count as one
+• each image or tile is resized to the size the model was trained at
+• object size - a typical object's area in pixels (a 60 x 80 bib: 4800).
+  0 runs the whole image at once; set it when objects are small in a big
+  image, and the image is cut into tiles that keep them big enough
+• overlap - how much neighbouring tiles share, so an object on a seam is
+  whole in one of them
+    """
+
     def _op_params(self) -> dict:
         return {
             "weights": self._weights(),
             "conf": self.conf,
             "iou": self.iou,
-            "imgsz": self.imgsz,
+            "object_size": float(self.object_size) or None,
+            "overlap": self.overlap,
         }
 
     @property
     def op(self):
-        return jdll_yolo
+        return yolo
 
     @classmethod
     def register(cls):
-        return GlobalSegmenterBase.register_framework(
-            "JDLL YOLO (scikit-ops)", cls
-        )
+        return GlobalSegmenterBase.register_framework("YOLO (scikit-ops)", cls)
 
 
 @dataclass

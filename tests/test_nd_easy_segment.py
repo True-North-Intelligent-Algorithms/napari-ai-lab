@@ -6,7 +6,7 @@ from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.Segmenters.GlobalSegmenters import MonaiUNetSegmenter
 
 
-def test_nd_easy_segment_creates_prediction():
+def test_nd_easy_segment_creates_prediction(qtbot):
     """Test that NDEasySegment creates prediction file in predictions directory."""
     # Setup original and temporary directories
     original_parent_dir = (
@@ -54,8 +54,13 @@ def test_nd_easy_segment_creates_prediction():
         image_layer = viewer.add_image(image_data, name="Image")
         nd_easy_segment_widget._set_image_layer(image_layer)
 
-        # Programmatically segment the current image
+        # Programmatically segment the current image. It runs on a worker
+        # thread, so wait for its result to come back to this one.
         nd_easy_segment_widget._on_segment_current()
+        qtbot.waitUntil(
+            lambda: nd_easy_segment_widget._segment_current_thread is None,
+            timeout=120_000,
+        )
 
         # Assert that prediction file was created
         predictions_dir = model.get_predictions_directory(
@@ -75,7 +80,3 @@ def test_nd_easy_segment_creates_prediction():
         # Cleanup temporary directory
         if temp_parent_dir.exists():
             shutil.rmtree(temp_parent_dir)
-
-
-if __name__ == "__main__":
-    test_nd_easy_segment_creates_prediction()
