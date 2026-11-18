@@ -14,6 +14,7 @@ they need.
 from ..Augmenters import (
     AlbumentationsAugmenter,
     SimpleAugmenter,
+    YoloCropAugmenter,
 )
 from ..Segmenters.GlobalSegmenters import (
     CellCastStardistSegmenter,
@@ -88,7 +89,7 @@ def register_all(profile=None):
             seg.register()
 
     # Augmenters
-    for aug in (SimpleAugmenter, AlbumentationsAugmenter):
+    for aug in (SimpleAugmenter, AlbumentationsAugmenter, YoloCropAugmenter):
         if prof.allows(aug, "augmenter"):
             aug.register()
 

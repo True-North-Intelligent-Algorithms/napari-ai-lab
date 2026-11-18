@@ -34,13 +34,15 @@ BOUNDARIES = {
 
 
 def _history_path(model_dir):
-    """Where the history is, for either layout: StarDist saves a model as a
-    directory, Cellpose as a file inside a ``models/`` subdirectory."""
+    """Where the history is, for each layout: StarDist saves a model as a
+    directory, Cellpose as a file inside a ``models/`` subdirectory, YOLO as
+    ``<name>.pt`` with ``<name>.pt_history.csv`` beside it."""
     parent, name = os.path.split(model_dir.rstrip(os.sep))
     for path in (
         os.path.join(model_dir, "history.csv"),
         os.path.join(parent, "models", f"{name}_history.csv"),
         f"{model_dir}_history.csv",
+        f"{model_dir}.pt_history.csv",
     ):
         if os.path.isfile(path):
             return path
@@ -122,7 +124,29 @@ def plot_history(model_dir, ax=None):
     ax.set_xlabel("epoch")
     ax.set_ylabel("loss")
     ax.set_title(os.path.basename(os.path.normpath(model_dir)))
-    ax.legend()
+    handles, labels = ax.get_legend_handles_labels()
+
+    # A detector's history also has its validation scores, which say more
+    # than its loss does: plotted against a 0-1 axis on the right.
+    scores = [
+        c for c in ("mAP50", "mAP50_95") if rows[0].get(c) not in (None, "")
+    ]
+    if scores:
+        right = ax.twinx()
+        for column, colour in zip(
+            scores, ("tab:green", "tab:olive"), strict=False
+        ):
+            right.plot(
+                epochs,
+                [float(r[column] or "nan") for r in rows],
+                color=colour,
+                label=column,
+            )
+        right.set_ylim(0, 1)
+        right.set_ylabel("validation score")
+        more_handles, more_labels = right.get_legend_handles_labels()
+        handles, labels = handles + more_handles, labels + more_labels
+    ax.legend(handles, labels)
     ax.figure.text(
         0.01,
         0.01,

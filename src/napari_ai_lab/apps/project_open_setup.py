@@ -86,6 +86,9 @@ class ProjectOpenDialog(QDialog):
         )
         if directory:
             self.dir_edit.setText(directory)
+        # Back on top: the folder picker can leave this behind napari.
+        self.raise_()
+        self.activateWindow()
 
     def get_values(self) -> dict:
         """Return the dialog selections as a dict."""

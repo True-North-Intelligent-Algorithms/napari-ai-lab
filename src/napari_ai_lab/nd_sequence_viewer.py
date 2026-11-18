@@ -15,6 +15,30 @@ from qtpy.QtWidgets import (
 
 from .models import ImageDataModel
 
+_startup_frozen = False
+
+
+def _freeze_startup_objects():
+    """Leave everything alive now out of later garbage collections, once.
+
+    napari runs a full gc.collect() whenever layers are removed (a Windows
+    OpenGL workaround), and a full collection walks every tracked object:
+    ~900,000 of them once napari, Qt and torch are loaded, ~0.5 s. Almost
+    all are modules, classes and widgets that live as long as the process,
+    so gc.freeze() takes them out of the walk.
+
+    Once per process, and before the first image's layers exist: a frozen
+    object in a reference cycle is never collected, so freezing again later
+    would keep that moment's image layers -- tens of MB each -- forever.
+    """
+    global _startup_frozen
+    if not _startup_frozen:
+        import gc
+
+        gc.collect()
+        gc.freeze()
+        _startup_frozen = True
+
 
 class NDSequenceViewer(QWidget):
     """
@@ -142,6 +166,7 @@ class NDSequenceViewer(QWidget):
 
                 # Update display and load first image
                 self._update_image_info()
+                _freeze_startup_objects()
                 self._load_current_image()
 
             else:
@@ -209,6 +234,16 @@ class NDSequenceViewer(QWidget):
         ):
             return
 
+        # One batch for the whole switch. napari runs a full gc.collect()
+        # after every layer it removes (a Windows OpenGL workaround in
+        # VispyCanvas._remove_layer), ~0.5 s each with this many objects
+        # alive; the switch removes six or so layers, which made it take
+        # 3-4 s. Batched, napari collects once, at the end.
+        with self.viewer.layers.batched_update():
+            self._swap_in_current_image()
+
+    def _swap_in_current_image(self):
+        """Replace the image layer and announce it; see _load_current_image."""
         try:
             # Remove old image layer if it exists
             if self.current_image_layer is not None:

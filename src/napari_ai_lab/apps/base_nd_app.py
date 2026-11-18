@@ -34,6 +34,20 @@ from ..widgets import NDOperationWidget
 DEFAULT_ANNOTATION_NAME = "Labels (Persistent)"
 
 
+def _close_op_workers():
+    """Shut down scikit-ops' shared runner, if it was ever started.
+
+    Imported here rather than at the top: scikit-ops is optional, and an
+    ai-lab without it has no workers to close.
+    """
+    try:
+        from ..Segmenters.GlobalSegmenters.SkopSegmenter import close_runner
+    except ImportError:
+        return
+    with contextlib.suppress(Exception):
+        close_runner()
+
+
 class BaseNDApp(QWidget):
     """
     Base class for ND App widgets.
@@ -107,6 +121,10 @@ class BaseNDApp(QWidget):
                     qt_window.closeEvent
                 )
                 qt_window._nd_close_handler_installed = True
+                # Once the window is really gone -- closeEvent can still be
+                # cancelled -- shut the op workers down, so their GPU memory
+                # comes back now rather than when Python exits.
+                qt_window.destroyed.connect(lambda *_: _close_op_workers())
                 print("Connected to viewer close event")
             else:
                 print(

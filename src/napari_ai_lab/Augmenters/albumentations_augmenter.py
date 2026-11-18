@@ -37,7 +37,11 @@ class AlbumentationsAugmenter(AugmenterBase):
 Albumentations Advanced Augmentation:
 • Random flips (vertical/horizontal)
 • Random 90-degree rotations
-• Random sized crop with resize
+• Random sized crop with resize: min/max scale is how much objects are
+  resized -- 1.0 keeps their size, 0.8-1.2 shrinks or enlarges up to 20%.
+  Off: patches cut at their own size
+• min objects: a patch must hold at least this many labelled objects
+  (0 allows empty patches); it is redrawn until it does
 • Random brightness/contrast adjustments
 • Colour jitter (hue/saturation) and random gamma, off by default
 • Normalization: Percentile-based intensity normalization
@@ -129,27 +133,44 @@ Albumentations Advanced Augmentation:
         },
     )
 
-    min_long_axis: int = field(
-        default=30,
+    # How much objects are resized: 1.0 keeps them as they are, 0.5 halves
+    # them, 2.0 doubles them. A factor rather than a size in pixels, which
+    # needs the objects' size known first; the log says what comes out.
+    min_scale: float = field(
+        default=0.8,
         metadata={
-            "type": "int",
+            "type": "float",
             "param_type": "augmentation",
-            "min": 4,
-            "max": 2048,
-            "step": 5,
-            "default": 30,
+            "min": 0.1,
+            "max": 10.0,
+            "step": 0.05,
+            "default": 0.8,
         },
     )
 
-    max_long_axis: int = field(
-        default=200,
+    max_scale: float = field(
+        default=1.2,
+        metadata={
+            "type": "float",
+            "param_type": "augmentation",
+            "min": 0.1,
+            "max": 10.0,
+            "step": 0.05,
+            "default": 1.2,
+        },
+    )
+
+    # Labelled objects a patch must hold, any part of them; 0 allows empty
+    # patches. Redrawn until met, up to MAX_TRIES.
+    min_objects: int = field(
+        default=1,
         metadata={
             "type": "int",
             "param_type": "augmentation",
-            "min": 8,
-            "max": 4096,
-            "step": 5,
-            "default": 200,
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "default": 1,
         },
     )
 
@@ -246,8 +267,6 @@ Albumentations Advanced Augmentation:
         self.do_random_rotate90 = self.do_random_rotate90
         self.do_random_sized_crop = self.do_random_sized_crop
         self.do_random_brightness_contrast = self.do_random_brightness_contrast
-        self.min_long_axis = self.min_long_axis
-        self.max_long_axis = self.max_long_axis
         self.brightness_limit = self.brightness_limit
         self.contrast_limit = self.contrast_limit
         self.normalization_jitter = self.normalization_jitter
@@ -274,8 +293,9 @@ Albumentations Advanced Augmentation:
             "do_random_rotate90": self.do_random_rotate90,
             "do_random_sized_crop": self.do_random_sized_crop,
             "do_random_brightness_contrast": self.do_random_brightness_contrast,
-            "min_long_axis": self.min_long_axis,
-            "max_long_axis": self.max_long_axis,
+            "min_scale": self.min_scale,
+            "max_scale": self.max_scale,
+            "min_objects": self.min_objects,
             "do_color_jitter": self.do_color_jitter,
             "do_random_gamma": self.do_random_gamma,
             "brightness_limit": self.brightness_limit,
@@ -332,7 +352,7 @@ Albumentations Advanced Augmentation:
         if self.do_random_rotate90:
             augmentations.append(A.RandomRotate90(p=0.5))
 
-        if self.do_random_sized_crop and min_max_height is not None:
+        if min_max_height is not None:
             augmentations.append(
                 A.RandomSizedCrop(
                     min_max_height=min_max_height,
@@ -381,87 +401,66 @@ Albumentations Advanced Augmentation:
     def _report_once(self, message: str) -> None:
         """Print a message the first time only. Patch generation runs hundreds
         of times over the same images, and a warning repeated hundreds of times
-        is a warning nobody reads."""
-        seen = self.__dict__.setdefault("_reported", set())
+        is a warning nobody reads. Kept, in order, for the Augment tab's log
+        (``take_reports``)."""
+        seen = self.__dict__.setdefault("_reported", {})
         if message not in seen:
-            seen.add(message)
+            seen[message] = None
             print(f"  {message}")
 
-    def _crop_range(self, mask, patch_size) -> tuple[int, int] | None:
-        """The crop sizes that put objects inside the requested size range.
+    def take_reports(self) -> list[str]:
+        """The messages reported since last asked, oldest first; cleared, so
+        the next run says them again."""
+        return list(self.__dict__.pop("_reported", {}))
 
-        A crop is resized to the patch, so cropping *small* enlarges what is in
-        it and cropping *large* shrinks it. To land an object of long axis L at
-        a target size T, crop ``patch_size * L / T``.
+    #: Draws of a patch before giving up on min_objects.
+    MAX_TRIES = 30
 
-        Anchored on the **largest** labelled object, not the median. The point
-        of a range is that the top of it gets covered, and the biggest object
-        is what has to reach it -- a median anchor leaves the large end empty
-        unless the labels happen to be uniform. Objects smaller than the
-        requested minimum simply come out smaller still, which costs nothing:
-        extra small examples are harmless, missing large ones are not.
+    def _crop_size(self, patch_size, image_shape, longest=None):
+        """The square crop to cut, for the patch it is resized to.
 
-        Returns None when there is nothing to measure, which leaves the crop
-        out of the pipeline rather than guessing a scale.
+        Cropping *small* enlarges what is in it, cropping *large* shrinks it:
+        a scale s means a crop of ``patch / s``. The scale is drawn
+        log-uniformly between min_scale and max_scale -- each doubling as
+        likely -- or is 1 with random sized crop off. Clamped to the image,
+        which a crop cannot exceed. *longest*, the largest object's long
+        axis in pixels, is only for saying what comes out.
         """
+        lo, hi = sorted((self.min_scale, self.max_scale))
+        lo = max(lo, 1e-3)
+        if not self.do_random_sized_crop:
+            lo = hi = 1.0
+        side = patch_size[0]
+        limit = min(image_shape[-2:])
+        if longest:
+            self._report_once(
+                f"largest object {longest:.0f}px -> {longest * lo:.0f}-"
+                f"{longest * hi:.0f}px in {side}px patches (scale {lo:g}-{hi:g})"
+            )
+        if side / lo > limit:
+            self._report_once(
+                f"scale: this image is only {limit}px, so objects shrink to "
+                f"{side / limit:.2f} at most, not {lo:g}"
+            )
+        scale = np.exp(self.rng.uniform(np.log(lo), np.log(hi)))
+        size = int(round(min(max(side / scale, 16), limit)))
+        return (size, size)
+
+    @staticmethod
+    def _longest(mask):
+        """Long axis of the largest labelled object in *mask*, or None."""
         from skimage.measure import regionprops
 
         labels = mask if mask.ndim == 2 else mask[mask.shape[0] // 2]
         lengths = [
             r.axis_major_length for r in regionprops(labels.astype(np.int32))
         ]
-        if not lengths:
-            return None
+        return max(lengths) if lengths else None
 
-        return self._crop_range_for(max(lengths), patch_size, mask.shape)
-
-    def _crop_range_for(
-        self, longest, patch_size, image_shape
-    ) -> tuple[int, int] | None:
-        """The crop size for a largest object of long axis *longest*.
-
-        Shared by masks and boxes; see ``_crop_range`` for the reasoning.
-        """
-        if longest <= 0:
-            return None
-
-        # crop = patch * longest / target, so the smaller target gives the
-        # larger crop. Clamped so a crop is never below 16px or above the
-        # image, which would fail rather than scale.
-        low = int(round(patch_size[0] * longest / max(self.max_long_axis, 1)))
-        high = int(round(patch_size[0] * longest / max(self.min_long_axis, 1)))
-        # Shrinking an object means cropping *more* than the patch, and there
-        # is only so much image. Say so rather than quietly narrowing the
-        # range: a request that cannot be met is worth knowing before training,
-        # not after wondering why the small end is empty.
-        limit = min(image_shape[-2:])
-        if high > limit:
-            reachable = int(round(longest * patch_size[0] / limit))
-            self._report_once(
-                f"size range: asked for {self.min_long_axis}-"
-                f"{self.max_long_axis}px long axis, but this image can only "
-                f"reach {reachable}-{self.max_long_axis}px -- shrinking "
-                f"further would need a crop larger than the image"
-            )
-        if low < patch_size[0] // 2:
-            self._report_once(
-                f"size range: {self.max_long_axis}px objects are more than "
-                f"half of a {patch_size[0]}px patch, so most will be cut by "
-                f"the crop edge -- raise the patch size or lower max_long_axis"
-            )
-        low, high = max(16, min(low, limit)), max(16, min(high, limit))
-        if low > high:
-            low, high = high, low
-
-        # One size per call, drawn log-uniformly, rather than handing
-        # RandomSizedCrop the whole range. It samples the crop *height*
-        # uniformly, and size is the reciprocal of height -- so a uniform
-        # height draw piles up at the small-object end and the top of the
-        # requested range goes nearly unvisited. Log-uniform gives each
-        # doubling equal weight, which is what "cover 30 to 200" means.
-        draw = np.exp(self.rng.uniform(np.log(low), np.log(high)))
-        size = int(round(draw))
-        return (size, size)
+    @staticmethod
+    def _count_objects(mask) -> int:
+        """Distinct labelled objects in *mask*, any part of them."""
+        return int(np.count_nonzero(np.unique(mask)))
 
     def augment(
         self,
@@ -500,9 +499,38 @@ Albumentations Advanced Augmentation:
 
         # Use the 2D patch size (last two dims) for the pipeline
         patch_size_2d = patch_size[-2:] if len(patch_size) >= 2 else patch_size
+        longest = self._longest(mask)
+        available = self._count_objects(mask)
+        wanted = min(self.min_objects, available)
+        if available < self.min_objects:
+            self._report_once(
+                f"min objects: asked for {self.min_objects} per patch, but "
+                f"this image has only {available}"
+            )
 
+        best = None
+        for _ in range(self.MAX_TRIES if wanted > 0 else 1):
+            out = self._augment_once(
+                im, mask, patch_size, patch_size_2d, longest
+            )
+            n = self._count_objects(out[1])
+            if best is None or n > best[0]:
+                best = (n, out)
+            if n >= wanted:
+                break
+        if best[0] < wanted:
+            self._report_once(
+                f"min objects: some patches could not get {wanted} objects in "
+                f"{self.MAX_TRIES} tries and kept the most found. Raise the "
+                f"patch size or lower min objects"
+            )
+        return best[1]
+
+    def _augment_once(self, im, mask, patch_size, patch_size_2d, longest):
+        """One augmented patch of *im* and *mask*; see ``augment``."""
         transform = self._create_augmentation_pipeline(
-            patch_size_2d, self._crop_range(mask, patch_size_2d)
+            patch_size_2d,
+            self._crop_size(patch_size_2d, mask.shape, longest),
         )
 
         # Determine if this is truly a 3D image or just RGB
@@ -611,18 +639,15 @@ Albumentations Advanced Augmentation:
         classes = np.asarray(classes, dtype=int).reshape(-1)
         patch_size_2d = tuple(patch_size[-2:])
 
-        # Crop size from the largest box, as _crop_range does from the
-        # largest labelled object. With no boxes, a plain patch-sized crop.
+        # The same scale range as augment; the largest box only says what
+        # comes out.
         height, width = im.shape[:2]
-        crop = None
+        longest = None
         if len(boxes):
             longest = max(
                 np.max(boxes[:, 2]) * width, np.max(boxes[:, 3]) * height
             )
-            crop = self._crop_range_for(longest, patch_size_2d, im.shape[:2])
-        elif self.do_random_sized_crop:
-            size = min(patch_size_2d[0], height, width)
-            crop = (size, size)
+        crop = self._crop_size(patch_size_2d, im.shape[:2], longest)
 
         transform = self._create_augmentation_pipeline(
             patch_size_2d,

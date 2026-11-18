@@ -5,11 +5,10 @@ This module combines NDEasyLabel, NDEasyAugment, and NDEasySegment
 into a single tabbed interface with shared model and viewer.
 """
 
-from pathlib import Path
-
 import napari
 import numpy as np
 from qtpy.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -299,6 +298,7 @@ class NDAILab(QWidget):
             text={"string": "{split_set}", "size": 15, "color": "green"},
             scale=annotation_scale,
         )
+        self.boxes_layer.events.data.connect(self._refresh_box_status)
 
         from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
 
@@ -412,12 +412,26 @@ class NDAILab(QWidget):
         # The auxiliary layers -- points, shapes, boxes -- were constructed
         # with a fixed ndim, so a change in dimensionality needs new ones. A
         # change in *size* does not: assigning .data handles that.
+        # Colour is never an annotation axis, whatever "Axes to collapse"
+        # says -- _annotation_shape drops it too. Counting only
+        # axes_to_collapse made a YXC photo (3 dims) look different from its
+        # 2D point and box layers on every switch of a colour project left
+        # at the default empty "Axes to collapse", so reuse never ran there.
         image_shape = image_layer.data.shape
         first = next(iter(annotations_layers.values()), None)
         annotation_ndim = self.points_layer.ndim
-        if len(image_shape) != annotation_ndim + len(
-            self.axes_to_collapse or ""
-        ):
+        axis_types = self.image_data_model.axis_types
+        if axis_types:
+            image_ndim = len(
+                compute_collapsed_shape(
+                    image_shape,
+                    axis_types,
+                    [*(self.axes_to_collapse or ""), "C"],
+                )
+            )
+        else:
+            image_ndim = len(image_shape) - len(self.axes_to_collapse or "")
+        if image_ndim != annotation_ndim:
             return False
 
         self.predictions_layers = (
@@ -727,6 +741,7 @@ class NDAILab(QWidget):
                     self.segment_widget._on_shapes_changed
                 )
 
+        self._refresh_box_status()
         print("   → Layers distributed to all sub-apps")
 
     def _setup_ui(self):
@@ -744,6 +759,11 @@ class NDAILab(QWidget):
         project_row.addWidget(self.label_widget.open_project_btn)
         project_row.addWidget(self.label_widget.save_project_btn)
         layout.addLayout(project_row)
+
+        # The box controls: a "Boxes" tab of their own in a profile without
+        # labels, where they replace the Label tab (made below).
+        boxes_panel = QWidget()
+        box_controls = QVBoxLayout(boxes_panel)
 
         # Class of the next box drawn, or of the selected boxes. Type a name
         # to add a class; it is added on Enter or when you click away.
@@ -766,7 +786,7 @@ class NDAILab(QWidget):
         self.class_combo.currentIndexChanged.connect(self._on_class_chosen)
         class_layout.addWidget(self.class_combo, 1)
         class_row.setVisible(not self.profile.show_labels)
-        layout.addWidget(class_row)
+        box_controls.addWidget(class_row)
 
         # A box layer per kind of thing boxed -- runners, bibs -- each with
         # its own folder under box_annotations/ and its own classes. The
@@ -774,7 +794,7 @@ class NDAILab(QWidget):
         box_layer_row = QWidget()
         box_layer_layout = QHBoxLayout(box_layer_row)
         box_layer_layout.setContentsMargins(0, 0, 0, 0)
-        box_layer_layout.addWidget(QLabel("New box layer:"))
+        box_layer_layout.addWidget(QLabel("Box layer:"))
         self.new_box_layer_edit = QLineEdit()
         self.new_box_layer_edit.setPlaceholderText("e.g. runners")
         self.new_box_layer_edit.returnPressed.connect(self._on_add_box_layer)
@@ -785,8 +805,22 @@ class NDAILab(QWidget):
         )
         add_box_layer_btn.clicked.connect(self._on_add_box_layer)
         box_layer_layout.addWidget(add_box_layer_btn)
+        rename_box_layer_btn = QPushButton("Rename")
+        rename_box_layer_btn.setToolTip(
+            "Rename the selected box layer to the name typed: its folder, "
+            "boxes, classes and complete photos move with it"
+        )
+        rename_box_layer_btn.clicked.connect(self._on_rename_box_layer)
+        box_layer_layout.addWidget(rename_box_layer_btn)
+        delete_box_layer_btn = QPushButton("Delete")
+        delete_box_layer_btn.setToolTip(
+            "Delete the selected box layer: its folder moves to "
+            "box_annotations/_deleted/, to move back if wanted"
+        )
+        delete_box_layer_btn.clicked.connect(self._on_delete_box_layer)
+        box_layer_layout.addWidget(delete_box_layer_btn)
         box_layer_row.setVisible(not self.profile.show_labels)
-        layout.addWidget(box_layer_row)
+        box_controls.addWidget(box_layer_row)
         self.viewer.layers.selection.events.active.connect(
             self._on_active_layer_changed
         )
@@ -813,7 +847,38 @@ class NDAILab(QWidget):
         copy_btn.clicked.connect(self._on_copy_box_predictions)
         copy_layout.addWidget(copy_btn)
         copy_row.setVisible(not self.profile.show_labels)
-        layout.addWidget(copy_row)
+        box_controls.addWidget(copy_row)
+
+        # The same, for every photo the predictions ran on, in one go.
+        # Photos the box layer already has boxes or a Complete for are left
+        # alone.
+        copy_all_btn = QPushButton("Copy to all photos")
+        copy_all_btn.setToolTip(
+            "Copy these predictions into the box layer on every photo they "
+            "ran on. Photos the box layer already has a file for, or that "
+            "are marked complete, are left as they are."
+        )
+        copy_all_btn.clicked.connect(self._on_copy_box_predictions_all)
+        copy_all_btn.setVisible(not self.profile.show_labels)
+        box_controls.addWidget(copy_all_btn)
+
+        # Complete: every object on this photo boxed, or none there. Saved
+        # boxes alone are not that -- a photo may be half done -- so it is
+        # said here, per photo and box layer, in the layer's complete.list.
+        self.complete_check = QCheckBox("Complete")
+        self.complete_check.setToolTip(
+            "Every object on this photo is boxed in the selected box layer, "
+            "or there are none. Only complete photos train (and photos with "
+            "label boxes, inside those)."
+        )
+        self.complete_check.toggled.connect(self._on_complete_toggled)
+        self.complete_check.setVisible(not self.profile.show_labels)
+        box_controls.addWidget(self.complete_check)
+        self.box_totals_label = QLabel()
+        self.box_totals_label.setWordWrap(True)
+        self.box_totals_label.setVisible(not self.profile.show_labels)
+        box_controls.addWidget(self.box_totals_label)
+        box_controls.addStretch()
         self.viewer.layers.events.inserted.connect(self._refresh_copy_combos)
         self.viewer.layers.events.removed.connect(self._refresh_copy_combos)
 
@@ -828,6 +893,16 @@ class NDAILab(QWidget):
         # Segment first: if a ready-made model works, nothing else is needed.
         self.tabs.addTab(_make_scroll(self.segment_widget), "Segment")
         self.tabs.addTab(_make_scroll(self.label_widget), "Label")
+        # Boxes: the label tab's masks, label numbers and interactive
+        # segmenters mean nothing for boxes, so a profile without labels
+        # gets the box controls in its place. The Label tab is kept, hidden:
+        # the label widget still owns Open/Save Project and the box layers.
+        if not self.profile.show_labels:
+            self.tabs.setTabVisible(1, False)
+            self.tabs.insertTab(1, _make_scroll(boxes_panel), "Boxes")
+        else:
+            boxes_panel.setParent(self)
+            boxes_panel.hide()
         self.tabs.addTab(_make_scroll(self.augment_widget), "Augment")
 
         # Add training tab - shows training view of segment widget
@@ -871,17 +946,20 @@ class NDAILab(QWidget):
         )
 
         if directory:
-            print(f"📁 Loading directory: {directory}")
+            # Open it the way "Open Project" does, with a sequence viewer, the
+            # usual project. This used to create the model and stop, so no
+            # image ever appeared.
+            from .project_open_setup import apply_project_setup
 
-            # Create model from directory
-            parent_dir = Path(directory)
-            self.image_data_model = ImageDataModel(parent_dir)
-
-            # Propagate to all tabs
-            self.set_image_data_model(self.image_data_model)
-
-            print("✅ Model created and shared across all tabs")
-            # TODO Phase 3: Load images and create layers
+            apply_project_setup(
+                self,
+                {
+                    "directory": directory,
+                    "viewer_type": "sequence",
+                    "axes_to_collapse": None,
+                    "axis_types": None,
+                },
+            )
 
     def _annotation_shape(self, image_shape):
         """Shape of an annotation for an image of *image_shape*.
@@ -899,8 +977,9 @@ class NDAILab(QWidget):
             [*(self.axes_to_collapse or ""), "C"],
         )
 
-    #: Edge colours for box annotation layers, one per layer in turn. Cyan is
-    #: left to box predictions and magenta to the 3D boxes.
+    #: Edge colours for box annotation layers, one per layer in turn. Unlike
+    #: the box predictions' (BOX_PREDICTION_COLORS in nd_easy_segment) and the
+    #: 3D boxes' magenta.
     BOX_LAYER_COLORS = ("yellow", "orange", "lime", "deepskyblue", "violet")
 
     def _add_box_layer(self, folder):
@@ -916,7 +995,7 @@ class NDAILab(QWidget):
             name=folder or BOX_ANNOTATIONS,
             edge_color=colour,
             face_color="transparent",
-            edge_width=3,
+            edge_width=6,
             ndim=self._box_layer_ndim,
             scale=self._box_layer_scale,
             features={
@@ -928,6 +1007,7 @@ class NDAILab(QWidget):
             metadata={"box_folder": folder},
         )
         layer.events.highlight.connect(self._on_box_selection_changed)
+        layer.events.data.connect(self._refresh_box_status)
         # Known as a box layer before it is added: adding makes it the active
         # layer, and _on_active_layer_changed looks it up then.
         self.box_layers[folder] = layer
@@ -1014,6 +1094,7 @@ class NDAILab(QWidget):
         self.segment_widget.shapes_layer = layer
         project = self.image_data_model.parent_directory
         self._fill_class_combo(read_class_names(project, self._box_folder()))
+        self._refresh_box_status()
 
     def _on_add_box_layer(self):
         """Add a box layer named as typed, with a folder and a first class.
@@ -1049,6 +1130,114 @@ class NDAILab(QWidget):
             )
         self.new_box_layer_edit.clear()
         self.viewer.layers.selection.active = layer
+        self._refresh_box_status()
+
+    def _on_rename_box_layer(self):
+        """Rename the selected box layer, and its folder, to the name typed.
+
+        This photo's edits are saved first, so they move with it.
+        """
+        from ..utilities.box_annotations import rename_box_folder
+
+        layer = self.shapes_layer if self._live_box_layers() else None
+        if layer is None or self.image_data_model is None:
+            QMessageBox.warning(
+                self, "Rename box layer", "Select a box layer to rename."
+            )
+            return
+        name = self.new_box_layer_edit.text()
+        if not name.strip():
+            QMessageBox.warning(
+                self,
+                "Rename box layer",
+                f"Type the new name for {layer.name}, then click Rename.",
+            )
+            return
+        old = self._box_folder(layer)
+        self._save_box_annotations()
+        try:
+            new = rename_box_folder(
+                self.image_data_model.parent_directory, old, name
+            )
+        except (ValueError, OSError) as e:
+            QMessageBox.warning(self, "Rename box layer", str(e))
+            return
+        # An empty layer the folder was, if any, is replaced by this one.
+        stale = self.box_layers.pop(new, None)
+        if (
+            stale is not None
+            and stale is not layer
+            and stale in self.viewer.layers
+        ):
+            self.viewer.layers.remove(stale)
+        # Same place in the list, under the new name.
+        self.box_layers = {
+            (new if f == old else f): lay for f, lay in self.box_layers.items()
+        }
+        layer.metadata = {**(layer.metadata or {}), "box_folder": new}
+        layer.name = new
+        print(f"Box layer {old or BOX_ANNOTATIONS!r} renamed {new!r}")
+        self.new_box_layer_edit.clear()
+        self._refresh_copy_combos()
+        self._load_box_annotations(self.image_layer.data.shape, folders=[new])
+        self._refresh_box_status()
+
+    def _on_delete_box_layer(self):
+        """Delete the selected box layer, after asking; see delete_box_folder."""
+        from ..utilities.box_annotations import (
+            delete_box_folder,
+            folder_path,
+            read_complete,
+        )
+
+        layer = self.shapes_layer if self._live_box_layers() else None
+        if layer is None or self.image_data_model is None:
+            QMessageBox.warning(
+                self, "Delete box layer", "Select a box layer to delete."
+            )
+            return
+        project = self.image_data_model.parent_directory
+        folder = self._box_folder(layer)
+        self._save_box_annotations()
+        files = [
+            f
+            for f in folder_path(project, folder).glob("*.txt")
+            if f.is_file()
+        ]
+        boxes = sum(
+            1
+            for f in files
+            for line in f.read_text().splitlines()
+            if line.strip()
+        )
+        complete = len(read_complete(project, folder))
+        answer = QMessageBox.question(
+            self,
+            "Delete box layer",
+            f"Delete {layer.name}: {boxes} boxes on {len(files)} photos, "
+            f"{complete} marked complete?\n\nIt moves to "
+            f"box_annotations/_deleted/, so it can be moved back.",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            where = delete_box_folder(project, folder)
+        except OSError as e:
+            QMessageBox.warning(self, "Delete box layer", str(e))
+            return
+        # Out of the list first, so nothing saves it back on the way out.
+        self.box_layers.pop(folder, None)
+        self.shapes_layer = None
+        if layer in self.viewer.layers:
+            self.viewer.layers.remove(layer)
+        self._live_box_layers()  # picks the next box layer, if any
+        if self.shapes_layer is not None:
+            self.viewer.layers.selection.active = self.shapes_layer
+        print(f"Box layer {layer.name!r} deleted: moved to {where}")
+        self._refresh_copy_combos()
+        self._refresh_box_status()
 
     #: Two boxes overlapping this much (IoU) are the same box: copying
     #: predictions skips one its target layer already has.
@@ -1098,14 +1287,7 @@ class NDAILab(QWidget):
         source = None
         if source_name in self.viewer.layers:
             source = self.viewer.layers[source_name]
-        target = next(
-            (
-                lay
-                for lay in self._live_box_layers().values()
-                if lay.name == self.copy_to_combo.currentText()
-            ),
-            None,
-        )
+        target = self._copy_target()
         if source is None or target is None:
             QMessageBox.warning(
                 self,
@@ -1151,6 +1333,285 @@ class NDAILab(QWidget):
         print(message)
         show_info(message)
         self.viewer.layers.selection.active = target
+
+    def _copy_target(self):
+        """The box layer the copy row's "to" combo names, or None."""
+        return next(
+            (
+                lay
+                for lay in self._live_box_layers().values()
+                if lay.name == self.copy_to_combo.currentText()
+            ),
+            None,
+        )
+
+    def _on_copy_box_predictions_all(self):
+        """Copy the chosen predictions into a box layer, on every photo.
+
+        A file for each photo they found something on. A photo the box layer
+        already has a file for, or marks complete, is skipped, so nothing
+        worked on is overwritten and copying twice changes nothing. Copied
+        boxes are not complete -- unless asked, for predictions trusted
+        as they are. Boxes take the class _on_copy_box_predictions would
+        give them.
+        """
+        from pathlib import Path
+
+        from napari.utils.notifications import show_info
+
+        from ..utilities.box_annotations import (
+            BOX_PREDICTIONS_DIR,
+            box_file,
+            read_class_names,
+            read_complete,
+            write_complete,
+        )
+        from .profiles import box_predictions_name
+
+        prefix = box_predictions_name("")[:-1]  # "Box predictions ("
+        source_name = self.copy_from_combo.currentText()
+        target = self._copy_target()
+        if not source_name.startswith(prefix) or target is None:
+            QMessageBox.warning(
+                self,
+                "Copy boxes",
+                "Choose box predictions to copy and a box layer to copy to.",
+            )
+            return
+        source = source_name[len(prefix) : -1]
+        project = Path(self.image_data_model.parent_directory)
+        folder = self._box_folder(target)
+
+        chosen = self.class_combo.currentData()
+        if target is self.shapes_layer and chosen is not None:
+            class_id, class_name = chosen, self.class_combo.currentText()
+        else:
+            class_id = 0
+            class_name = read_class_names(project, folder).get(0, "0")
+
+        stems = {p.stem for p in self.image_data_model.get_image_paths()}
+        files = [
+            f
+            for f in sorted(
+                (project / BOX_PREDICTIONS_DIR / source).glob("*.txt")
+            )
+            if f.stem in stems
+        ]
+        # This photo's edits first, so it counts as already done.
+        self._save_box_annotations()
+        complete = read_complete(project, folder)
+        todo = [
+            f
+            for f in files
+            if f.stem not in complete
+            and not box_file(project, folder, f.stem).exists()
+        ]
+        if not todo:
+            QMessageBox.information(
+                self,
+                "Copy to all photos",
+                f"Every photo {source} ran on already has boxes in "
+                f"{target.name}, or is complete. Nothing to copy.",
+            )
+            return
+        answer = self._ask_copy_all(
+            f"Copy the boxes of {source} into {target.name} as {class_name}, "
+            f"on {len(todo)} photos? ({len(files) - len(todo)} already have "
+            f"boxes or are complete, and are left alone.)\n\n"
+            f"Copy only: then fix each photo and tick Complete.\n"
+            f"Copy and mark complete: the predictions are trusted as they are, "
+            f"empty ones too."
+        )
+        if answer is None:
+            return
+
+        boxes = empty = 0
+        for f in todo:
+            rows = [line.split() for line in f.read_text().splitlines()]
+            lines = [
+                f"{class_id} {' '.join(r[1:5])}\n" for r in rows if len(r) >= 5
+            ]
+            boxes += len(lines)
+            empty += not lines
+            if lines:
+                out = box_file(project, folder, f.stem)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text("".join(lines))
+        if answer == "complete":
+            write_complete(project, folder, complete | {f.stem for f in todo})
+        # This photo, if it was one of them, from its new file.
+        if self.image_layer is not None:
+            self._load_box_annotations(self.image_layer.data.shape, [folder])
+
+        message = (
+            f"Copied {boxes} boxes to {target.name} on {len(todo) - empty} "
+            f"photos ({empty} had none)"
+            + (
+                f"; all {len(todo)} marked complete"
+                if answer == "complete"
+                else ""
+            )
+        )
+        self._refresh_box_status()
+        print(message)
+        show_info(message)
+
+    def _ask_copy_all(self, text):
+        """ "copy", "complete" (copy and mark complete), or None to cancel."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Copy to all photos")
+        box.setText(text)
+        copy = box.addButton("Copy only", QMessageBox.AcceptRole)
+        complete = box.addButton(
+            "Copy and mark complete", QMessageBox.AcceptRole
+        )
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(copy)
+        box.exec_()
+        clicked = box.clickedButton()
+        if clicked is copy:
+            return "copy"
+        if clicked is complete:
+            return "complete"
+        return None
+
+    # ------------------------------------------------------------------
+    # Complete: per photo and box layer, in the layer's complete.list.
+    # ------------------------------------------------------------------
+
+    def _current_stem(self):
+        paths = self.image_data_model.get_image_paths()
+        if not 0 <= self.current_image_index < len(paths):
+            return None
+        return paths[self.current_image_index].stem
+
+    def _on_complete_toggled(self, checked):
+        """Mark this photo complete in the selected box layer, or not."""
+        from ..utilities.box_annotations import set_complete
+
+        layer = self.shapes_layer
+        project = (
+            self.image_data_model and self.image_data_model.parent_directory
+        )
+        stem = self._current_stem() if project else None
+        if layer is None or stem is None:
+            return
+        # The boxes as they are now are the complete ones.
+        self._save_box_annotations()
+        set_complete(project, self._box_folder(layer), stem, checked)
+        print(
+            f"{stem}: {layer.name} {'complete' if checked else 'not complete'}"
+        )
+        self._refresh_box_status()
+
+    def _box_state(self, folder, layer, complete):
+        """This photo's state in one box layer, as the status line says it."""
+        n = len(layer.data)
+        boxes = f"{n} box{'es' if n != 1 else ''}"
+        if self._current_stem() in complete:
+            return f"complete, {boxes}" if n else "complete, empty"
+        label_layer = getattr(self, "boxes_layer", None)
+        k = len(label_layer.data) if label_layer is not None else 0
+        if k:
+            return (
+                f"marked up ({k} label box{'es' if k != 1 else ''}), {boxes}"
+            )
+        return f"NOT complete, {boxes}"
+
+    #: Key prefix of the status lines' overlays, one per box layer.
+    STATUS_OVERLAY = "box_status_"
+
+    def _show_status_lines(self, lines):
+        """Show (text, colour) *lines* on the canvas, each in its own colour.
+
+        One text overlay per line, so each box layer's line is green or
+        orange on its own; napari stacks them in the corner. Before 0.9,
+        with only the one text_overlay, all in the first line's colour.
+        """
+        canvas = getattr(self.viewer, "canvas", None)
+        overlays = getattr(canvas, "overlays", None)
+        if overlays is None or not hasattr(overlays, "text"):
+            overlay = self.viewer.text_overlay
+            overlay.text = "\n".join(t for t, _ in lines)
+            overlay.color = lines[0][1] if lines else "white"
+            overlay.font_size = 14
+            overlay.visible = bool(lines)
+            return
+        from napari.components.overlays import TextOverlay
+
+        # Listed top to bottom; napari stacks the later-added ones above.
+        wanted = [f"{self.STATUS_OVERLAY}{i}" for i in range(len(lines))]
+        for key in [k for k in overlays if k.startswith(self.STATUS_OVERLAY)]:
+            if key not in wanted:
+                del overlays[key]
+        for key, (text, colour) in zip(wanted, reversed(lines), strict=False):
+            if key not in overlays:
+                overlays[key] = TextOverlay(font_size=14)
+            overlay = overlays[key]
+            overlay.text, overlay.color, overlay.visible = text, colour, True
+
+    def _refresh_box_status(self, event=None):
+        """The Complete tick, the status line on the photo, and the totals."""
+        from pathlib import Path
+
+        from ..utilities.box_annotations import box_file, read_complete
+
+        if self.profile.show_labels or self.image_data_model is None:
+            return
+        project = self.image_data_model.parent_directory
+        stem = self._current_stem() if project else None
+        layers = self._live_box_layers()
+        if stem is None or not layers:
+            self._show_status_lines([])
+            self.box_totals_label.setText("")
+            return
+
+        # Each layer's line green if this photo is complete in it.
+        lines, active_complete = [], False
+        for folder, layer in layers.items():
+            complete = read_complete(project, folder)
+            state = self._box_state(folder, layer, complete)
+            colour = "lightgreen" if stem in complete else "orange"
+            lines.append((f"{layer.name}: {state}", colour))
+            if layer is self.shapes_layer:
+                active_complete = stem in complete
+                active = (folder, complete)
+        self._show_status_lines(lines)
+
+        self.complete_check.blockSignals(True)
+        self.complete_check.setChecked(active_complete)
+        self.complete_check.setText(
+            f"Complete: all {self.shapes_layer.name} boxed on this photo"
+        )
+        self.complete_check.blockSignals(False)
+        if event is not None:
+            # A box drawn or moved: the totals, from the files, can wait.
+            return
+
+        with_label_boxes = {
+            Path(r["file_name"]).stem
+            for r in self.image_data_model.load_existing_boxes()
+        }
+        label_layer = getattr(self, "boxes_layer", None)
+        if label_layer is not None and len(label_layer.data):
+            with_label_boxes.add(stem)
+        folder, complete = active
+        stems = [p.stem for p in self.image_data_model.get_image_paths()]
+        full = empty = marked = 0
+        for s in stems:
+            if s in complete:
+                txt = box_file(project, folder, s)
+                if txt.exists() and txt.read_text().strip():
+                    full += 1
+                else:
+                    empty += 1
+            elif s in with_label_boxes:
+                marked += 1
+        self.box_totals_label.setText(
+            f"{self.shapes_layer.name}: {full} complete, {empty} complete and "
+            f"empty, {marked} marked up, "
+            f"{len(stems) - full - empty - marked} not complete"
+        )
 
     def _fill_class_combo(self, names):
         """List *names* in the class combo, keeping the current choice.
@@ -1264,7 +1725,8 @@ class NDAILab(QWidget):
 
         An image that never had boxes in a layer gets no file there; one
         whose boxes were all deleted gets an empty file, so they stay
-        deleted -- and the image counts as checked, holding none.
+        deleted. Whether the image is complete is its own matter: the
+        layer's complete.list.
         """
         from ..utilities.box_annotations import box_file, write_yolo_boxes
 

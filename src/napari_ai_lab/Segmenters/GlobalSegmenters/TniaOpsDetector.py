@@ -13,13 +13,9 @@ at 960 pixels, so a small bib far back can be missed.
 
 from dataclasses import dataclass, field
 
+from ...utilities.shared_models import shared_model
 from .GlobalSegmenterBase import GlobalSegmenterBase
-from .SkopDetector import (
-    PtModelPicker,
-    SkopDetector,
-    _float_field,
-    _int_field,
-)
+from .SkopDetector import SkopDetector, _float_field
 
 # Optional: ai-lab without tnia-ops simply does not offer these.
 try:
@@ -28,51 +24,117 @@ except ImportError:
     detect_bibs = detect_people = None
 
 
-@dataclass
-class TniaPeopleDetector(PtModelPicker, SkopDetector):
-    """tnia-ops' detect_people: a COCO YOLO checkpoint kept to people."""
-
-    model_file_path: str = field(
-        default="",
+def _friendly(default, label, help_, lo, hi, step, kind):
+    """A field the form shows under *label*, with *help_* as its tooltip."""
+    return field(
+        default=default,
         metadata={
-            "type": "file",
+            "type": kind,
             "param_type": "inference",
-            "file_type": "file",
-            "default": "",
+            "label": label,
+            "help": help_,
+            "min": lo,
+            "max": hi,
+            "step": step,
+            "default": default,
         },
     )
-    size: int = _int_field(1280, 320, 4096, 32)
-    conf: float = _float_field(0.35)
-    keep_relative_height: float = _float_field(0.45)
+
+
+#: The model People runs, fetched once into the shared models folder.
+PEOPLE_MODEL = "yolo11m.pt"
+PEOPLE_MODEL_URL = (
+    "https://github.com/ultralytics/assets/releases/download/v8.4.0/"
+    + PEOPLE_MODEL
+)
+
+
+@dataclass
+class TniaPeopleDetector(SkopDetector):
+    """People: tnia-ops' detect_people, with nothing to set up.
+
+    The friendly counterpart of the YOLO segmenter. Its model is fixed -- a
+    COCO YOLO kept to its person class -- and lives in the per-user shared
+    models folder, downloaded there the first time, so it works in any
+    project with no model to choose. It only runs on colour photos, so there
+    is no axis to choose either; the options are about people.
+    """
+
+    show_axis_choice = False
+
+    conf: float = _friendly(
+        0.35,
+        "Confidence it's a person",
+        "Lower finds more people, and more things that are not people.",
+        0.0,
+        1.0,
+        0.05,
+        "float",
+    )
+    keep_relative_height: float = _friendly(
+        0.45,
+        "Only the nearest people",
+        "Drop people shorter than this fraction of the tallest one -- the "
+        "ones further back. 0 keeps everyone.",
+        0.0,
+        1.0,
+        0.05,
+        "float",
+    )
+    min_height: int = _friendly(
+        0,
+        "Minimum height (pixels)",
+        "Drop people shorter than this, in the photo's pixels. 0 keeps "
+        "everyone.",
+        0,
+        10000,
+        10,
+        "int",
+    )
+    size: int = _friendly(
+        1280,
+        "Detail (photo size)",
+        "The photo's long side is looked at this many pixels long. Higher "
+        "finds people further back, more slowly.",
+        320,
+        4096,
+        32,
+        "int",
+    )
 
     instructions = """
-People, YOLO (tnia-ops):
-• model - a COCO YOLO .pt, e.g. yolo11m.pt, from the project's models/
-  folder or browsed to with model file path
-• size - the photo's long side is run at this; 1280 keeps people far back
-• conf - lower finds more
-• keep relative height - drop people shorter than this fraction of the
-  tallest, the ones further back; 0 keeps everyone
+People:
+• finds the people in a photo, with a box around each
+• works in any project: its model downloads once, the first time, to
+  ~/.napari_ai_lab/models
+• hover over an option to see what it does
 • runs in tnia-ops' photo environment, built on first use
     """
+
+    def __post_init__(self):
+        super().__post_init__()
+        self._potential_axes = ["YXC"]
+        self._supported_axes = ["YXC"]
 
     @property
     def op(self):
         return detect_people
 
+    def get_recommended_axis(self) -> str:
+        return "YXC"
+
     def _op_params(self) -> dict:
         return {
-            "weights": self._weights(),
+            "weights": str(shared_model(PEOPLE_MODEL, PEOPLE_MODEL_URL)),
             "size": self.size,
             "conf": self.conf,
             "keep_relative_height": self.keep_relative_height,
+            "min_height": self.min_height,
         }
 
     @classmethod
     def register(cls):
-        return GlobalSegmenterBase.register_framework(
-            "People, YOLO (tnia-ops)", cls
-        )
+        return GlobalSegmenterBase.register_framework("People", cls)
 
 
 @dataclass

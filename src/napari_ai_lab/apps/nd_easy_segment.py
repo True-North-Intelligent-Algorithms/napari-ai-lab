@@ -347,11 +347,18 @@ class NDEasySegment(BaseNDApp):
             return
 
         models_dir = str(self.image_data_model.get_models_directory())
+        # A YOLO model is a file, listed as e.g. "bibs.pt" or
+        # "yolo11s.pt (shared)": the name to number is "bibs", and the
+        # numbered names to skip are files.
+        ext = ""
+        name = model_name.removesuffix(" (shared)")
+        if name.endswith(".pt"):
+            name, ext = os.path.basename(name)[:-3], ".pt"
         # Strip a trailing _NNNNN so continuing from my_model_00001 proposes
         # my_model_00002, not my_model_00001_00000.
-        base = re.sub(r"_\d{5}$", "", model_name)
+        base = re.sub(r"_\d{5}$", "", name)
         self.model_name_edit.setText(
-            generate_next_name(models_dir, base, ext="")
+            generate_next_name(models_dir, base, ext=ext)
         )
 
     def _on_show_history(self):
@@ -421,6 +428,10 @@ class NDEasySegment(BaseNDApp):
         name = self.segmenter.training_model_name
         models_dir = str(self.image_data_model.get_models_directory())
         existing = os.path.join(models_dir, name)
+        # A YOLO model is one file, <name>.pt, with its history beside it.
+        model_file = existing + ".pt"
+        if os.path.isfile(model_file) and not os.path.isdir(existing):
+            return self._archive_model_file(name, models_dir, model_file)
         if not os.path.isdir(existing):
             return True
 
@@ -445,6 +456,54 @@ class NDEasySegment(BaseNDApp):
         if hasattr(self, "progress_logger"):
             self.progress_logger.log_info(
                 f"Archived existing '{name}' to archive/{archived}"
+            )
+        return True
+
+    def _archive_model_file(self, name, models_dir, model_file) -> bool:
+        """_archive_if_overwriting for a model that is one file (YOLO's).
+
+        Training on from the same file continues it, history and all, so
+        that needs no archive -- only training something else over it does.
+        """
+        import shutil
+
+        from ..utilities.io_util import generate_next_name
+
+        if name in self._models_trained_this_session:
+            return True
+        continuing = os.path.normcase(
+            os.path.abspath(
+                getattr(self.segmenter, "_initial_weights", lambda: "")()
+            )
+        ) == os.path.normcase(os.path.abspath(model_file))
+        if continuing:
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Overwrite model?",
+            f"'{name}.pt' already exists and was not trained in this session."
+            f"\n\nIt will be copied to archive/ and then replaced.",
+            QMessageBox.Ok | QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Ok:
+            return False
+        archive_dir = os.path.join(models_dir, "archive")
+        os.makedirs(archive_dir, exist_ok=True)
+        archived = generate_next_name(archive_dir, name, ext=".pt")
+        shutil.copy2(model_file, os.path.join(archive_dir, archived + ".pt"))
+        history = model_file + "_history.csv"
+        if os.path.isfile(history):
+            shutil.copy2(
+                history,
+                os.path.join(archive_dir, archived + ".pt_history.csv"),
+            )
+        # Its history would be continued by the new model, which is not its
+        # descendant.
+        with contextlib.suppress(OSError):
+            os.remove(history)
+        if hasattr(self, "progress_logger"):
+            self.progress_logger.log_info(
+                f"Archived existing '{name}.pt' to archive/{archived}.pt"
             )
         return True
 
@@ -519,9 +578,11 @@ class NDEasySegment(BaseNDApp):
         )
 
         # Train button (same as in automatic mode controls)
-        train_btn = QPushButton("Train Model")
-        train_btn.clicked.connect(self._on_train)
-        layout.addWidget(train_btn)
+        # Kept: _run_training disables it while a training runs, so a second
+        # click cannot start another on the same model.
+        self.train_btn = QPushButton("Train Model")
+        self.train_btn.clicked.connect(self._on_train)
+        layout.addWidget(self.train_btn)
 
         history_btn = QPushButton("Show Training History")
         history_btn.clicked.connect(self._on_show_history)
@@ -1630,6 +1691,12 @@ class NDEasySegment(BaseNDApp):
         ai_lab = getattr(self, "ai_lab", None)
         return ai_lab is None or ai_lab.profile.show_labels
 
+    #: Edge colours for "Box predictions" layers, one per source in turn.
+    #: Unlike the box annotation layers' (NDAILab.BOX_LAYER_COLORS), the
+    #: label box's blue and the 3D boxes' magenta, so a prediction is not
+    #: mistaken for a checked box.
+    BOX_PREDICTION_COLORS = ("cyan", "red", "white", "hotpink")
+
     def box_predictions_layer(self, source):
         """The "Box predictions (<source>)" layer, made if it is missing.
 
@@ -1641,19 +1708,26 @@ class NDEasySegment(BaseNDApp):
         layer = self.box_predictions_layers.get(name)
         if layer is not None and layer in self.viewer.layers:
             return layer
+        # One colour per source, so two detectors' boxes can be told apart;
+        # a source made again keeps its colour (its place in the dict).
+        names = list(self.box_predictions_layers)
+        index = names.index(name) if name in names else len(names)
+        colour = self.BOX_PREDICTION_COLORS[
+            index % len(self.BOX_PREDICTION_COLORS)
+        ]
         layer = self.viewer.add_shapes(
             name=name,
             shape_type="rectangle",
-            edge_color="cyan",
+            edge_color=colour,
             face_color="transparent",
-            edge_width=2,
+            edge_width=4,
             # The layer's ndim, not len(data.shape): an RGB image's colour
             # axis is not a dimension. Counting it made a 3-D shapes layer,
             # whose slider then sliced the next image down to one row.
             ndim=self.image_layer.ndim,
             features={"score": np.zeros(0, dtype=object)},
             feature_defaults={"score": ""},
-            text={"string": "{score}", "size": 10, "color": "cyan"},
+            text={"string": "{score}", "size": 10, "color": colour},
         )
         self.box_predictions_layers[name] = layer
         return layer

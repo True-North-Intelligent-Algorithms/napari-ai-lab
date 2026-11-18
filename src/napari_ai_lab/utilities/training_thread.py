@@ -48,6 +48,14 @@ class _TrainingWorker(QObject):
             AttributeError,
         ) as e:
             self.error.emit(str(e))
+        except Exception as e:  # noqa: BLE001
+            # Anything else -- a worker process that crashed, say -- is still
+            # a failed training, said in a line. Left uncaught, napari shows
+            # it with every local variable: every image path, for YOLO.
+            import traceback
+
+            traceback.print_exc()
+            self.error.emit(f"{type(e).__name__}: {e}")
         finally:
             self.finished.emit(result)
 

@@ -11,13 +11,16 @@ The boxes reach the viewer the way MicroSamYoloSegmenter's do, through
 it returns an empty one; a profile without labels drops it.
 """
 
+import contextlib
 import os
 from dataclasses import dataclass, field
 
 import numpy as np
 
+from ...mixins import TrainingBase
+from ...utilities.shared_models import shared_models_dir
 from .GlobalSegmenterBase import GlobalSegmenterBase
-from .SkopSegmenter import SkopSegmenter
+from .SkopSegmenter import SkopSegmenter, _get_runner
 
 # One at a time: a scikit-ops without one of them should still offer the others.
 try:
@@ -33,6 +36,29 @@ try:
     from skop.ops.detect import object_aware_yolo
 except ImportError:
     object_aware_yolo = None
+try:
+    # Apart from the detect op: a scikit-ops without the training op should
+    # lose the Train button, not the detector.
+    from skop.ops.train import train_yolo
+    from skop.ops.train.yolo import Cache as YoloCache
+except ImportError:
+    train_yolo = YoloCache = None
+
+#: Stock models training can start from; ultralytics downloads them. Bigger
+#: is slower and, with enough boxes, better: n, s, m.
+STOCK_MODELS = ["yolo11n.pt", "yolo11s.pt", "yolo11m.pt"]
+
+
+def _training_field(default, kind, **meta):
+    return field(
+        default=default,
+        metadata={
+            "type": kind,
+            "param_type": "training",
+            "default": default,
+            **meta,
+        },
+    )
 
 
 def _float_field(default, lo=0.0, hi=1.0, step=0.05):
@@ -101,10 +127,11 @@ class SkopDetector(SkopSegmenter):
 
 
 class PtModelPicker:
-    """A YOLO ``.pt`` chosen from the project's models/ folder, or browsed.
+    """A YOLO ``.pt`` chosen from the project's or the shared models folder, or browsed.
 
     For a detector with a ``model_file_path`` field: the combo lists every
-    ``.pt`` under the project's ``models/`` directory, and a browsed file
+    ``.pt`` under the project's ``models/`` directory and in the per-user
+    shared one (``utilities.shared_models``), and a browsed file
     wins over the combo. Shared by YOLO and tnia-ops' people detector.
     """
 
@@ -115,16 +142,31 @@ class PtModelPicker:
         self.inference_model_name = ""
 
     def _model_files(self) -> dict:
-        """Name -> path for every .pt under model_save_dir. The name is the
-        path relative to it, so two runs' best.pt stay apart."""
-        if not self.model_save_dir or not os.path.isdir(self.model_save_dir):
-            return {}
+        """Name -> path for every .pt under model_save_dir, then every one in
+        the per-user shared models folder. A project model's name is its
+        path relative to model_save_dir, so two runs' best.pt stay apart; a
+        shared one is marked "(shared)"."""
         found = {}
-        for root, _dirs, files in sorted(os.walk(self.model_save_dir)):
-            for name in sorted(files):
-                if name.endswith(".pt"):
-                    path = os.path.join(root, name)
-                    found[os.path.relpath(path, self.model_save_dir)] = path
+        if self.model_save_dir and os.path.isdir(self.model_save_dir):
+            # Walked top-down, unsorted, so the folders can be pruned as it
+            # goes: archived models and training's working folders
+            # (<name>_training/) are not models to choose.
+            for root, dirs, files in os.walk(self.model_save_dir):
+                dirs[:] = sorted(
+                    d
+                    for d in dirs
+                    if d != "archive" and not d.endswith("_training")
+                )
+                for name in sorted(files):
+                    if name.endswith(".pt"):
+                        path = os.path.join(root, name)
+                        found[os.path.relpath(path, self.model_save_dir)] = (
+                            path
+                        )
+        shared = shared_models_dir()
+        if shared.is_dir():
+            for path in sorted(shared.glob("*.pt")):
+                found[f"{path.name} (shared)"] = str(path)
         return found
 
     def get_model_axis_map(self) -> dict:
@@ -150,6 +192,7 @@ class PtModelPicker:
         if name not in files:
             raise FileNotFoundError(
                 f"No YOLO model chosen. Put a .pt file in {self.model_save_dir!r} "
+                f"or {str(shared_models_dir())!r} "
                 "and pick it from the model combo, or browse to one with "
                 "model file path."
             )
@@ -157,7 +200,7 @@ class PtModelPicker:
 
 
 @dataclass
-class YoloSkopDetector(PtModelPicker, SkopDetector):
+class YoloSkopDetector(PtModelPicker, SkopDetector, TrainingBase):
     """Any trained YOLO model, on the whole image or in tiles: skop's ``yolo``.
 
     The main YOLO detector. FastSAM and object-aware YOLO are the special
@@ -182,6 +225,27 @@ class YoloSkopDetector(PtModelPicker, SkopDetector):
     object_size: int = _int_field(0, 0, 10_000_000, 100)
     overlap: float = _float_field(0.15, 0.0, 0.95)
 
+    # Training, on a crop set the Augment tab's "YOLO crops" wrote.
+    num_epochs: int = _training_field(100, "int", min=1, max=5000, step=10)
+    #: 0 trains at the size the crops were cut at, which is the usual thing.
+    train_imgsz: int = _training_field(0, "int", min=0, max=4096, step=32)
+    #: -1 lets ultralytics choose from the GPU's memory.
+    train_batch_size: int = _training_field(16, "int", min=-1, max=256, step=1)
+    #: What "start from" means when no model of the project's is chosen.
+    stock_model: str = _training_field(
+        "yolo11s.pt", "str", choices=STOCK_MODELS
+    )
+    patience: int = _training_field(50, "int", min=0, max=5000, step=10)
+    #: 0: numbers and letters must not be mirrored. 0.5 for symmetric things.
+    fliplr: float = _training_field(0.0, "float", min=0.0, max=1.0, step=0.1)
+    #: Ultralytics' own augmentation on top of the crops' (mosaic, zoom...).
+    augment: bool = _training_field(True, "bool")
+    cache: str = _training_field("ram", "str", choices=["ram", "disk", "off"])
+
+    #: Shown in the "Start from" combo for no project model: training starts
+    #: from the stock model below, not from nothing.
+    FROM_SCRATCH_LABEL = "(stock model)"
+
     instructions = """
 YOLO (scikit-ops):
 • model - any YOLO .pt in the project's models/ folder, subfolders included
@@ -197,7 +261,137 @@ YOLO (scikit-ops):
   image, and the image is cut into tiles that keep them big enough
 • overlap - how much neighbouring tiles share, so an object on a seam is
   whole in one of them
+Training: make crops first (Augment tab, YOLO crops), then pick them as
+"Patches to Process". The model is saved as models/<name>.pt.
     """
+
+    def __post_init__(self):
+        super().__post_init__()
+        TrainingBase.__init__(self)
+        self.training_model_name = ""
+        # Which model training starts from; "" is the stock model.
+        self.initial_model_name = ""
+
+    def train(self, updater=None):
+        """Train on the crop set the app selected (``patch_path``).
+
+        The crop set's pairs.json lists the images and labels, training
+        first and validation last, and the size they were cut at; this hands
+        them to scikit-ops' ``train_yolo``, which writes
+        ``<model_save_dir>/<name>.pt`` and its history beside it.
+        """
+        from ...utilities.box_crops import read_pairs
+
+        if train_yolo is None:
+            return {
+                "success": False,
+                "message": "scikit-ops has no YOLO training op -- upgrade it.",
+            }
+        if not self.model_save_dir:
+            return {"success": False, "message": "model_save_dir is not set."}
+        if not self.patch_path or not os.path.isfile(
+            os.path.join(self.patch_path, "pairs.json")
+        ):
+            return {
+                "success": False,
+                "message": (
+                    f"No crop set at {self.patch_path!r}. Make one in the "
+                    "Augment tab with YOLO crops, then pick it as Patches "
+                    "to Process."
+                ),
+            }
+        pairs = read_pairs(self.patch_path)
+        name = self.training_model_name or "yolo_model"
+
+        def on_progress(event):
+            if updater is None:
+                return
+            # See StardistSkopSegmenter.train: an event can arrive after the
+            # progress bar behind updater is gone.
+            with contextlib.suppress(RuntimeError):
+                updater(
+                    event.current or 0,
+                    event.maximum or self.num_epochs,
+                    event.message or "",
+                )
+
+        from qtpy.QtCore import QCoreApplication
+        from superqt.utils import ensure_main_thread
+
+        report = (
+            ensure_main_thread(on_progress)
+            if QCoreApplication.instance() is not None
+            else on_progress
+        )
+
+        try:
+            model_path = self._run_training(pairs, name, report)
+        except Exception as e:  # noqa: BLE001 -- appose's TaskException
+            if "crashed" not in str(e):
+                raise
+            return {"success": False, "message": self._crash_message(name, e)}
+
+        # Selectable without a restart: the model combo lists models/*.pt.
+        self.inference_model_name = os.path.relpath(
+            model_path, self.model_save_dir
+        )
+        return {
+            "success": True,
+            "message": f"Training complete. Model saved to: {model_path}",
+        }
+
+    def _crash_message(self, name, error) -> str:
+        """What to say when the training process died: how far it got, and
+        the last epoch's weights to carry on from."""
+        workspace = os.path.join(self.model_save_dir, f"{name}_training")
+        last = os.path.join(workspace, "run", "weights", "last.pt")
+        epochs = 0
+        results = os.path.join(workspace, "run", "results.csv")
+        if os.path.exists(results):
+            with open(results) as f:
+                epochs = max(0, sum(1 for _ in f) - 1)
+        first = str(error).strip().splitlines()[0]
+        message = (
+            f"The training process crashed after {epochs} of "
+            f"{self.num_epochs} epochs ({first})"
+        )
+        if os.path.exists(last):
+            message += (
+                f". The last weights it saved are in {last}: copy that into "
+                f"models/ under a new name and start from it to carry on"
+            )
+        return (
+            message + ". Its log: " + os.path.join(workspace, "training.log")
+        )
+
+    def _run_training(self, pairs, name, report):
+        return _get_runner().run(
+            train_yolo,
+            images=pairs["images"],
+            labels=pairs["labels"],
+            model_dir=self.model_save_dir,
+            name=name,
+            class_names=pairs.get("class_names") or None,
+            initial_model=self._initial_weights(),
+            epochs=self.num_epochs,
+            imgsz=self.train_imgsz or int(pairs.get("imgsz", 640)),
+            batch_size=self.train_batch_size,
+            patience=self.patience,
+            fliplr=self.fliplr,
+            augment=self.augment,
+            cache=YoloCache[self.cache],
+            val_size=int(pairs["val_size"]),
+            dataset_id=f"{os.path.basename(self.patch_path)} {pairs.get('made', '')}",
+            on_progress=report,
+        )
+
+    def _initial_weights(self) -> str:
+        """A project or shared model's path, or the stock model's name."""
+        if self.initial_model_name:
+            return self._model_files().get(
+                self.initial_model_name, self.initial_model_name
+            )
+        return self.stock_model
 
     def _op_params(self) -> dict:
         return {

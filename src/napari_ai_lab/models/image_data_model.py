@@ -478,11 +478,14 @@ class ImageDataModel:
         them to the user as a "Patches to Process" choice rather than
         relying on a separately-tracked axis selection.
 
+        YOLO crop sets (``utilities.box_crops``, e.g. ``yolo_bibs``) are
+        listed too: any subdirectory holding a ``pairs.json``.
+
         Returns:
             Sorted list of subdirectory names under ``patches/`` that
-            start with ``patches_axis_``.  Returns an empty list when
-            ``parent_directory`` is unset or no patches have been
-            generated yet.
+            start with ``patches_axis_`` or hold a crop set.  Returns an
+            empty list when ``parent_directory`` is unset or no patches
+            have been generated yet.
         """
         if self.parent_directory is None:
             return []
@@ -492,7 +495,11 @@ class ImageDataModel:
         return sorted(
             d.name
             for d in root.iterdir()
-            if d.is_dir() and d.name.startswith("patches_axis_")
+            if d.is_dir()
+            and (
+                d.name.startswith("patches_axis_")
+                or (d / "pairs.json").is_file()
+            )
         )
 
     def get_patches_directory_by_name(self, name: str) -> Path:
@@ -2105,6 +2112,8 @@ class ImageDataModel:
         else:
             print(f"\nGenerating {self.num_patches} patches...")
 
+        if hasattr(self.augmenter, "take_reports"):
+            self.augmenter.take_reports()
         for i in range(self.num_patches):
             self.augmenter.augment_and_save(
                 image,
@@ -2122,6 +2131,8 @@ class ImageDataModel:
                 )
             elif (i + 1) % 10 == 0 or (i + 1) == self.num_patches:
                 print(f"  Created {i+1}/{self.num_patches} patches")
+
+        self._log_augmenter_reports(progress_logger)
 
         # Write info.json
         if progress_logger:
@@ -2149,6 +2160,13 @@ class ImageDataModel:
             print(f"✅ Created {self.num_patches} patches in {patches_dir}")
 
         return patches_dir
+
+    def _log_augmenter_reports(self, progress_logger):
+        """The augmenter's warnings (scale, min objects) in the Augment log."""
+        take = getattr(self.augmenter, "take_reports", None)
+        for message in take() if take else []:
+            if progress_logger:
+                progress_logger.log_info(f"ℹ️ {message}")
 
     def generate_patches_from_labels(
         self,
@@ -2225,6 +2243,8 @@ class ImageDataModel:
             print(msg)
 
         done = 0
+        if hasattr(self.augmenter, "take_reports"):
+            self.augmenter.take_reports()
 
         for image_path, truth_path in zip(
             input_files, truth_files, strict=False
@@ -2263,6 +2283,7 @@ class ImageDataModel:
                 sub_sample=1,
             )
 
+        self._log_augmenter_reports(progress_logger)
         msg = f"✅ Created {done} patches in {patches_dir}"
         if progress_logger:
             progress_logger.log_info(msg)

@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..Augmenters import AugmenterBase
@@ -71,6 +72,18 @@ class NDEasyAugment(BaseNDApp):
         self.boxes_layer_combo.addItems(["Label box", "3D Bounding Boxes"])
         self.layout().addWidget(self.boxes_layer_combo)
 
+        # YOLO crops only: photos to keep out of the crop set -- a held-back
+        # test set, labelled for checking but never trained on. A list of
+        # photo names, one a line, in a .txt file in the project folder.
+        self.leave_out_label = QLabel("Leave out photos listed in:")
+        self.layout().addWidget(self.leave_out_label)
+        self.leave_out_combo = QComboBox()
+        self.leave_out_combo.setToolTip(
+            "A .txt file in the project folder naming photos, one a line, "
+            "to keep out of training even if they have boxes."
+        )
+        self.layout().addWidget(self.leave_out_combo)
+
         # Add Augmenter selection
         self.augmenter_label = QLabel("Augmenter:")
         self.layout().addWidget(self.augmenter_label)
@@ -88,39 +101,43 @@ class NDEasyAugment(BaseNDApp):
         )
         self.layout().addWidget(self.augmentation_form)
 
-        # Add patch size control
-        patch_size_layout = QHBoxLayout()
-        patch_size_layout.addWidget(QLabel("Patch Size (XY):"))
+        # Patch size and count rows, each a widget so a box-crop augmenter,
+        # which has its own crop size and count, can hide them.
+        def _row(label, spinbox):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel(label))
+            row_layout.addWidget(spinbox)
+            self.layout().addWidget(row)
+            return row
+
         self.patch_size_xy_spinbox = QSpinBox()
         self.patch_size_xy_spinbox.setMinimum(16)
         self.patch_size_xy_spinbox.setMaximum(2048)
         self.patch_size_xy_spinbox.setValue(128)
         self.patch_size_xy_spinbox.setSingleStep(16)
-        patch_size_layout.addWidget(self.patch_size_xy_spinbox)
+        self.patch_size_xy_row = _row(
+            "Patch Size (XY):", self.patch_size_xy_spinbox
+        )
 
-        self.layout().addLayout(patch_size_layout)
-
-        # Add Z patch size control
-        patch_size_z_layout = QHBoxLayout()
-        patch_size_z_layout.addWidget(QLabel("Patch Size (Z):"))
         self.patch_size_z_spinbox = QSpinBox()
         self.patch_size_z_spinbox.setMinimum(1)
         self.patch_size_z_spinbox.setMaximum(512)
         self.patch_size_z_spinbox.setValue(32)
         self.patch_size_z_spinbox.setSingleStep(4)
-        patch_size_z_layout.addWidget(self.patch_size_z_spinbox)
-        self.layout().addLayout(patch_size_z_layout)
+        self.patch_size_z_row = _row(
+            "Patch Size (Z):", self.patch_size_z_spinbox
+        )
 
-        # Add number of patches control
-        num_patches_layout = QHBoxLayout()
-        num_patches_layout.addWidget(QLabel("Number of Patches:"))
         self.num_patches_spinbox = QSpinBox()
         self.num_patches_spinbox.setMinimum(1)
         self.num_patches_spinbox.setMaximum(10000)
         self.num_patches_spinbox.setValue(200)
         self.num_patches_spinbox.setSingleStep(10)
-        num_patches_layout.addWidget(self.num_patches_spinbox)
-        self.layout().addLayout(num_patches_layout)
+        self.num_patches_row = _row(
+            "Number of Patches:", self.num_patches_spinbox
+        )
 
         # Add buttons for augmentation operations
         buttons_layout = QHBoxLayout()
@@ -234,6 +251,285 @@ class NDEasyAugment(BaseNDApp):
 
         # Set the new augmenter in the form - this rebuilds the UI with new parameters
         self.augmentation_form.set_nd_operation(self.augmenter)
+        self._show_controls_for_augmenter()
+
+    # ------------------------------------------------------------------
+    # YOLO crops: an augmenter that makes a whole training set from a box
+    # layer (makes_box_crops), rather than patches slice by slice.
+    # ------------------------------------------------------------------
+
+    #: The boxes-layer choices of the patch augmenters' from_label_boxes mode.
+    LABEL_BOX_SOURCES = ("Label box", "3D Bounding Boxes")
+
+    def _makes_box_crops(self):
+        return getattr(
+            getattr(self, "augmenter", None), "makes_box_crops", False
+        )
+
+    def _show_controls_for_augmenter(self):
+        """Show the controls the selected augmenter uses.
+
+        YOLO crops has its own crop size and count, and takes its boxes from
+        a box annotation layer -- so the patch rows go, and the boxes-layer
+        combo lists the project's box layers instead of the label boxes.
+        """
+        crops = self._makes_box_crops()
+        for widget in (
+            self.patch_mode_label,
+            self.patch_mode_combo,
+            self.patch_size_z_row,
+        ):
+            widget.setVisible(not crops)
+        self.boxes_layer_label.setText(
+            "Box layer:" if crops else "Boxes Layer:"
+        )
+        # Patch size and count are the crop size and crops per photo. Each
+        # mode keeps its own values: 128 px suits a cell patch, not a photo.
+        mode = "crops" if crops else "patches"
+        old = getattr(self, "_size_mode", "patches")
+        if old != mode:
+            saved = self.__dict__.setdefault("_size_values", {})
+            saved[old] = (
+                self.patch_size_xy_spinbox.value(),
+                self.num_patches_spinbox.value(),
+            )
+            default = (
+                (self.augmenter.crop_size, self.augmenter.crops_per_photo)
+                if crops
+                else (128, 200)
+            )
+            size, count = saved.get(mode, default)
+            self.patch_size_xy_spinbox.setValue(size)
+            self.num_patches_spinbox.setValue(count)
+            self._size_mode = mode
+
+        current = self.boxes_layer_combo.currentText()
+        self.boxes_layer_combo.blockSignals(True)
+        self.boxes_layer_combo.clear()
+        if crops:
+            from ..utilities.box_annotations import box_folders
+
+            project = getattr(self.image_data_model, "parent_directory", None)
+            for folder in box_folders(project) if project else []:
+                self.boxes_layer_combo.addItem(
+                    folder or "Box annotations", folder
+                )
+        else:
+            for name in self.LABEL_BOX_SOURCES:
+                self.boxes_layer_combo.addItem(name, name)
+        index = self.boxes_layer_combo.findText(current)
+        self.boxes_layer_combo.setCurrentIndex(max(index, 0))
+        self.boxes_layer_combo.blockSignals(False)
+
+        self.leave_out_label.setVisible(crops)
+        self.leave_out_combo.setVisible(crops)
+        current = self.leave_out_combo.currentText()
+        self.leave_out_combo.clear()
+        self.leave_out_combo.addItem(self.LEAVE_OUT_NONE)
+        if crops:
+            project = getattr(self.image_data_model, "parent_directory", None)
+            if project is not None:
+                self.leave_out_combo.addItems(
+                    sorted(p.name for p in project.glob("*.txt"))
+                )
+        index = self.leave_out_combo.findText(current)
+        self.leave_out_combo.setCurrentIndex(max(index, 0))
+
+    LEAVE_OUT_NONE = "(none)"
+
+    def _left_out_stems(self):
+        """Stems of the photos the leave-out list names; empty for none."""
+        name = self.leave_out_combo.currentText()
+        project = getattr(self.image_data_model, "parent_directory", None)
+        if name == self.LEAVE_OUT_NONE or not name or project is None:
+            return set()
+        from pathlib import Path
+
+        stems = set()
+        for line in (project / name).read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                stems.add(Path(line).stem)
+        return stems
+
+    def _label_boxes(self):
+        """The project's 2D label boxes, stem -> [(l, t, r, b), ...] in pixels."""
+        from pathlib import Path
+
+        out = {}
+        for row in self.image_data_model.load_existing_boxes():
+            if row.get("middle_positions"):
+                continue
+            out.setdefault(Path(row["file_name"]).stem, []).append(
+                tuple(
+                    float(row[k]) for k in ("xstart", "ystart", "xend", "yend")
+                )
+            )
+        return out
+
+    def _crop_dir(self, folder):
+        """Where a box layer's crop set goes: patches/yolo_<layer>/."""
+        return self.image_data_model.get_patches_directory() / (
+            f"yolo_{folder or 'boxes'}"
+        )
+
+    def _make_box_crops(self):
+        """Write the selected box layer's crop set, for the Train tab."""
+        from qtpy.QtWidgets import QApplication
+
+        from ..utilities.box_annotations import read_class_names
+        from ..utilities.box_crops import labelled_photos
+
+        model = self.image_data_model
+        project = getattr(model, "parent_directory", None)
+        if project is None:
+            QMessageBox.warning(self, "YOLO crops", "Open a project first.")
+            return
+        if self.boxes_layer_combo.count() == 0:
+            QMessageBox.warning(
+                self, "YOLO crops", "The project has no box layers yet."
+            )
+            return
+        folder = self.boxes_layer_combo.currentData() or ""
+        layer = self.boxes_layer_combo.currentText()
+
+        # The boxes on screen are saved when the image changes; save now, so
+        # the photo being worked on counts as it looks.
+        ai_lab = getattr(self, "ai_lab", None)
+        if ai_lab is not None and hasattr(ai_lab, "_save_box_annotations"):
+            ai_lab._save_box_annotations()
+            ai_lab._save_boxes()
+
+        self.augmenter = self.augmentation_form.sync_nd_operation_instance(
+            self.augmenter
+        )
+        self.augmenter.crop_size = self.patch_size_xy_spinbox.value()
+        self.augmenter.crops_per_photo = self.num_patches_spinbox.value()
+        self.progress_logger.clear()
+        photos = labelled_photos(
+            project,
+            folder,
+            model.get_image_paths(),
+            model.load_image,
+            label_boxes=self._label_boxes(),
+        )
+        left_out = self._left_out_stems()
+        if left_out:
+            kept = [p for p in photos if p.stem not in left_out]
+            self.progress_logger.log_info(
+                f"Leaving out {len(photos) - len(kept)} complete photos listed "
+                f"in {self.leave_out_combo.currentText()}"
+            )
+            photos = kept
+        marked = sum(p.regions is not None for p in photos)
+        if marked:
+            self.progress_logger.log_info(
+                f"{marked} of them marked up: only inside their label boxes"
+            )
+        names = read_class_names(project, folder)
+        class_names = (
+            [names.get(i, f"class{i}") for i in range(max(names) + 1)]
+            if names
+            else None
+        )
+        out = self._crop_dir(folder)
+        self.progress_logger.log_info(
+            f"{layer}: {len(photos)} complete photos -> {out}"
+        )
+        self.progress_logger.log_info(
+            f"Each training photo with boxes gives 1 whole + "
+            f"{self.augmenter.crops_per_photo} crops of "
+            f"{self.augmenter.crop_size} px; one complete and empty, only "
+            f"itself whole"
+        )
+
+        def progress(done, total, stem):
+            self.progress_logger.update_progress(done, total, stem)
+            # Runs on the GUI thread; let the log and bar repaint.
+            QApplication.processEvents()
+
+        self.perform_augmentation_button.setEnabled(False)
+        try:
+            summary = self.augmenter.write(
+                photos,
+                out,
+                class_names=class_names,
+                source=(
+                    f"box_annotations/{folder}"
+                    if folder
+                    else "box_annotations"
+                ),
+                progress=progress,
+            )
+        except (ValueError, OSError, ImportError) as e:
+            self.progress_logger.log_error(f"YOLO crops failed: {e}")
+            return
+        finally:
+            self.perform_augmentation_button.setEnabled(True)
+        self.progress_logger.log_info(
+            f"✅ {summary['train']} training images from "
+            f"{summary['photos'] - summary['val_photos']} photos, "
+            f"{summary['val']} validation images from {summary['val_photos']} "
+            f"photos ({', '.join(summary['val_names'])}). "
+            f"Train at imgsz {summary['imgsz']}."
+        )
+        segment = getattr(ai_lab, "segment_widget", None)
+        if segment is not None and hasattr(segment, "_refresh_patches_combo"):
+            segment._refresh_patches_combo()
+
+    def _show_box_crops(self, limit=300):
+        """Open the selected layer's crop set in a second viewer, boxes on."""
+        import numpy as np
+        from skimage.io import imread
+
+        from ..utilities.box_annotations import read_yolo_boxes
+        from ..utilities.box_crops import PAD_GREY, read_pairs
+
+        folder = self.boxes_layer_combo.currentData() or ""
+        out = self._crop_dir(folder)
+        if not (out / "pairs.json").is_file():
+            QMessageBox.warning(
+                self,
+                "No Crops",
+                "No crops for this box layer. Make them first.",
+            )
+            return
+        pairs = read_pairs(out)
+        images = pairs["images"][:limit]
+        labels = pairs["labels"][:limit]
+        size = int(pairs["imgsz"])
+        # Whole photos are not square: each sits top-left on a grey square,
+        # so all stack.
+        stack = np.full((len(images), size, size, 3), PAD_GREY, np.uint8)
+        rects = []
+        for k, (image, label) in enumerate(zip(images, labels, strict=True)):
+            img = imread(image)[..., :3]
+            h, w = img.shape[:2]
+            stack[k, :h, :w] = img
+            boxes, _ = read_yolo_boxes(label, h, w)
+            rects += [np.column_stack([np.full(4, k), b]) for b in boxes]
+
+        viewer = napari.Viewer(title=f"YOLO crops: {out.name}")
+        viewer.add_image(stack, name="crops", rgb=True)
+        viewer.add_shapes(
+            rects,
+            shape_type="rectangle",
+            edge_color="yellow",
+            face_color="transparent",
+            edge_width=3,
+            name="boxes",
+        )
+        n_val = int(pairs["val_size"])
+        first_val = len(pairs["images"]) - n_val
+        viewer.text_overlay.visible = True
+        viewer.text_overlay.text = (
+            f"{len(pairs['images'])} images; validation from {first_val}"
+            + (
+                f" (showing the first {limit})"
+                if len(pairs["images"]) > limit
+                else ""
+            )
+        )
 
     def _set_image_layer(self, image_layer):
         """
@@ -277,6 +573,11 @@ class NDEasyAugment(BaseNDApp):
         # Validate that we have an augmenter
         if not hasattr(self, "augmenter") or self.augmenter is None:
             print("⚠️ No augmenter selected!")
+            return
+
+        # From a box layer's saved files, not the labels layer.
+        if self._makes_box_crops():
+            self._make_box_crops()
             return
 
         # Validate that we have image and annotations
@@ -482,6 +783,10 @@ class NDEasyAugment(BaseNDApp):
 
         import numpy as np
         from skimage.io import imread
+
+        if self._makes_box_crops():
+            self._show_box_crops()
+            return
 
         # Get the selected axis from the form (matches what was used during augmentation)
         selected_axis = self.augmentation_form.get_selected_axis()

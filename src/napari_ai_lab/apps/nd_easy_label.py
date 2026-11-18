@@ -2127,7 +2127,15 @@ class NDEasyLabel(BaseNDApp):
         """Show the project-open dialog and apply its settings to the AI Lab."""
         from .project_open_setup import ProjectOpenDialog, apply_project_setup
 
-        dialog = ProjectOpenDialog(self)
+        # Parented to the napari window, not to this widget: this is the
+        # Label tab, hidden while another tab shows, and a dialog owned by a
+        # hidden widget is not kept above napari -- after Browse it dropped
+        # behind the main window and looked as if nothing had happened.
+        try:
+            parent = self.viewer.window._qt_window
+        except AttributeError:
+            parent = self
+        dialog = ProjectOpenDialog(parent)
         if dialog.exec_() != ProjectOpenDialog.Accepted:
             return
 

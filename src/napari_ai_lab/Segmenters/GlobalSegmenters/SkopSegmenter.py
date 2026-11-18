@@ -46,6 +46,18 @@ def _get_runner():
     return _runner
 
 
+def close_runner():
+    """Shut down the shared runner's workers, freeing their GPU memory.
+
+    Called when the viewer window goes away. A later segmentation starts a
+    new runner, so this is safe at any time.
+    """
+    global _runner
+    if _runner is not None:
+        _runner.close()
+        _runner = None
+
+
 #: Callables taking one line of build news, e.g. a GUI log's. Called from
 #: whatever thread the build reports on, so a GUI listener must hop to its
 #: own thread (a Qt signal's emit does). One that raises is dropped.

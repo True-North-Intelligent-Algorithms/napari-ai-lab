@@ -108,7 +108,43 @@ def collect_all_image_names(image_path):
 
     image_file_list.sort(key=lambda x: x.name.lower())
 
-    return image_file_list
+    return _in_photo_order(image_path, image_file_list)
+
+
+#: A project's own order for its images, one file name per line; lines
+#: starting with "#" are comments, such as where a batch begins. Optional.
+PHOTO_ORDER_FILE = "photos.list"
+
+
+def _in_photo_order(folder: Path, image_files: list) -> list:
+    """*image_files* (sorted by name) in the order photos.list gives, if any.
+
+    A project with a photos.list is one built up in batches: its images
+    are listed in the order they were added, so a new batch comes last,
+    after everything already worked on. An image in the folder but not in
+    the list is new: it is appended to the list, under a dated batch line,
+    and so goes to the end. A listed file that is gone is skipped. Without
+    a photos.list, alphabetical order, as always.
+    """
+    order_path = folder / PHOTO_ORDER_FILE
+    if not order_path.is_file():
+        return image_files
+    listed = [
+        line.strip()
+        for line in order_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    by_name = {p.name: p for p in image_files}
+    known = set(listed)
+    new = [p for p in image_files if p.name not in known]
+    if new:
+        import time
+
+        with open(order_path, "a", encoding="utf-8") as f:
+            f.write(f"# batch added {time.strftime('%Y-%m-%d %H:%M')}\n")
+            f.writelines(f"{p.name}\n" for p in new)
+        print(f"{len(new)} new images added to the end of {order_path}")
+    return [by_name[n] for n in listed if n in by_name] + new
 
 
 def load_images_from_directory(directory):

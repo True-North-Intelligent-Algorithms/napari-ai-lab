@@ -132,7 +132,10 @@ PROFILES: dict[str, Profile] = {
             "2D object detection, the YOLO kind. You draw boxes on the "
             "Shapes layer, and those boxes are the annotations -- not "
             "prompts, so no interactive segmenter is offered to turn them "
-            "into masks. The global segmenter is the one that detects boxes."
+            "into masks. The global segmenter is the one that detects boxes. "
+            "Its augmenter cuts random-zoom crops around a box layer's "
+            "boxes, so small objects in big photos are big enough to learn "
+            "from."
         ),
         global_segmenters=(
             "YoloSkopDetector",
@@ -144,7 +147,7 @@ PROFILES: dict[str, Profile] = {
             "TniaBibDetector",
         ),
         interactive_segmenters=(),
-        augmenters=(),
+        augmenters=("YoloCropAugmenter",),
         show_3d=False,
         show_shapes=True,
         show_labels=False,

@@ -59,6 +59,14 @@ class NDOperationWidget(QWidget):
     #: translated to an empty ``initial_model_name`` on the way through.
     FROM_SCRATCH = "(train from scratch)"
 
+    def _from_scratch(self) -> str:
+        """The "Start from" combo's first entry. An operation whose empty
+        start is not nothing -- YOLO starts from a stock model -- names it
+        with ``FROM_SCRATCH_LABEL``."""
+        return getattr(
+            self.nd_operation, "FROM_SCRATCH_LABEL", self.FROM_SCRATCH
+        )
+
     def __init__(
         self,
         nd_operation=None,
@@ -370,6 +378,23 @@ class NDOperationWidget(QWidget):
                 # Get supported axes directly from the ND Operation instance
                 supported_axes = self.nd_operation.supported_axes
 
+                # An operation with nothing to choose -- e.g. People, which
+                # only ever runs on a colour photo -- sets show_axis_choice
+                # False: no combo, but the run still needs the axis.
+                if supported_axes and not getattr(
+                    self.nd_operation, "show_axis_choice", True
+                ):
+                    existing_axis = getattr(
+                        self.nd_operation, "selected_axis", None
+                    )
+                    self.selected_axis = (
+                        existing_axis
+                        if existing_axis in supported_axes
+                        else supported_axes[0]
+                    )
+                    self.nd_operation.selected_axis = self.selected_axis
+                    return
+
                 if supported_axes and len(supported_axes) > 0:
                     from qtpy.QtWidgets import QComboBox
 
@@ -430,7 +455,7 @@ class NDOperationWidget(QWidget):
             starting = self.model_role == "initial"
             self._model_combo = QComboBox()
             if starting:
-                self._model_combo.addItem(self.FROM_SCRATCH)
+                self._model_combo.addItem(self._from_scratch())
             for name in model_map:
                 self._model_combo.addItem(name)
 
@@ -456,7 +481,7 @@ class NDOperationWidget(QWidget):
     def _on_model_changed(self, model_name):
         """Handle model selection changes."""
         if self.model_role == "initial":
-            name = "" if model_name == self.FROM_SCRATCH else model_name
+            name = "" if model_name == self._from_scratch() else model_name
             self.nd_operation.initial_model_name = name
             self.initial_model_changed.emit(name)
             return
@@ -480,7 +505,7 @@ class NDOperationWidget(QWidget):
         self._model_combo.blockSignals(True)
         self._model_combo.clear()
         if self.model_role == "initial":
-            self._model_combo.addItem(self.FROM_SCRATCH)
+            self._model_combo.addItem(self._from_scratch())
         for name in model_map:
             self._model_combo.addItem(name)
         if select_name:
@@ -546,7 +571,13 @@ class NDOperationWidget(QWidget):
         self.parameter_values[field_name] = current_val
 
         # Create label
-        label = QLabel(field_name.replace("_", " ").title())
+        # A field may name itself in words ("label") and explain itself in a
+        # tooltip ("help"); otherwise its name, title-cased.
+        label = QLabel(
+            metadata.get("label") or field_name.replace("_", " ").title()
+        )
+        if metadata.get("help"):
+            label.setToolTip(metadata["help"])
 
         # Create appropriate widget based on field type
         if field_type == "int":
@@ -573,6 +604,8 @@ class NDOperationWidget(QWidget):
 
         # Store widget reference
         self.parameter_widgets[field_name] = widget
+        if metadata.get("help"):
+            widget.setToolTip(metadata["help"])
 
         # Add to form layout
         self.form_layout.addRow(label, widget)
