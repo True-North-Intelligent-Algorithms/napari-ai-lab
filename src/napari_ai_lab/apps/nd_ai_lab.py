@@ -83,6 +83,8 @@ class NDAILab(QWidget):
         # Tracking for sequence viewer changes
         self._processing_image_change = False
         self.current_image_index = 0
+        # True once labels or label boxes change after the last save.
+        self.unsaved = False
 
         # What this session offers. See apps/profiles.py.
         self.profile = get_profile(profile)
@@ -123,6 +125,8 @@ class NDAILab(QWidget):
         self.label_widget.ai_lab = self
         self.augment_widget.ai_lab = self
         self.segment_widget.ai_lab = self
+        self.augment_widget.before_augment = self._ask_save_first
+        self.label_widget.save_project_btn.clicked.connect(self._mark_saved)
 
         # If model provided, set it now
         if image_data_model is not None:
@@ -207,6 +211,9 @@ class NDAILab(QWidget):
                 data,
                 name=ann_name,
                 scale=annotation_scale,
+            )
+            self.annotations_layers[ann_name].events.paint.connect(
+                self._mark_unsaved
             )
         # Pick the first as the active layer (backwards-compatible ref).
         self.annotations_layer = next(
@@ -299,6 +306,7 @@ class NDAILab(QWidget):
             scale=annotation_scale,
         )
         self.boxes_layer.events.data.connect(self._refresh_box_status)
+        self.boxes_layer.events.data.connect(self._mark_unsaved)
 
         from napari_ai_lab.vendored.napari_bbox import BoundingBoxLayer
 
@@ -1892,7 +1900,37 @@ class NDAILab(QWidget):
             print("⚠️  Received invalid image data from sequence viewer")
             self._cleanup_layers()
 
+        # Saved on the way out, and the new image's data has just loaded.
+        self.unsaved = False
+
         # The lock is released by the caller's finally, not here: one owner.
+
+    def _mark_unsaved(self, event=None):
+        self.unsaved = True
+
+    def _mark_saved(self):
+        self.unsaved = False
+
+    def _ask_save_first(self):
+        """Offer a save before augmenting, which reads the saved labels.
+
+        True to go ahead, False to cancel.
+        """
+        if not self.unsaved:
+            return True
+        from qtpy.QtWidgets import QMessageBox
+
+        answer = QMessageBox.question(
+            self,
+            "Unsaved changes",
+            "Save the project first? Augmentation uses the saved labels.",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes,
+        )
+        if answer == QMessageBox.Yes:
+            self.label_widget._on_save_project()
+            self.unsaved = False
+        return answer != QMessageBox.Cancel
 
     def _save_boxes(self):
         """Delegate box saving to label_widget, which inherits it from BaseNDApp."""
@@ -2063,6 +2101,7 @@ class NDAILab(QWidget):
                 preds_slice
             ]
             self.annotations_layer.refresh()
+            self.unsaved = True
             return True
         except (IndexError, ValueError) as e:
             print(f"✗ Copy failed: {e}")

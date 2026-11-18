@@ -45,6 +45,8 @@ class NDEasyAugment(BaseNDApp):
         self.embedded = embedded
         self.axes_to_collapse = axes_to_collapse
         self.augmenter_cache = {}  # Cache for augmenter instances
+        # Asked before augmenting; NDAILab offers a save first.
+        self.before_augment = lambda: True
 
         # Create Qt progress logger
         self.progress_logger = QtProgressLogger()
@@ -570,6 +572,8 @@ class NDEasyAugment(BaseNDApp):
 
     def _on_perform_augmentations(self):
         """Perform augmentations by generating patches."""
+        if not self.before_augment():
+            return
         # Validate that we have an augmenter
         if not hasattr(self, "augmenter") or self.augmenter is None:
             print("⚠️ No augmenter selected!")

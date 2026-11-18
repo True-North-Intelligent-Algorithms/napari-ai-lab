@@ -448,6 +448,9 @@ class NDEasyLabel(BaseNDApp):
         self.annotation_layer.data[nz] = self.current_label_num
         work[nz] = 0
         self.annotation_layer.refresh()
+        ai_lab = getattr(self, "ai_lab", None)
+        if ai_lab is not None:
+            ai_lab.unsaved = True
         self.working_layer.refresh()
         self._clear_points()
         print(f"Committed working layer with label {self.current_label_num}")
