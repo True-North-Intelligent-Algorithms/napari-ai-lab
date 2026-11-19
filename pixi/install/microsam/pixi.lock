@@ -518,8 +518,9 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
       - pypi: https://files.pythonhosted.org/packages/06/84/2f13d50a2cbec4a1b1684b30265bdb01cae0aa74b743079fa9edfc34230d/stringzilla-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/19/77/d5508d73a2ec0d422b396dc5110e58fe8c928096b62cdf8cfdf9e29c9906/pillow_heif-1.8.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/33/12/969743e8b7150d13b654756f3bb927c4a916747e16742c0e202e9a5e6a66/appose-0.12.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/39/88/d1c92668b5321f3b6999a15601cd94a608927ebbc675b2407dba155a910a/napari_ai_lab-0.1.0a8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3c/28/7ae846998728326759eab771afd83ad721b6c10e9cef7da2b5ca9bdd4a7b/simsimd-6.5.16-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/64/013409c451a44b61310fb757af4527f3de57fc98a00f40448de28b864290/albumentations-2.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/96/c2/dc1733880884bb63592bb26c3c46c0c419f5dbed9f972b5ba4e9a06ac63b/tnia_python-0.2.3-py3-none-any.whl
@@ -1029,8 +1030,9 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/16/a2/53ad321b6d202cd159be3914bccb0eabaa48fa7b4fc630feb31323eccb9d/pillow_heif-1.8.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/33/12/969743e8b7150d13b654756f3bb927c4a916747e16742c0e202e9a5e6a66/appose-0.12.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/39/88/d1c92668b5321f3b6999a15601cd94a608927ebbc675b2407dba155a910a/napari_ai_lab-0.1.0a8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/44/02/c5cd2a641e5b7e60162d8b2d321fd93d530a1bbeee033c670be107e55654/stringzilla-5.2.0-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/56/4f/0fa014163c6b846182f6355ebfc24f79e86ced7a2cce0ca95ba711f19e04/simsimd-6.5.16-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/64/013409c451a44b61310fb757af4527f3de57fc98a00f40448de28b864290/albumentations-2.0.8-py3-none-any.whl
@@ -1556,8 +1558,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/33/12/969743e8b7150d13b654756f3bb927c4a916747e16742c0e202e9a5e6a66/appose-0.12.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/39/88/d1c92668b5321f3b6999a15601cd94a608927ebbc675b2407dba155a910a/napari_ai_lab-0.1.0a8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/45/89/a45ef421b70d557eac7d196b03e45ff9ff8c7c786b4e54dfb505c1efc0f1/simsimd-6.5.16-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/64/013409c451a44b61310fb757af4527f3de57fc98a00f40448de28b864290/albumentations-2.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/96/c2/dc1733880884bb63592bb26c3c46c0c419f5dbed9f972b5ba4e9a06ac63b/tnia_python-0.2.3-py3-none-any.whl
@@ -1566,6 +1568,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/bf/16/d5a72d0b67ea10909f1aa6f93ee2d0c3418ceade6fd0895898b414c390ab/stringzilla-5.2.0-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/c4/18/25f6657ba1064926261cd29246391602b0a3f448e0c2d4790e937b296493/opspec-0.1.0.dev0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d5/ee/d5dd5e3e6dee228ec8833600934df4cdfd35ae621156a965b6b86ddeb190/ophelper-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/db/fd/2ff579be4694ac68cc73bfaafe1abc255bd658b678bfb3b33922784ddaf0/pillow_heif-1.8.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/fe/72/0b7200aa3eb733e956d6047d3a9991bf501fc15a9162a2ef1e4db52cf282/oprunner-0.1.0.dev1-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-8_kmp_llvm.conda
@@ -20319,23 +20322,82 @@ packages:
   - simsimd>=5.9.2
   - opencv-python-headless>=4.9.0.80
   requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
-  name: napari-ai-lab
-  version: 0.1.0a7
-  sha256: bc7f6756be2e2875044733ec5fdcd4e40122815786b6f540654ef49c542bbbe5
+- pypi: https://files.pythonhosted.org/packages/16/a2/53ad321b6d202cd159be3914bccb0eabaa48fa7b4fc630feb31323eccb9d/pillow_heif-1.8.1-cp312-cp312-macosx_11_0_arm64.whl
+  name: pillow-heif
+  version: 1.8.1
+  sha256: 1c60f323daf9df728858e469e0d95010727a32ee3e6c8e9658809a070fb93f69
   requires_dist:
-  - numpy
-  - magicgui
-  - qtpy
-  - scikit-image
-  - napari[all] ; extra == 'all'
-  - appose ; extra == 'appose'
+  - pillow>=11.1.0
+  - sphinx>=4.4 ; extra == 'docs'
+  - sphinx-issues>=3.0.1 ; extra == 'docs'
+  - sphinx-rtd-theme>=1.0 ; extra == 'docs'
+  - pytest ; extra == 'tests-min'
+  - defusedxml ; extra == 'tests-min'
+  - packaging ; extra == 'tests-min'
+  - pytest ; extra == 'tests'
+  - defusedxml ; extra == 'tests'
+  - packaging ; extra == 'tests'
+  - numpy ; extra == 'tests'
+  - pympler ; extra == 'tests'
+  - pytest ; extra == 'dev'
+  - defusedxml ; extra == 'dev'
+  - packaging ; extra == 'dev'
+  - numpy ; extra == 'dev'
+  - pympler ; extra == 'dev'
+  - opencv-python==5.0.0.93 ; extra == 'dev'
+  - pre-commit ; extra == 'dev'
+  - pylint ; extra == 'dev'
+  - mypy ; extra == 'dev'
+  - coverage ; extra == 'dev'
+  - setuptools ; extra == 'dev'
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/19/77/d5508d73a2ec0d422b396dc5110e58fe8c928096b62cdf8cfdf9e29c9906/pillow_heif-1.8.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+  name: pillow-heif
+  version: 1.8.1
+  sha256: 3811fa95ad29d6abd37a72c88c8c682dd1ff41d51fddf4899255328bfccbe358
+  requires_dist:
+  - pillow>=11.1.0
+  - sphinx>=4.4 ; extra == 'docs'
+  - sphinx-issues>=3.0.1 ; extra == 'docs'
+  - sphinx-rtd-theme>=1.0 ; extra == 'docs'
+  - pytest ; extra == 'tests-min'
+  - defusedxml ; extra == 'tests-min'
+  - packaging ; extra == 'tests-min'
+  - pytest ; extra == 'tests'
+  - defusedxml ; extra == 'tests'
+  - packaging ; extra == 'tests'
+  - numpy ; extra == 'tests'
+  - pympler ; extra == 'tests'
+  - pytest ; extra == 'dev'
+  - defusedxml ; extra == 'dev'
+  - packaging ; extra == 'dev'
+  - numpy ; extra == 'dev'
+  - pympler ; extra == 'dev'
+  - opencv-python==5.0.0.93 ; extra == 'dev'
+  - pre-commit ; extra == 'dev'
+  - pylint ; extra == 'dev'
+  - mypy ; extra == 'dev'
+  - coverage ; extra == 'dev'
+  - setuptools ; extra == 'dev'
   requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/33/12/969743e8b7150d13b654756f3bb927c4a916747e16742c0e202e9a5e6a66/appose-0.12.0-py3-none-any.whl
   name: appose
   version: 0.12.0
   sha256: 5c36f8293e824b049deb7393c53a46066ad67625f2de8ccb7f662eaa94ef5c80
   requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/39/88/d1c92668b5321f3b6999a15601cd94a608927ebbc675b2407dba155a910a/napari_ai_lab-0.1.0a8-py3-none-any.whl
+  name: napari-ai-lab
+  version: 0.1.0a8
+  sha256: 6413aef964407430275d0a7993fd2f76e5c2272dacd580b26ec24aec5849e32a
+  requires_dist:
+  - numpy
+  - magicgui
+  - qtpy
+  - scikit-image
+  - pillow-heif
+  - napari[all] ; extra == 'all'
+  - appose ; extra == 'appose'
+  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/3c/28/7ae846998728326759eab771afd83ad721b6c10e9cef7da2b5ca9bdd4a7b/simsimd-6.5.16-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
   name: simsimd
   version: 6.5.16
@@ -20433,6 +20495,35 @@ packages:
   requires_dist:
   - numpy
   - opspec>=0.1.0.dev0
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/db/fd/2ff579be4694ac68cc73bfaafe1abc255bd658b678bfb3b33922784ddaf0/pillow_heif-1.8.1-cp312-cp312-win_amd64.whl
+  name: pillow-heif
+  version: 1.8.1
+  sha256: ce0ff957ad901a5a6bf8cd22ea26c4304bab7cf2f93d0a2f03046487e5711910
+  requires_dist:
+  - pillow>=11.1.0
+  - sphinx>=4.4 ; extra == 'docs'
+  - sphinx-issues>=3.0.1 ; extra == 'docs'
+  - sphinx-rtd-theme>=1.0 ; extra == 'docs'
+  - pytest ; extra == 'tests-min'
+  - defusedxml ; extra == 'tests-min'
+  - packaging ; extra == 'tests-min'
+  - pytest ; extra == 'tests'
+  - defusedxml ; extra == 'tests'
+  - packaging ; extra == 'tests'
+  - numpy ; extra == 'tests'
+  - pympler ; extra == 'tests'
+  - pytest ; extra == 'dev'
+  - defusedxml ; extra == 'dev'
+  - packaging ; extra == 'dev'
+  - numpy ; extra == 'dev'
+  - pympler ; extra == 'dev'
+  - opencv-python==5.0.0.93 ; extra == 'dev'
+  - pre-commit ; extra == 'dev'
+  - pylint ; extra == 'dev'
+  - mypy ; extra == 'dev'
+  - coverage ; extra == 'dev'
+  - setuptools ; extra == 'dev'
   requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/fe/72/0b7200aa3eb733e956d6047d3a9991bf501fc15a9162a2ef1e4db52cf282/oprunner-0.1.0.dev1-py3-none-any.whl
   name: oprunner

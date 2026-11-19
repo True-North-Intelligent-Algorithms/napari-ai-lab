@@ -27,7 +27,7 @@ micro_sam = ">=1.8"
 torchvision = "*"
 
 [pypi-dependencies]
-napari-ai-lab = ">=0.1.0a7"
+napari-ai-lab = ">=0.1.0a8"
 tnia-python = "*"
 # From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
 albumentations = "*"
