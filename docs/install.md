@@ -13,16 +13,14 @@ minutes.
 ## 1. napari hub
 
 !!! note "Coming soon"
-    Waiting on scikit-ops being published to PyPI.
+    The listing goes live with an upcoming release.
 
 ## 2. pip and conda
-
-scikit-ops is not on PyPI yet, so it is installed from GitHub.
 
 ```sh
 conda create -n napari-ai-lab -c conda-forge python=3.12 napari pyqt
 conda activate napari-ai-lab
-pip install "scikit-ops @ git+https://github.com/apposed/scikit-ops@69771a9"
+pip install --pre scikit-ops
 pip install napari-ai-lab albumentations
 ```
 

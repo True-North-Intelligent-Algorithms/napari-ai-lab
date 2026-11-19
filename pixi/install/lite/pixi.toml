@@ -6,8 +6,8 @@ platforms = ["win-64", "linux-64", "osx-arm64"]
 version = "0.1.0"
 
 # Canonical install, meant to be downloaded on its own: nothing here reads a
-# local checkout. napari-ai-lab and appose come from PyPI; scikit-ops is not
-# on PyPI yet, so it comes from its public git repo, pinned.
+# local checkout. Everything comes from PyPI; scikit-ops is pinned exactly,
+# because it is a development release.
 #
 # Lite: no micro_sam, torch or CUDA, so interactive SAM is off. Models still
 # run, through scikit-ops, each in its own environment built on first use.
@@ -27,7 +27,7 @@ tnia-python = "*"
 # From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
 albumentations = "*"
 appose = ">=0.12"
-scikit-ops = { git = "https://github.com/apposed/scikit-ops", rev = "69771a9" }
+scikit-ops = "==0.1.0.dev3"
 
 [tasks]
 napari = "napari"

@@ -389,10 +389,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/wheel-0.48.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zarr-3.4.1-pyhc364b38_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - pypi: git+https://github.com/apposed/scikit-ops?rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=ophelper&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=oprunner&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=opspec&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
       - pypi: https://files.pythonhosted.org/packages/06/84/2f13d50a2cbec4a1b1684b30265bdb01cae0aa74b743079fa9edfc34230d/stringzilla-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
@@ -401,6 +397,10 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/8e/64/013409c451a44b61310fb757af4527f3de57fc98a00f40448de28b864290/albumentations-2.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/96/c2/dc1733880884bb63592bb26c3c46c0c419f5dbed9f972b5ba4e9a06ac63b/tnia_python-0.2.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9b/21/f6ef335f6e65724aa78b8d792b48d40a48c381715f1e62f5a5049e09d07e/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/a0/a5/7e1e13ba03391a03875e48e96c55aa221152c38572f038a14d8c6912ceb2/scikit_ops-0.1.0.dev3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/c4/18/25f6657ba1064926261cd29246391602b0a3f448e0c2d4790e937b296493/opspec-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d5/ee/d5dd5e3e6dee228ec8833600934df4cdfd35ae621156a965b6b86ddeb190/ophelper-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/72/0b7200aa3eb733e956d6047d3a9991bf501fc15a9162a2ef1e4db52cf282/oprunner-0.1.0.dev1-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/aiohappyeyeballs-2.7.1-pyhd8ed1ab_0.conda
@@ -705,10 +705,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zeromq-4.3.5-h888dc83_9.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - pypi: git+https://github.com/apposed/scikit-ops?rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=ophelper&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=oprunner&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=opspec&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/33/12/969743e8b7150d13b654756f3bb927c4a916747e16742c0e202e9a5e6a66/appose-0.12.0-py3-none-any.whl
@@ -717,6 +713,10 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/56/4f/0fa014163c6b846182f6355ebfc24f79e86ced7a2cce0ca95ba711f19e04/simsimd-6.5.16-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/64/013409c451a44b61310fb757af4527f3de57fc98a00f40448de28b864290/albumentations-2.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/96/c2/dc1733880884bb63592bb26c3c46c0c419f5dbed9f972b5ba4e9a06ac63b/tnia_python-0.2.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a0/a5/7e1e13ba03391a03875e48e96c55aa221152c38572f038a14d8c6912ceb2/scikit_ops-0.1.0.dev3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/c4/18/25f6657ba1064926261cd29246391602b0a3f448e0c2d4790e937b296493/opspec-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d5/ee/d5dd5e3e6dee228ec8833600934df4cdfd35ae621156a965b6b86ddeb190/ophelper-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/72/0b7200aa3eb733e956d6047d3a9991bf501fc15a9162a2ef1e4db52cf282/oprunner-0.1.0.dev1-py3-none-any.whl
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/aiohappyeyeballs-2.7.1-pyhd8ed1ab_0.conda
@@ -1013,18 +1013,18 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - pypi: git+https://github.com/apposed/scikit-ops?rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=ophelper&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=oprunner&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-      - pypi: git+https://github.com/apposed/scikit-ops?subdirectory=opspec&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2c/c9/662637a9d51bb5183e1e6715be19cadfa1320196c36ac105d9c33d4df843/napari_ai_lab-0.1.0a7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/33/12/969743e8b7150d13b654756f3bb927c4a916747e16742c0e202e9a5e6a66/appose-0.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/45/89/a45ef421b70d557eac7d196b03e45ff9ff8c7c786b4e54dfb505c1efc0f1/simsimd-6.5.16-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/64/013409c451a44b61310fb757af4527f3de57fc98a00f40448de28b864290/albumentations-2.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/96/c2/dc1733880884bb63592bb26c3c46c0c419f5dbed9f972b5ba4e9a06ac63b/tnia_python-0.2.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a0/a5/7e1e13ba03391a03875e48e96c55aa221152c38572f038a14d8c6912ceb2/scikit_ops-0.1.0.dev3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b8/88/763b967f7efd7226b82c9fae16d560cba049b1f0c036647e65c610fd636e/opencv_python_headless-5.0.0.93-cp37-abi3-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/bf/16/d5a72d0b67ea10909f1aa6f93ee2d0c3418ceade6fd0895898b414c390ab/stringzilla-5.2.0-cp312-cp312-win_amd64.whl
+      - pypi: https://files.pythonhosted.org/packages/c4/18/25f6657ba1064926261cd29246391602b0a3f448e0c2d4790e937b296493/opspec-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d5/ee/d5dd5e3e6dee228ec8833600934df4cdfd35ae621156a965b6b86ddeb190/ophelper-0.1.0.dev0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/72/0b7200aa3eb733e956d6047d3a9991bf501fc15a9162a2ef1e4db52cf282/oprunner-0.1.0.dev1-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -1061,7 +1061,7 @@ packages:
   - python_abi 3.12.* *_cp312
   license: MIT AND Apache-2.0
   purls:
-  - pkg:pypi/aiohttp?source=compressed-mapping
+  - pkg:pypi/aiohttp?source=hash-mapping
   run_exports: {}
   size: 1240813
   timestamp: 1791734313039
@@ -1106,7 +1106,7 @@ packages:
   - zstd >=1.5.7,<1.6.0a0
   license: BSD-3-Clause AND MIT AND EPL-2.0
   purls:
-  - pkg:pypi/backports-zstd?source=compressed-mapping
+  - pkg:pypi/backports-zstd?source=hash-mapping
   run_exports: {}
   size: 241909
   timestamp: 1791654828167
@@ -1391,7 +1391,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/fonttools?source=compressed-mapping
+  - pkg:pypi/fonttools?source=hash-mapping
   run_exports: {}
   size: 3137021
   timestamp: 1791995457180
@@ -1478,7 +1478,7 @@ packages:
   license: Apache-2.0
   license_family: Apache
   purls:
-  - pkg:pypi/google-crc32c?source=compressed-mapping
+  - pkg:pypi/google-crc32c?source=hash-mapping
   run_exports: {}
   size: 29520
   timestamp: 1788537554663
@@ -2863,7 +2863,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/markupsafe?source=compressed-mapping
+  - pkg:pypi/markupsafe?source=hash-mapping
   run_exports: {}
   size: 27678
   timestamp: 1791548971554
@@ -3938,7 +3938,7 @@ packages:
   license: BSD-2-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/wrapt?source=compressed-mapping
+  - pkg:pypi/wrapt?source=hash-mapping
   run_exports: {}
   size: 153347
   timestamp: 1792013634085
@@ -4322,7 +4322,7 @@ packages:
   license: Apache-2.0
   license_family: Apache
   purls:
-  - pkg:pypi/yarl?source=compressed-mapping
+  - pkg:pypi/yarl?source=hash-mapping
   run_exports: {}
   size: 185237
   timestamp: 1791286177020
@@ -5076,7 +5076,7 @@ packages:
   license: BSD-2-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/imageio?source=compressed-mapping
+  - pkg:pypi/imageio?source=hash-mapping
   run_exports: {}
   size: 321602
   timestamp: 1791477236274
@@ -5315,7 +5315,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/jsonpointer?source=compressed-mapping
+  - pkg:pypi/jsonpointer?source=hash-mapping
   run_exports: {}
   size: 14728
   timestamp: 1791676993658
@@ -6014,7 +6014,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/npe2?source=compressed-mapping
+  - pkg:pypi/npe2?source=hash-mapping
   run_exports: {}
   size: 80046
   timestamp: 1792069465748
@@ -6137,7 +6137,7 @@ packages:
   - python
   license: MIT
   purls:
-  - pkg:pypi/platformdirs?source=compressed-mapping
+  - pkg:pypi/platformdirs?source=hash-mapping
   run_exports: {}
   size: 33944
   timestamp: 1792152866708
@@ -6254,7 +6254,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/pycparser?source=compressed-mapping
+  - pkg:pypi/pycparser?source=hash-mapping
   run_exports: {}
   size: 58624
   timestamp: 1791592610066
@@ -6324,7 +6324,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/pydantic-settings?source=compressed-mapping
+  - pkg:pypi/pydantic-settings?source=hash-mapping
   run_exports: {}
   size: 69536
   timestamp: 1792000612449
@@ -6809,7 +6809,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/soupsieve?source=compressed-mapping
+  - pkg:pypi/soupsieve?source=hash-mapping
   run_exports: {}
   size: 43039
   timestamp: 1791821664697
@@ -6888,7 +6888,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/tifffile?source=compressed-mapping
+  - pkg:pypi/tifffile?source=hash-mapping
   run_exports: {}
   size: 234030
   timestamp: 1792143963108
@@ -7185,7 +7185,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/zarr?source=compressed-mapping
+  - pkg:pypi/zarr?source=hash-mapping
   run_exports: {}
   size: 556765
   timestamp: 1791523946731
@@ -7233,7 +7233,7 @@ packages:
   - python_abi 3.12.* *_cp312
   license: MIT AND Apache-2.0
   purls:
-  - pkg:pypi/aiohttp?source=compressed-mapping
+  - pkg:pypi/aiohttp?source=hash-mapping
   run_exports: {}
   size: 1189132
   timestamp: 1791734315908
@@ -7262,7 +7262,7 @@ packages:
   - python_abi 3.12.* *_cp312
   license: BSD-3-Clause AND MIT AND EPL-2.0
   purls:
-  - pkg:pypi/backports-zstd?source=compressed-mapping
+  - pkg:pypi/backports-zstd?source=hash-mapping
   run_exports: {}
   size: 239753
   timestamp: 1791654832798
@@ -7427,7 +7427,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/cytoolz?source=compressed-mapping
+  - pkg:pypi/cytoolz?source=hash-mapping
   run_exports: {}
   size: 695392
   timestamp: 1791511337371
@@ -7492,7 +7492,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/fonttools?source=compressed-mapping
+  - pkg:pypi/fonttools?source=hash-mapping
   run_exports: {}
   size: 3049510
   timestamp: 1791995330764
@@ -8396,7 +8396,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/markupsafe?source=compressed-mapping
+  - pkg:pypi/markupsafe?source=hash-mapping
   run_exports: {}
   size: 27904
   timestamp: 1791548952699
@@ -9033,7 +9033,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/rpds-py?source=compressed-mapping
+  - pkg:pypi/rpds-py?source=hash-mapping
   run_exports: {}
   size: 286627
   timestamp: 1791202361450
@@ -9191,7 +9191,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/wcwidth?source=compressed-mapping
+  - pkg:pypi/wcwidth?source=hash-mapping
   run_exports: {}
   size: 370064
   timestamp: 1791194620909
@@ -9205,7 +9205,7 @@ packages:
   license: BSD-2-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/wrapt?source=compressed-mapping
+  - pkg:pypi/wrapt?source=hash-mapping
   run_exports: {}
   size: 147917
   timestamp: 1792013639985
@@ -9261,7 +9261,7 @@ packages:
   license: Apache-2.0
   license_family: Apache
   purls:
-  - pkg:pypi/yarl?source=compressed-mapping
+  - pkg:pypi/yarl?source=hash-mapping
   run_exports: {}
   size: 178013
   timestamp: 1791286121523
@@ -9328,7 +9328,7 @@ packages:
   - python_abi 3.12.* *_cp312
   license: MIT AND Apache-2.0
   purls:
-  - pkg:pypi/aiohttp?source=compressed-mapping
+  - pkg:pypi/aiohttp?source=hash-mapping
   run_exports: {}
   size: 1170778
   timestamp: 1791734351910
@@ -9539,7 +9539,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/cytoolz?source=compressed-mapping
+  - pkg:pypi/cytoolz?source=hash-mapping
   run_exports: {}
   size: 687138
   timestamp: 1791511277051
@@ -9611,7 +9611,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/fonttools?source=compressed-mapping
+  - pkg:pypi/fonttools?source=hash-mapping
   run_exports: {}
   size: 2651301
   timestamp: 1791995297544
@@ -10441,7 +10441,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/markupsafe?source=compressed-mapping
+  - pkg:pypi/markupsafe?source=hash-mapping
   run_exports: {}
   size: 28515
   timestamp: 1791548981413
@@ -11327,7 +11327,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/wcwidth?source=compressed-mapping
+  - pkg:pypi/wcwidth?source=hash-mapping
   run_exports: {}
   size: 348834
   timestamp: 1791194558195
@@ -11389,7 +11389,7 @@ packages:
   license: Apache-2.0
   license_family: Apache
   purls:
-  - pkg:pypi/yarl?source=compressed-mapping
+  - pkg:pypi/yarl?source=hash-mapping
   run_exports: {}
   size: 179409
   timestamp: 1791286114277
@@ -11460,35 +11460,6 @@ packages:
     - zstd >=1.5.7,<1.6.0a0
   size: 387535
   timestamp: 1786599623274
-- pypi: git+https://github.com/apposed/scikit-ops?rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-  name: scikit-ops
-  version: 0.1.0.dev0
-  requires_dist:
-  - numpy
-  - opspec @ git+https://github.com/apposed/scikit-ops@69771a9#subdirectory=opspec
-  - ophelper @ git+https://github.com/apposed/scikit-ops@69771a9#subdirectory=ophelper
-  - oprunner @ git+https://github.com/apposed/scikit-ops@69771a9#subdirectory=oprunner
-  requires_python: '>=3.10'
-- pypi: git+https://github.com/apposed/scikit-ops?subdirectory=ophelper&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-  name: ophelper
-  version: 0.1.0.dev0
-  requires_dist:
-  - numpy
-  - opspec @ git+https://github.com/apposed/scikit-ops@69771a9#subdirectory=opspec
-  requires_python: '>=3.10'
-- pypi: git+https://github.com/apposed/scikit-ops?subdirectory=oprunner&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-  name: oprunner
-  version: 0.1.0.dev0
-  requires_dist:
-  - appose>=0.12
-  - numpy
-  - psutil
-  - opspec @ git+https://github.com/apposed/scikit-ops@69771a9#subdirectory=opspec
-  requires_python: '>=3.10'
-- pypi: git+https://github.com/apposed/scikit-ops?subdirectory=opspec&rev=69771a9#69771a93cdabd6dc799fd5f1f886009f38993f8b
-  name: opspec
-  version: 0.1.0.dev0
-  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/06/84/2f13d50a2cbec4a1b1684b30265bdb01cae0aa74b743079fa9edfc34230d/stringzilla-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
   name: stringzilla
   version: 5.2.0
@@ -11592,6 +11563,16 @@ packages:
   - numpy<2.0 ; python_full_version < '3.9'
   - numpy>=2 ; python_full_version >= '3.9'
   requires_python: '>=3.6'
+- pypi: https://files.pythonhosted.org/packages/a0/a5/7e1e13ba03391a03875e48e96c55aa221152c38572f038a14d8c6912ceb2/scikit_ops-0.1.0.dev3-py3-none-any.whl
+  name: scikit-ops
+  version: 0.1.0.dev3
+  sha256: 857cd6cf2c78497cb520c519a4ba28194fab6c20f65108ea5b50f03c4552141f
+  requires_dist:
+  - numpy
+  - ophelper==0.1.0.dev0
+  - oprunner==0.1.0.dev1
+  - opspec==0.1.0.dev0
+  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/b8/88/763b967f7efd7226b82c9fae16d560cba049b1f0c036647e65c610fd636e/opencv_python_headless-5.0.0.93-cp37-abi3-win_amd64.whl
   name: opencv-python-headless
   version: 5.0.0.93
@@ -11604,4 +11585,27 @@ packages:
   name: stringzilla
   version: 5.2.0
   sha256: 012efc450ebbf10f65738c26cb76a089034233703b6b22acc61ce9c61d85eb4e
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/c4/18/25f6657ba1064926261cd29246391602b0a3f448e0c2d4790e937b296493/opspec-0.1.0.dev0-py3-none-any.whl
+  name: opspec
+  version: 0.1.0.dev0
+  sha256: 5d3a6b0cd13e7b5f96476e10d558d906d6e11b3cb961f64262e9dcaf620486c7
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/d5/ee/d5dd5e3e6dee228ec8833600934df4cdfd35ae621156a965b6b86ddeb190/ophelper-0.1.0.dev0-py3-none-any.whl
+  name: ophelper
+  version: 0.1.0.dev0
+  sha256: 2be02befa94e4336d717c7554992426e5de155edda16a76aece12ba5f1729897
+  requires_dist:
+  - numpy
+  - opspec>=0.1.0.dev0
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/fe/72/0b7200aa3eb733e956d6047d3a9991bf501fc15a9162a2ef1e4db52cf282/oprunner-0.1.0.dev1-py3-none-any.whl
+  name: oprunner
+  version: 0.1.0.dev1
+  sha256: c98117f596d9ea81b96fee1d65a88d1c70b254929c7a6fd0d9ee33470774aca7
+  requires_dist:
+  - appose>=0.12
+  - numpy
+  - opspec>=0.1.0.dev0
+  - psutil
   requires_python: '>=3.10'
