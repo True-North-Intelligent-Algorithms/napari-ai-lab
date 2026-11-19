@@ -36,6 +36,50 @@ _BANNER_STYLE = (
     " border-radius: 4px; padding: 4px 6px; }}"
 )
 
+#: Instructions longer than SHORT_LINES lines show their first SHOWN_LINES, or
+#: the operation's ``summary``, with a "More..." button for the rest.
+SHORT_LINES = 5
+SHOWN_LINES = 3
+
+
+def _instructions_of(operation) -> tuple[str, str]:
+    """An operation's (full, short) instructions; ("", "") if it has none.
+
+    *short* is the ``summary`` given beside ``instructions`` in the same
+    class (a subclass with instructions of its own does not get its
+    parent's summary), else all of it up to SHORT_LINES lines, else the
+    first SHOWN_LINES.
+    """
+    full = getattr(operation, "instructions", None)
+    summary = None
+    for klass in type(operation).__mro__:
+        if "instructions" in vars(klass):
+            summary = vars(klass).get("summary")
+            break
+    if not isinstance(full, str) or not full.strip():
+        return "", ""
+    full = full.strip("\n").rstrip()
+    lines = [line for line in full.splitlines() if line.strip()]
+    if isinstance(summary, str) and summary.strip():
+        short = summary.strip()
+    elif len(lines) <= SHORT_LINES:
+        short = full
+    else:
+        short = "\n".join(lines[:SHOWN_LINES]) + " ..."
+    return full, short
+
+
+def _show_instructions(parent, operation, text):
+    """The full instructions, in a window of their own."""
+    from qtpy.QtWidgets import QMessageBox
+
+    box = QMessageBox(parent)
+    box.setWindowTitle(f"{type(operation).__name__}: instructions")
+    box.setTextFormat(Qt.PlainText)  # "<name>" is not a tag
+    box.setText(text)
+    box.setStandardButtons(QMessageBox.Ok)
+    box.exec_()
+
 
 class NDOperationWidget(QWidget):
     """
@@ -288,23 +332,26 @@ class NDOperationWidget(QWidget):
             if not deps_ok and self._supports_remote_execution():
                 self._add_remote_env_row()
 
-        # --- Instructions label ---
-        if hasattr(self.nd_operation, "instructions"):
-            instructions_text = self.nd_operation.instructions
-            if instructions_text and isinstance(instructions_text, str):
-                # Create instructions label with similar styling as nd_easy_label
-                self._instructions_text = QLabel(instructions_text)
-                self._instructions_text.setStyleSheet(
-                    "QLabel { font-size: 14px; color: #357; }"
+        # --- Instructions: a few lines, the rest behind "More..." ---
+        full, short = _instructions_of(self.nd_operation)
+        if full:
+            # One widget, so clearing the form removes the label and button.
+            self._instructions_text = QWidget()
+            row = QHBoxLayout(self._instructions_text)
+            row.setContentsMargins(0, 0, 0, 0)
+            label = QLabel(short)
+            label.setTextFormat(Qt.PlainText)
+            label.setStyleSheet("QLabel { font-size: 14px; color: #357; }")
+            label.setWordWrap(True)
+            row.addWidget(label, 1)
+            if short != full:
+                more = QPushButton("More...")
+                more.setToolTip("All the instructions, in a window")
+                more.clicked.connect(
+                    lambda: _show_instructions(self, self.nd_operation, full)
                 )
-                self._instructions_text.setWordWrap(True)
-
-                # Add instructions at the top of the form
-                self.main_layout.addWidget(self._instructions_text)
-
-                print(
-                    f"Added instructions for {self.nd_operation.__class__.__name__}"
-                )
+                row.addWidget(more, 0, Qt.AlignTop)
+            self.main_layout.addWidget(self._instructions_text)
 
     def _supports_remote_execution(self) -> bool:
         """Whether this operation can run in another environment via appose.

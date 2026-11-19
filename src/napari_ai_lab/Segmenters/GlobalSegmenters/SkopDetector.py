@@ -246,6 +246,13 @@ class YoloSkopDetector(PtModelPicker, SkopDetector, TrainingBase):
     #: from the stock model below, not from nothing.
     FROM_SCRATCH_LABEL = "(stock model)"
 
+    #: What the panel shows; "More..." shows the instructions below.
+    summary = """
+YOLO (scikit-ops): finds objects with a .pt model from models/.
+Small objects in big photos: set object size. Lower conf finds more.
+Train: make YOLO crops first (Augment tab), pick them as Patches.
+    """
+
     instructions = """
 YOLO (scikit-ops):
 • model - any YOLO .pt in the project's models/ folder, subfolders included
