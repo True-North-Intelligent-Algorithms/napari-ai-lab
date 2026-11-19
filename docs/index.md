@@ -3,13 +3,13 @@
 !!! warning "Under construction"
     Very new. Expect changes.
 
-## What AI Lab does
+## Napari ai-lab main functionality
 
-- Load a folder of images as a sequence.
-- Segment with popular models such as Cellpose and micro-sam.
-- Not good enough? Draw labels, or click with SAM.
-- Label boxes mark finished areas.
+- Loads folders of images as a sequence.
+- Can segment with popular models such as Cellpose and micro-sam.
+- Fine tune labels with manually or with SAM.
+- Mark up finished areas that are ready for training.
 - Augment to add training data.
-- Train a model.
+- Train models.
 
 ![AI Lab after opening the bees project](images/ai_lab_open.png)
