@@ -3,11 +3,11 @@
 #
 #   scripts/release.sh            # next alpha: v0.1.0a5 -> v0.1.0a6
 #   scripts/release.sh v0.1.0     # or name the version
-#   scripts/release.sh --upload   # also build and twine upload by hand
+#   scripts/release.sh --upload   # also build and upload by hand, with uv
 #
 # Pushing the tag is the release: GitHub Actions (test_and_deploy.yml) builds
 # and uploads to PyPI. --upload is the fallback for when CI can't; with
-# --skip-existing it is harmless if CI already did it.
+# --check-url it is harmless if CI already did it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -44,8 +44,8 @@ git push origin "$version"
 
 if $upload; then
     rm -rf dist
-    python -m build
-    python -m twine upload --skip-existing dist/* --verbose
+    uv build --out-dir dist
+    uv publish --check-url https://pypi.org/simple/ dist/*
 fi
 
 echo "Done. CI publishes $version; watch the Actions tab."
