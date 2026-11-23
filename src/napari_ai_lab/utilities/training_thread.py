@@ -7,6 +7,8 @@ to the main/GUI thread via Qt signals for safe widget updates.
 
 from qtpy.QtCore import QObject, QThread, Signal
 
+from .processor_thread import relay_signals
+
 
 class _TrainingWorker(QObject):
     """QObject that runs a segmenter's ``train`` method in a worker thread.
@@ -60,6 +62,17 @@ class _TrainingWorker(QObject):
             self.finished.emit(result)
 
 
+class _TrainingRelay(QObject):
+    """_TrainingWorker's signals, on the GUI thread; see relay_signals."""
+
+    progress = Signal(int, int, str)
+    log_info = Signal(str)
+    log_warning = Signal(str)
+    log_error = Signal(str)
+    finished = Signal(object)
+    error = Signal(str)
+
+
 class TrainingThread:
     """Convenience wrapper that manages QThread + _TrainingWorker lifecycle.
 
@@ -85,13 +98,19 @@ class TrainingThread:
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
-        # Expose signals for external connection
-        self.progress = self.worker.progress
-        self.log_info = self.worker.log_info
-        self.log_warning = self.worker.log_warning
-        self.log_error = self.worker.log_error
-        self.finished = self.worker.finished
-        self.error = self.worker.error
+        # Expose signals for external connection, from the GUI thread
+        names = (
+            "progress",
+            "log_info",
+            "log_warning",
+            "log_error",
+            "finished",
+            "error",
+        )
+        self.relay = _TrainingRelay()
+        relay_signals(self.worker, self.relay, names)
+        for name in names:
+            setattr(self, name, getattr(self.relay, name))
 
     def start(self):
         """Start training on the worker thread."""

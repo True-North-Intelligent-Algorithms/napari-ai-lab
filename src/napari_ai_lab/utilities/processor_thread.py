@@ -9,7 +9,32 @@ The only module here that imports Qt.
 import traceback
 from typing import ClassVar
 
-from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtCore import QObject, QThread, QTimer, Signal
+
+# Why the wrappers below hand out a relay's signals, not the worker's: under
+# PySide6 (napari's bundled app) a lambda or plain function connected to a
+# worker's signal runs on the worker thread, since it has no thread of its
+# own. PyQt sends it to the GUI thread instead. Run off the GUI thread, a
+# callback that adds a layer corrupts Qt: garbage drawn, a window that hangs.
+# A relay is a QObject made on the GUI thread; a signal-to-signal connection
+# to it is queued, so it re-emits there and every slot runs there.
+
+
+def relay_signals(source, relay, names):
+    """Forward each named signal of *source* to *relay*'s signal of that name."""
+    for name in names:
+        getattr(source, name).connect(getattr(relay, name))
+
+
+def _release_when_finished(wrapper, running):
+    """Drop *wrapper* from *running* once its relay's finished has fired.
+
+    On the next turn of the GUI loop, so the relay outlives every slot
+    connected to its finished, the caller's included.
+    """
+    wrapper.relay.finished.connect(
+        lambda: QTimer.singleShot(0, lambda: running.discard(wrapper))
+    )
 
 
 class _ProcessorWorker(QObject):
@@ -54,6 +79,15 @@ class _ProcessorWorker(QObject):
             self.finished.emit()
 
 
+class _ProcessorRelay(QObject):
+    """_ProcessorWorker's signals, on the GUI thread; see relay_signals."""
+
+    progress = Signal(int, int)
+    slice_done = Signal(tuple, object)
+    error = Signal(str)
+    finished = Signal()
+
+
 class ProcessorThread:
     """Convenience wrapper that manages QThread + _ProcessorWorker lifecycle.
 
@@ -85,9 +119,6 @@ class ProcessorThread:
         self.worker.moveToThread(self.thread)
 
         ProcessorThread._running.add(self)
-        self.thread.finished.connect(
-            lambda: ProcessorThread._running.discard(self)
-        )
 
         # Wire lifecycle
         self.thread.started.connect(self.worker.run)
@@ -95,11 +126,17 @@ class ProcessorThread:
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
-        # Expose signals for external connection
-        self.progress = self.worker.progress
-        self.slice_done = self.worker.slice_done
-        self.finished = self.thread.finished
-        self.error = self.worker.error
+        # Expose signals for external connection, from the GUI thread
+        self.relay = _ProcessorRelay()
+        relay_signals(
+            self.worker, self.relay, ("progress", "slice_done", "error")
+        )
+        relay_signals(self.thread, self.relay, ("finished",))
+        self.progress = self.relay.progress
+        self.slice_done = self.relay.slice_done
+        self.finished = self.relay.finished
+        self.error = self.relay.error
+        _release_when_finished(self, ProcessorThread._running)
 
     def start(self):
         """Start processing on the worker thread."""
@@ -128,6 +165,14 @@ class _CallWorker(QObject):
             self.finished.emit()
 
 
+class _CallRelay(QObject):
+    """_CallWorker's signals, on the GUI thread; see relay_signals."""
+
+    done = Signal(object)
+    error = Signal(str)
+    finished = Signal()
+
+
 class CallThread:
     """Run one callable off the GUI thread, ProcessorThread's way.
 
@@ -145,16 +190,19 @@ class CallThread:
         self.worker.moveToThread(self.thread)
 
         CallThread._running.add(self)
-        self.thread.finished.connect(lambda: CallThread._running.discard(self))
 
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
-        self.done = self.worker.done
-        self.error = self.worker.error
-        self.finished = self.thread.finished
+        self.relay = _CallRelay()
+        relay_signals(self.worker, self.relay, ("done", "error"))
+        relay_signals(self.thread, self.relay, ("finished",))
+        self.done = self.relay.done
+        self.error = self.relay.error
+        self.finished = self.relay.finished
+        _release_when_finished(self, CallThread._running)
 
     def start(self):
         self.thread.start()
