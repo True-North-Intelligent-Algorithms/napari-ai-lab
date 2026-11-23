@@ -10,17 +10,25 @@ through [scikit-ops](https://github.com/apposed/scikit-ops), which builds each
 model's environment the first time you use it. That first run takes several
 minutes.
 
-## 1. napari hub
+## 1. napari, no code
 
-!!! note "Coming soon"
-    The listing goes live with an upcoming release.
+From 0.1.0a9 AI Lab is listed on the napari hub, so it installs from inside
+napari with no terminal.
+
+1. Install napari from [napari.org](https://napari.org/stable/tutorials/fundamentals/installation_bundle.html)
+   (the bundled app: download the installer and run it).
+2. Start napari, then **Plugins → Install/Uninstall Plugins...**
+3. Search for **napari-ai-lab**, click **Install**, and restart napari when
+   asked.
+
+That installs scikit-ops with it, so Cellpose, StarDist and the other models
+are available; each builds its environment the first time you run it.
 
 ## 2. pip and conda
 
 ```sh
 conda create -n napari-ai-lab -c conda-forge python=3.12 napari pyqt
 conda activate napari-ai-lab
-pip install --pre scikit-ops
 pip install napari-ai-lab albumentations
 ```
 

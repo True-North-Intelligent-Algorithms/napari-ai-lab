@@ -387,16 +387,44 @@ outside the appose environments at the same moment.
 
 ---
 
-## Not on napari hub: hidden, and blocked on scikit-ops reaching PyPI
+## Non-ASCII prints crash wherever stdout is cp1252
 
-**Status:** decided: go public once scikit-ops is on PyPI.
+**Status:** open. Found 2026-11-23 in a minimal environment (napari 0.10 and
+napari-ai-lab from pip, nothing else).
 
-`napari.yaml` has `visibility: hidden` (from the template, since the initial
-commit), and npe2api skips any manifest that is not public — that, not the
-alpha versions, is why the hub has no page. Flipping it is one line plus a
-release. But the hub installs with plain `pip install napari-ai-lab`, and
-PyPI rejects git-URL dependencies, so scikit-ops (with opspec, ophelper and
-oprunner) must be published to PyPI first.
+On Windows, a `print` of an emoji raises `UnicodeEncodeError` when stdout is a
+redirected stream using the ANSI code page (cp1252): a pipe, a log file, some
+IDEs and launchers. A real console is fine, since Python writes it as UTF-8.
+The napari bundle runs `python.exe -m napari` in a hidden console, so a
+bundle user probably never sees it.
+
+Three of these ran while the plugin loads (the "not available" notes in
+`Segmenters/GlobalSegmenters/__init__.py` and `apps/register_all.py`) and took
+every widget down; they are ASCII now. About 85 more `print` calls in
+`src/napari_ai_lab` still carry emoji or other non-ASCII characters. They run
+later, from user actions, and would fail the action rather than the plugin.
+Replacing them with ASCII, or moving to `logging`, closes it.
+
+---
+
+## No minimal-environment check; interactive_local_learning needs scikit-learn
+
+**Status:** open.
+
+Spec 0003 asks for a smoke test in a minimal environment, and the bundle
+route makes it the configuration codeless users actually get. Done by hand on
+2026-11-23 (napari 0.10.0 with PyQt5 and with PySide6, plus
+`pip install napari-ai-lab` from the branch): all three widgets open, and
+`SkopSegmenter` finds scikit-ops. Modules that fail to import there, all
+off the plugin path:
+
+- `Segmenters/GlobalSegmenters/MonaiUNetSegmenter*`: torch, expected; the
+  lazy segmenter lookup turns them into `None`.
+- `apps/interactive_local_learning`: imports `sklearn` at module level, which
+  is not a declared dependency. Guard it per spec 0003, or declare it.
+
+Turning that into CI (import every module, open every widget) is what would
+stop a release breaking this again.
 
 ---
 
@@ -482,6 +510,20 @@ harness offers datasets that cannot load.
 ---
 
 ## Resolved
+
+## Not on napari hub: hidden, and blocked on scikit-ops reaching PyPI
+
+**Status:** done (2026-11-23, for 0.1.0a9): `visibility: public`, and `scikit-ops>=0.1.0.dev3` is a declared dependency, so a plain
+`pip install napari-ai-lab` (the hub, the plugin manager) gets the model route. scikit-ops 0.1.0.dev3 reached PyPI on 2026-11-19.
+
+`napari.yaml` has `visibility: hidden` (from the template, since the initial
+commit), and npe2api skips any manifest that is not public — that, not the
+alpha versions, is why the hub has no page. Flipping it is one line plus a
+release. But the hub installs with plain `pip install napari-ai-lab`, and
+PyPI rejects git-URL dependencies, so scikit-ops (with opspec, ophelper and
+oprunner) must be published to PyPI first.
+
+---
 
 ## scikit-ops is a copy, not an editable install, in pytorch_napari
 

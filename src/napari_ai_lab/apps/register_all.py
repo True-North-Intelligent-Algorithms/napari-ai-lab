@@ -107,7 +107,7 @@ def _register_skop_segmenters(prof):
             StardistSkopSegmenter,
         )
     except ImportError as exc:
-        print(f"ℹ️  scikit-ops segmenters not registered: {exc}")
+        print(f"Note: scikit-ops segmenters not registered: {exc}")
         return
 
     from ..Segmenters.GlobalSegmenters.SkopDetector import (
@@ -132,7 +132,9 @@ def _register_skop_segmenters(prof):
     from ..Segmenters.GlobalSegmenters import TniaOpsDetector as tnia
 
     if tnia.detect_people is None:
-        print("ℹ️  tnia-ops detectors not registered: tnia-ops not installed")
+        print(
+            "Note: tnia-ops detectors not registered: tnia-ops not installed"
+        )
         return
     for seg in (tnia.TniaPeopleDetector, tnia.TniaBibDetector):
         if prof.allows(seg, "global"):

@@ -59,7 +59,10 @@ def __getattr__(name):
             return segmenter_class
         else:
             # Return None instead of raising - caller can check and skip registration
-            print(f"ℹ️  {name} not available (missing dependencies)")
+            # ASCII only: this runs while the plugin loads, and a non-ASCII
+            # print raises UnicodeEncodeError wherever stdout is cp1252 (a
+            # redirected stream on Windows), taking every widget down with it.
+            print(f"Note: {name} not available (missing dependencies)")
             globals()[name] = None
             return None
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
