@@ -39,7 +39,7 @@ dependencies = [
     # manager). Light: scikit-ops builds each model's environment (Cellpose,
     # StarDist, ...) on first use, so torch and friends never enter napari's.
     # Names a pre-release, so pip will take one.
-    "scikit-ops>=0.1.0.dev4",
+    "scikit-ops>=0.1.0.dev5",
 ]
 
 [project.urls]

@@ -1,8 +1,8 @@
 """micro_sam automatic segmentation and training, through scikit-ops.
 
-The scikit-ops twin of ``MicroSamSegmenter``. The ops, in
-``napari_ai_lab_ops.microsam_auto``, run in scikit-ops' ``pytorch``
-environment, which carries micro_sam -- so this works from a napari hub
+The scikit-ops twin of ``MicroSamSegmenter``. The ops,
+``skop.ops.segment.microsam`` and ``skop.ops.train.microsam``, run in
+scikit-ops' ``pytorch`` environment, which carries micro_sam -- so this works from a napari hub
 install, where micro_sam is not installed and ai-lab does not depend on it.
 
 Models: micro_sam's built-ins by name, plus every
@@ -20,11 +20,9 @@ from .GlobalSegmenterBase import GlobalSegmenterBase
 from .SkopSegmenter import SkopSegmenter, _get_runner
 
 try:
-    from napari_ai_lab_ops.microsam_auto import (
-        microsam_segment,
-        train_microsam,
-    )
-except ImportError:  # scikit-ops (opspec) missing
+    from skop.ops.segment.microsam import microsam as microsam_segment
+    from skop.ops.train.microsam import train_microsam
+except ImportError:  # scikit-ops missing, or older than 0.1.0.dev5
     microsam_segment = train_microsam = None
 
 #: Built-in -> axes. Every one but plain vit_b has the instance decoder.

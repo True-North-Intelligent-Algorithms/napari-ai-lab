@@ -9,8 +9,8 @@ Two backends, the same behaviour:
 * **here** -- micro_sam imported into this process, as the i2k tutorial
   environment installs it.
 * **scikit-ops** -- when micro_sam is not importable, which is the napari hub
-  install. The ops in ``napari_ai_lab_ops.microsam_prompt`` run in
-  scikit-ops' ``pytorch`` environment, which carries micro_sam, and keep the
+  install. scikit-ops' ``skop.ops.prompt.microsam`` ops run in its
+  ``pytorch`` environment, which carries micro_sam, and keep the
   embeddings in that worker between clicks. napari-ai-lab itself never
   depends on micro_sam (which depends on napari and PyQt6).
 
@@ -39,13 +39,10 @@ except ImportError:
     _is_micro_sam_available = False
 
 try:
-    from napari_ai_lab_ops.microsam_prompt import (
-        microsam_embed,
-        microsam_points,
-    )
+    from skop.ops.prompt.microsam import microsam_embed, microsam_points
 
     _is_skop_available = True
-except ImportError:  # scikit-ops (opspec) missing
+except ImportError:  # scikit-ops missing, or older than 0.1.0.dev5
     microsam_embed = microsam_points = None
     _is_skop_available = False
 
