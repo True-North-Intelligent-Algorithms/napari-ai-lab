@@ -106,9 +106,9 @@ PROFILES: dict[str, Profile] = {
             "each image's embedding between clicks."
         ),
         global_segmenters=(
-            "StardistSkopSegmenter",
-            "Cellpose3SkopSegmenter",
             "Cellpose4SkopSegmenter",
+            "Cellpose3SkopSegmenter",
+            "StardistSkopSegmenter",
             "CellCastStardistSegmenter",
         ),
         interactive_segmenters=(

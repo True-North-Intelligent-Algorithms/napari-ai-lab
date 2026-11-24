@@ -116,10 +116,12 @@ def _register_skop_segmenters(prof):
         YoloSkopDetector,
     )
 
+    # Registration order is list order, and the first is the default: Cellpose
+    # (4, Cellpose-SAM) first, as the one most people reach for.
     for seg in (
-        StardistSkopSegmenter,
-        Cellpose3SkopSegmenter,
         Cellpose4SkopSegmenter,
+        Cellpose3SkopSegmenter,
+        StardistSkopSegmenter,
         YoloSkopDetector,
         FastSamSkopDetector,
         ObjectAwareYoloSkopDetector,
