@@ -76,7 +76,7 @@ class TestSimpleAugmenter:
         patch_size = (50, 50)
 
         with pytest.raises(
-            ValueError, match="Image and mask shapes must match"
+            ValueError, match="Image and mask spatial shapes must match"
         ):
             augmenter.augment(im, mask, patch_size)
 
@@ -101,7 +101,7 @@ class TestSimpleAugmenter:
 
         with pytest.raises(
             ValueError,
-            match="patch_size dimensions .* must match image dimensions",
+            match=r"patch_size dimensions .* must match image spatial dimensions",
         ):
             augmenter.augment(im, mask, patch_size)
 

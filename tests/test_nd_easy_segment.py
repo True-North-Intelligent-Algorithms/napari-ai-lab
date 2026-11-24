@@ -1,12 +1,37 @@
+import importlib.util
 import shutil
 from pathlib import Path
 
+import pytest
+
 from napari_ai_lab.apps.nd_easy_segment import NDEasySegment
 from napari_ai_lab.models import ImageDataModel
-from napari_ai_lab.Segmenters.GlobalSegmenters import MonaiUNetSegmenter
+from napari_ai_lab.Segmenters.GlobalSegmenters import (
+    MonaiUNetSegmenter,
+    ThresholdSegmenter,
+)
+
+#: The widget path is the same for any segmenter. ThresholdSegmenter needs
+#: nothing optional, so the path is always tested; MONAI, with the trained
+#: test model, when it is installed.
+SEGMENTERS = [
+    pytest.param(ThresholdSegmenter, "ThresholdSegmenter", id="threshold"),
+    pytest.param(
+        MonaiUNetSegmenter,
+        "MonaiUNetSegmenter",
+        id="monai",
+        marks=pytest.mark.skipif(
+            importlib.util.find_spec("monai") is None,
+            reason="MONAI is optional and not installed",
+        ),
+    ),
+]
 
 
-def test_nd_easy_segment_creates_prediction(qtbot):
+@pytest.mark.parametrize(("segmenter_class", "segmenter_name"), SEGMENTERS)
+def test_nd_easy_segment_creates_prediction(
+    qtbot, segmenter_class, segmenter_name
+):
     """Test that NDEasySegment creates prediction file in predictions directory."""
     # Setup original and temporary directories
     original_parent_dir = (
@@ -16,7 +41,7 @@ def test_nd_easy_segment_creates_prediction(qtbot):
 
     try:
         # Register all global segmenters
-        MonaiUNetSegmenter.register()
+        segmenter_class.register()
 
         # Create temp directory and copy test file
         temp_parent_dir.mkdir(parents=True, exist_ok=True)
@@ -39,14 +64,13 @@ def test_nd_easy_segment_creates_prediction(qtbot):
         # viewer.window.add_dock_widget(nd_easy_segment_widget)
         nd_easy_segment_widget.automatic_mode_btn.setChecked(True)
 
-        segmenter_name = "MonaiUNetSegmenter"
         nd_easy_segment_widget.segmenter_combo.setCurrentText(segmenter_name)
         segmenter = nd_easy_segment_widget.segmenter_cache[segmenter_name]
-        model_path = str(
-            original_parent_dir / "models" / "monai_unet_test.pth"
-        )
-
-        segmenter.load_model(model_path)
+        if segmenter_class is MonaiUNetSegmenter:
+            model_path = str(
+                original_parent_dir / "models" / "monai_unet_test.pth"
+            )
+            segmenter.load_model(model_path)
         nd_easy_segment_widget._update_segmenter_parameter_form(segmenter)
         nd_easy_segment_widget.segmenter_parameter_form.set_selected_axis("YX")
 

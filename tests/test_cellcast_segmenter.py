@@ -3,6 +3,7 @@ Test CellCast StarDist segmenter registration and basic functionality.
 """
 
 import numpy as np
+import pytest
 
 
 def test_cellcast_segmenter_registration():
@@ -29,6 +30,8 @@ def test_cellcast_segmenter_registration():
 
 def test_cellcast_segmenter_predict():
     """Test basic prediction with CellCast segmenter."""
+    # CellCast is optional, and not in the testing dependencies.
+    pytest.importorskip("cellcast")
     from napari_ai_lab.Segmenters.GlobalSegmenters import (
         CellCastStardistSegmenter,
     )

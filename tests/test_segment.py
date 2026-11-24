@@ -12,9 +12,14 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.Segmenters.GlobalSegmenters import MonaiUNetSegmenter
+
+# MONAI is optional, and not in the testing dependencies: its torch stack
+# would be the heaviest thing CI installs, for these tests alone.
+pytest.importorskip("monai")
 
 
 def test_segment_logic_without_widget():

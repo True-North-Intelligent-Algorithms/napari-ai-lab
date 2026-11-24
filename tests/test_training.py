@@ -3,11 +3,17 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
 from napari_ai_lab.Augmenters import SimpleAugmenter
 from napari_ai_lab.models import ImageDataModel
 from napari_ai_lab.Segmenters.GlobalSegmenters.MonaiUNetSegmenter import (
     MonaiUNetSegmenter,
 )
+
+# MONAI is optional, and not in the testing dependencies: its torch stack
+# would be the heaviest thing CI installs, for these tests alone.
+pytest.importorskip("monai")
 
 
 def simple_updater(message, progress=None):
