@@ -3,8 +3,22 @@ SAM3D Interactive Segmenter.
 
 This module provides a 3D Segment Anything Model (SAM) segmenter that works with
 3D volumetric data using point and shape annotations.
+
+Two backends, the same behaviour:
+
+* **here** -- micro_sam imported into this process, as the i2k tutorial
+  environment installs it.
+* **scikit-ops** -- when micro_sam is not importable, which is the napari hub
+  install. The ops in ``napari_ai_lab_ops.microsam_prompt`` run in
+  scikit-ops' ``pytorch`` environment, which carries micro_sam, and keep the
+  embeddings in that worker between clicks. napari-ai-lab itself never
+  depends on micro_sam (which depends on napari and PyQt6).
+
+``NAPARI_AI_LAB_SAM3D=skop`` forces the second even where micro_sam is
+installed, to try the hub path from a development environment.
 """
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,9 +37,27 @@ try:
 except ImportError:
     AnnotatorState = None
     _is_micro_sam_available = False
-    print(
-        "Warning: micro_sam is not installed. SAM3D segmenter will not work."
+
+try:
+    from napari_ai_lab_ops.microsam_prompt import (
+        microsam_embed,
+        microsam_points,
     )
+
+    _is_skop_available = True
+except ImportError:  # scikit-ops (opspec) missing
+    microsam_embed = microsam_points = None
+    _is_skop_available = False
+
+
+def _backend():
+    """'here', 'skop', or None when neither can run."""
+    forced = os.environ.get("NAPARI_AI_LAB_SAM3D", "").lower()
+    if _is_micro_sam_available and forced != "skop":
+        return "here"
+    if _is_skop_available:
+        return "skop"
+    return None
 
 
 @dataclass
@@ -103,6 +135,8 @@ Instructions:
         super().__init__()
 
         self.state = None
+        #: Embedding path the scikit-ops worker holds embeddings for.
+        self._skop_embedded = None
 
         self._supported_axes = ["ZYX", "YX", "ZYXC", "YXC"]
         self._potential_axes = ["ZYX", "YX", "ZYXC", "YXC"]
@@ -133,12 +167,14 @@ Instructions:
         passes and ``prompt_segmentation`` then runs them against the wrong
         shape.
         """
+        _, expected = self._embedding_paths(save_path, image_name)
+        if _backend() == "skop":
+            return self._skop_embedded != expected
         if (
             self.state is None
             or getattr(self.state, "image_embeddings", None) is None
         ):
             return True
-        _, expected = self._embedding_paths(save_path, image_name)
         return expected != self.embedding_save_path
 
     def initialize_predictor(self, image, save_path: str, image_name: str):
@@ -163,6 +199,9 @@ Instructions:
 
         # Initialize embedding save path
         self.initialize_embedding_save_path(save_path, image_name)
+
+        if _backend() == "skop":
+            return self._initialize_skop(image)
 
         self.state = AnnotatorState()
         self.state.reset_state()
@@ -254,6 +293,75 @@ Instructions:
                 "message": user_msg,
             }
 
+    def _initialize_skop(self, image):
+        """Have the scikit-ops worker make or load this image's embeddings."""
+        from ..GlobalSegmenters.SkopSegmenter import _get_runner, _report
+
+        self._skop_embedded = None
+        runner = _get_runner()
+        try:
+            if not runner.env_for(microsam_embed).folder.is_dir():
+                _report(
+                    "SAM3D: building scikit-ops' 'pytorch' environment "
+                    "first. Minutes and gigabytes, once."
+                )
+            Path(self.embedding_save_path).parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            runner.run(
+                microsam_embed,
+                image=np.ascontiguousarray(image),
+                embedding_path=self.embedding_save_path,
+                model_type=self.model_type,
+                ndim=get_ndim(image.shape),
+            )
+        except Exception as e:  # noqa: BLE001 - shown to the user instead
+            import traceback
+
+            traceback.print_exc()
+            return {
+                "success": False,
+                "error_type": type(e).__name__,
+                "message": (
+                    "SAM3D could not prepare embeddings in scikit-ops' "
+                    f"'pytorch' environment.\n\nDetails: {e}"
+                ),
+            }
+        self._skop_embedded = self.embedding_save_path
+        return {
+            "success": True,
+            "error_type": None,
+            "message": "Embeddings ready (scikit-ops).",
+        }
+
+    def availability(self):
+        """Ready here, ready elsewhere, needs a build, or unavailable."""
+        from ..availability import available, ready, unavailable, will_build
+
+        backend = _backend()
+        if backend == "here":
+            return available()
+        if backend is None:
+            return unavailable(
+                "SAM3D needs micro_sam here, or scikit-ops to run it in its "
+                "own environment -- pip install scikit-ops"
+            )
+        from ..GlobalSegmenters.SkopSegmenter import _get_runner
+
+        try:
+            built = _get_runner().env_for(microsam_embed).folder.is_dir()
+        except Exception:  # noqa: BLE001 - informational only
+            built = False
+        if built:
+            return ready(
+                "Runs micro_sam in scikit-ops' 'pytorch' environment, "
+                "which is already built"
+            )
+        return will_build(
+            "Runs micro_sam in scikit-ops' 'pytorch' environment, which must "
+            "be built on first use -- several minutes and gigabytes of disk"
+        )
+
     @property
     def supported_axes(self):
         """
@@ -299,9 +407,9 @@ Instructions:
         Check if required dependencies are available.
 
         Returns:
-            bool: True if micro_sam can be imported, False otherwise.
+            bool: True if micro_sam can run here or through scikit-ops.
         """
-        return _is_micro_sam_available
+        return _backend() is not None
 
     def segment(
         self, image, points=None, shapes=None, point_labels=None, **kwargs
@@ -329,6 +437,9 @@ Instructions:
             raise ValueError(
                 f"SAM3D does not support 5D+ images. Got shape: {image.shape}"
             )
+
+        if _backend() == "skop":
+            return self._segment_skop(image, points, point_labels)
 
         # Check if predictor has been initialized
         if (
@@ -403,6 +514,29 @@ Instructions:
             )
 
         return seg
+
+    def _segment_skop(self, image, points, point_labels):
+        """One click, answered by the scikit-ops worker."""
+        if not points:
+            return None
+        if self._skop_embedded is None:
+            print("SAM3D: embeddings not ready")
+            return None
+        from ..GlobalSegmenters.SkopSegmenter import _get_runner
+
+        labels = point_labels or [1] * len(points)
+        return _get_runner().run(
+            microsam_points,
+            image=np.ascontiguousarray(image),
+            points=np.asarray(points, dtype=np.float64),
+            point_labels=np.asarray(labels, dtype=np.int64),
+            embedding_path=self._skop_embedded,
+            model_type=self.model_type,
+            ndim=get_ndim(image.shape),
+            volume=self.selected_axis == "ZYX",
+            iou_threshold=float(self.iou_threshold),
+            box_extension=float(self.box_extension),
+        )
 
     def get_execution_string(self, image, **kwargs):
         """

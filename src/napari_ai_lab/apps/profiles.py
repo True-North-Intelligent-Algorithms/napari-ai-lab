@@ -100,10 +100,10 @@ PROFILES: dict[str, Profile] = {
         description=(
             "2D instance segmentation. Global segmenters are the scikit-ops "
             "ones, which run in their own environments, where a scikit-ops "
-            "version exists; CellCast has none, so it runs in the host. The "
-            "interactive segmenters are host-side by necessity: interactive "
-            "SAM keeps the image embedding resident between clicks, so it "
-            "cannot run out of process."
+            "version exists; CellCast has none, so it runs in the host. "
+            "SAM3D runs micro_sam in the host when it is installed there, and "
+            "otherwise in scikit-ops' pytorch environment, whose worker keeps "
+            "each image's embedding between clicks."
         ),
         global_segmenters=(
             "StardistSkopSegmenter",
