@@ -1389,7 +1389,11 @@ class NDEasySegment(BaseNDApp):
             use_progress_logger: If True, pass progress_logger to train method (embedded mode)
         """
         # Get the selected "Patches to Process" subdirectory name and
-        # combine it with the base patches directory.
+        # combine it with the base patches directory. Re-read the folders
+        # first: patches made since the form was built were not listed, and
+        # an empty selection sent training to patches/ itself, which holds
+        # no info.json. The current choice is kept when it still exists.
+        self._refresh_patches_combo()
         selected_patches = self.training_parameter_form.get_selected_patches()
         patches_base = self.image_data_model.get_patches_directory()
         if selected_patches:

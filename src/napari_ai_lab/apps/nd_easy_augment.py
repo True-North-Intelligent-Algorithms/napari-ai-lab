@@ -570,8 +570,28 @@ class NDEasyAugment(BaseNDApp):
             return self.augmenter.get_parameters_dict()
         return {}
 
+    def _refresh_training_patches(self):
+        """Have the Train tab list the patch folders now on disk.
+
+        Its "Patches to Process" combo is filled when the training form is
+        built, so patches made afterwards were missing from it until a
+        segmenter change, and training then read ``patches/`` itself:
+        "No such file or directory: ...patches\\info.json".
+        """
+        ai_lab = getattr(self, "ai_lab", None)
+        segment = getattr(ai_lab, "segment_widget", None)
+        if segment is not None and hasattr(segment, "_refresh_patches_combo"):
+            segment._refresh_patches_combo()
+
     def _on_perform_augmentations(self):
         """Perform augmentations by generating patches."""
+        try:
+            self._perform_augmentations()
+        finally:
+            # Every path, including the ones that return early.
+            self._refresh_training_patches()
+
+    def _perform_augmentations(self):
         if not self.before_augment():
             return
         # Validate that we have an augmenter
@@ -758,6 +778,7 @@ class NDEasyAugment(BaseNDApp):
             f"✅ Completed augmentation of {total_str} slices"
         )
         self._augment_thread = None
+        self._refresh_training_patches()
 
     def _on_augment_all_error(self, error_msg):
         """Handle errors from the augmentation worker thread."""
