@@ -11,24 +11,11 @@
 
 A collection of plugins and utilities for ND segmentation with Cellpose, StarDist, SAM and more
 
-## Status: early, and released for a specific reason
+## Napari-ai-lab
 
-This is an alpha release. It exists so that the analysis in a forthcoming
-article can be reproduced against a fixed, installable version, rather than
-against a moving git branch.
+Napari-ai-lab is a set of napari plugins for labelling, training and segmenting image sequences with popular AI models (Cellpose, StarDist, SAM, YOLO).
 
-That means:
-
-- **The API will change without deprecation.** Pin an exact version.
-- Parts of it are experimental, and some segmenters are more finished than
-  others.
-- The deep-learning ops are expected to migrate to
-  [scikit-ops](https://github.com/apposed/scikit-ops)
-  over subsequent releases, which will change how segmenters are invoked.
-
-If you are here from the article, install the exact version it pins. If you are
-here to use it day to day, it is probably too early — but issues and feedback
-are welcome.
+Current status is early.  See work in progress documentation [here](https://true-north-intelligent-algorithms.github.io/napari-ai-lab/)
 
 ----------------------------------
 
