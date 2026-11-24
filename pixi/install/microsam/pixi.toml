@@ -27,12 +27,12 @@ micro_sam = ">=1.8"
 torchvision = "*"
 
 [pypi-dependencies]
-napari-ai-lab = ">=0.1.0a8"
+napari-ai-lab = ">=0.1.0a15"
 tnia-python = "*"
 # From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
 albumentations = "*"
 appose = ">=0.12"
-scikit-ops = "==0.1.0.dev4"
+scikit-ops = "==0.1.0.dev5"
 
 [system-requirements]
 cuda = "12.0"
