@@ -32,7 +32,7 @@ tnia-python = "*"
 # From PyPI, not conda: conda's albumentations pulls a second cv2/Qt.
 albumentations = "*"
 appose = ">=0.12"
-scikit-ops = "==0.1.0.dev3"
+scikit-ops = "==0.1.0.dev4"
 
 [system-requirements]
 cuda = "12.0"
