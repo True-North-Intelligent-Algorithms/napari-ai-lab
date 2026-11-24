@@ -35,6 +35,12 @@ dependencies = [
     "scikit-image",
     "pillow-heif",  # iPhone .heic photos; see utilities/image_util.read_image
     "tifffile",  # imported at module level by artifact_io
+    # AlbumentationsAugmenter. 2.0.x is the last MIT albumentations; its
+    # successor, AlbumentationsX, is AGPL and a different package, so this
+    # never pulls it. Brings opencv-python-headless (no Qt), albucore,
+    # simsimd and stringzilla. Tested on OpenCV 5.1 in the napari 0.10
+    # bundle. Stopgap until the augmenter is rewritten on numpy/scipy.
+    "albumentations>=2.0,<2.1",
     # The route to models for a plain `pip install` (napari hub, the plugin
     # manager). Light: scikit-ops builds each model's environment (Cellpose,
     # StarDist, ...) on first use, so torch and friends never enter napari's.
