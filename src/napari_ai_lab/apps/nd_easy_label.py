@@ -8,6 +8,7 @@ from qtpy.QtGui import QKeySequence, QShortcut
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -2127,7 +2128,13 @@ class NDEasyLabel(BaseNDApp):
             self._interactive_roi_busy = False
 
     def _on_open_project(self):
-        """Show the project-open dialog and apply its settings to the AI Lab."""
+        """Pick a folder, confirm the project settings, open it in the AI Lab.
+
+        The folder picker comes first, since a folder is all most projects
+        need; the dialog after it shows the folder with the usual settings
+        (sequence viewer, nothing collapsed, axes auto-detected) already
+        filled in, so the common case is just OK.
+        """
         from .project_open_setup import ProjectOpenDialog, apply_project_setup
 
         # Parented to the napari window, not to this widget: this is the
@@ -2138,7 +2145,12 @@ class NDEasyLabel(BaseNDApp):
             parent = self.viewer.window._qt_window
         except AttributeError:
             parent = self
-        dialog = ProjectOpenDialog(parent)
+        directory = QFileDialog.getExistingDirectory(
+            parent, "Select Project Directory"
+        )
+        if not directory:
+            return
+        dialog = ProjectOpenDialog(parent, directory=directory)
         if dialog.exec_() != ProjectOpenDialog.Accepted:
             return
 

@@ -36,15 +36,15 @@ class ProjectOpenDialog(QDialog):
 
     VIEWER_TYPES = ["none", "stacked", "sequence"]
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, directory: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Open Project")
 
         form = QFormLayout(self)
 
-        # Directory + Browse
+        # Directory + Browse. Usually already picked; Browse changes it.
         dir_row = QHBoxLayout()
-        self.dir_edit = QLineEdit()
+        self.dir_edit = QLineEdit(directory)
         browse_btn = QPushButton("Browse...")
         browse_btn.clicked.connect(self._on_browse)
         dir_row.addWidget(self.dir_edit)

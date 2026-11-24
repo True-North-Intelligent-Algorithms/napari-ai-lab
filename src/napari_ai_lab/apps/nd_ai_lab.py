@@ -11,7 +11,6 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -756,13 +755,10 @@ class NDAILab(QWidget):
         """Setup the tabbed user interface."""
         layout = QVBoxLayout(self)
 
-        # Top-level controls (shared across all tabs)
-        self.dir_btn = QPushButton("Open Image Directory")
-        self.dir_btn.clicked.connect(self._on_open_directory)
-        layout.addWidget(self.dir_btn)
-
         # Open/Save Project live on the label widget; shown here, above the
-        # tabs, so they are reachable whichever tab is first.
+        # tabs, so they are reachable whichever tab is first. There is no
+        # separate "Open Image Directory": Open Project starts with the
+        # folder picker and its defaults are what that button did.
         project_row = QHBoxLayout()
         project_row.addWidget(self.label_widget.open_project_btn)
         project_row.addWidget(self.label_widget.save_project_btn)
@@ -945,29 +941,8 @@ class NDAILab(QWidget):
         trn_form.parameters_changed.connect(_train_to_aug)
 
     def _on_open_directory(self):
-        """Open directory and create/set model for all sub-apps."""
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Image Directory",
-            "...",
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
-        )
-
-        if directory:
-            # Open it the way "Open Project" does, with a sequence viewer, the
-            # usual project. This used to create the model and stop, so no
-            # image ever appeared.
-            from .project_open_setup import apply_project_setup
-
-            apply_project_setup(
-                self,
-                {
-                    "directory": directory,
-                    "viewer_type": "sequence",
-                    "axes_to_collapse": None,
-                    "axis_types": None,
-                },
-            )
+        """Open a project: the same as the Open Project button."""
+        self.label_widget._on_open_project()
 
     def _annotation_shape(self, image_shape):
         """Shape of an annotation for an image of *image_shape*.
