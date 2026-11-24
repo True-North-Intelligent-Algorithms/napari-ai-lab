@@ -4,8 +4,13 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from napari_ai_lab.artifact_io import ZarrArtifactIO
+
+# zarr is optional (ZarrArtifactIO says so when it is missing), and not in
+# the testing dependencies.
+pytest.importorskip("zarr")
 
 
 def test_zarr_io_3d_sparse_save_load():

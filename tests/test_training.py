@@ -5,15 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from napari_ai_lab.Augmenters import SimpleAugmenter
-from napari_ai_lab.models import ImageDataModel
-from napari_ai_lab.Segmenters.GlobalSegmenters.MonaiUNetSegmenter import (
+# MONAI is optional, and not in the testing dependencies: its torch stack
+# would be the heaviest thing CI installs, for these tests alone. Checked
+# before the imports below, the last of which needs torch.
+pytest.importorskip("monai")
+
+from napari_ai_lab.Augmenters import SimpleAugmenter  # noqa: E402
+from napari_ai_lab.models import ImageDataModel  # noqa: E402
+from napari_ai_lab.Segmenters.GlobalSegmenters.MonaiUNetSegmenter import (  # noqa: E402
     MonaiUNetSegmenter,
 )
-
-# MONAI is optional, and not in the testing dependencies: its torch stack
-# would be the heaviest thing CI installs, for these tests alone.
-pytest.importorskip("monai")
 
 
 def simple_updater(message, progress=None):

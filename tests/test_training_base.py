@@ -2,14 +2,16 @@
 
 from pathlib import Path
 
-from napari_ai_lab.Segmenters.GlobalSegmenters.MonaiUNetSegmenter import (
-    MonaiUNetSegmenter,
+# Any TrainingBase segmenter would do. This one needs only scikit-ops, a
+# required dependency -- MONAI's imports torch, which CI does not install.
+from napari_ai_lab.Segmenters.GlobalSegmenters.Cellpose4SkopSegmenter import (
+    Cellpose4SkopSegmenter as Segmenter,
 )
 
 
 def test_training_base_initialization():
     """Test that TrainingBase initializes loss tracking lists."""
-    segmenter = MonaiUNetSegmenter()
+    segmenter = Segmenter()
 
     # Check loss tracking lists are initialized
     assert hasattr(segmenter, "train_loss_list")
@@ -22,7 +24,7 @@ def test_training_base_initialization():
 
 def test_patch_path_property():
     """Test that patch_path property works correctly."""
-    segmenter = MonaiUNetSegmenter()
+    segmenter = Segmenter()
 
     # Initially should be None
     assert segmenter.patch_path is None
@@ -40,7 +42,7 @@ def test_patch_path_property():
 
 def test_train_method_exists():
     """Test that train method exists and is callable."""
-    segmenter = MonaiUNetSegmenter()
+    segmenter = Segmenter()
 
     assert hasattr(segmenter, "train")
     assert callable(segmenter.train)
