@@ -762,6 +762,12 @@ class NDAILab(QWidget):
         project_row = QHBoxLayout()
         project_row.addWidget(self.label_widget.open_project_btn)
         project_row.addWidget(self.label_widget.save_project_btn)
+        envs_btn = QPushButton("Environments")
+        envs_btn.setToolTip(
+            "Which model environments are built, and build one now"
+        )
+        envs_btn.clicked.connect(self._on_show_environments)
+        project_row.addWidget(envs_btn)
         layout.addLayout(project_row)
 
         # The box controls: a "Boxes" tab of their own in a profile without
@@ -939,6 +945,24 @@ class NDAILab(QWidget):
 
         aug_spin.valueChanged.connect(_aug_to_train)
         trn_form.parameters_changed.connect(_train_to_aug)
+
+    def _on_show_environments(self):
+        """Dock the Environments panel, or bring back the one docked."""
+        from .environments_panel import EnvironmentsPanel
+
+        panel = getattr(self, "_environments_panel", None)
+        if panel is not None:
+            try:
+                panel.refresh()
+                panel.parent().show()
+                panel.parent().raise_()
+                return
+            except RuntimeError:  # its dock was closed and deleted
+                pass
+        self._environments_panel = EnvironmentsPanel(self.viewer)
+        self.viewer.window.add_dock_widget(
+            self._environments_panel, name="Environments", area="right"
+        )
 
     def _on_open_directory(self):
         """Open a project: the same as the Open Project button."""

@@ -195,6 +195,9 @@ class NDEasySegment(BaseNDApp):
         # Add progress logger widget for segmentation
         self.segment_progress_logger = QtProgressLogger()
         auto_layout.addWidget(self.segment_progress_logger.get_widget())
+        # From the start, not the first segmentation: a build started from
+        # the Environments panel belongs in this log too.
+        self._listen_for_builds()
 
         main_layout.addWidget(self.auto_controls_group)
 
@@ -828,10 +831,15 @@ class NDEasySegment(BaseNDApp):
         except ImportError:
             return
         self._build_relay = BuildRelay()
-        self._build_relay.message.connect(
-            self.segment_progress_logger.log_info
-        )
+        self._build_relay.message.connect(self._on_build_news)
         add_build_listener(self._build_relay.message.emit)
+
+    def _on_build_news(self, line):
+        """One line of build news; a failure is logged as one."""
+        if line.startswith("❌"):
+            self.segment_progress_logger.log_error(line[1:].strip())
+        else:
+            self.segment_progress_logger.log_info(line)
 
     def _on_segment_range(self):
         """Segment a range of slices in the ND data (threaded)."""
