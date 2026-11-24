@@ -44,6 +44,27 @@ docs/, design/                  loose notes plus docs/spec/
 notebooks/, experiments/, scripts/, temp_scripts/
 ```
 
+## Writing style (docs, GUI text, comments, commit messages)
+
+- Facts as short bullet points, not prose. Numbers where there are numbers.
+- Headings name the thing: "Check the patches", not "What training sees".
+- No framing sentences ("This page explains...", "What the tab holds..."), no
+  abstract or polished phrasing.
+- Comments and docstrings: two lines at most.
+- The user writes longer explanations where needed. Instead of writing them,
+  point out places that need more explanation.
+- When editing the user's text, fix grammar, spelling and what is wrong. Keep
+  their voice.
+
+Bad:
+> ## What the patches hold
+> A closer look at what training will actually see, and why it matters.
+
+Good:
+> ## Check the patches
+> - **Show Patches**: opens them in a second napari viewer
+> - On disk: `patches/patches_axis_yxc/input0/` (images), `ground_truth0/` (labels)
+
 ## Open items
 
 `docs/spec/OPEN.md` is the register of known-broken and undecided things — one
