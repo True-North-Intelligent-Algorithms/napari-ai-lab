@@ -38,10 +38,38 @@ except ImportError:  # optional dependency, see docs/spec/0003
 _runner = None
 
 
+#: Packages of ops that ship with ai-lab but run in scikit-ops' environments.
+_OURS = ("napari_ai_lab_ops",)
+
+
+def _make_runner():
+    """A Runner that runs ai-lab's own ops in scikit-ops' environments.
+
+    oprunner looks for an op's ``envs/<id>/pixi.toml`` beside the op's files,
+    and ``napari_ai_lab_ops`` brings none: it means scikit-ops' ``pytorch``.
+    In a scikit-ops checkout the runner's fallback is that checkout's
+    ``envs/``, which is why this worked in the dev setup; installed from pip
+    there is no fallback, and the op failed with "No environment 'pytorch':
+    this runner has no envs_dir". So look the environment up as if the op
+    were one of skop's: same recipe, same ``scikit-ops--pytorch`` name, the
+    environment Cellpose already built -- nothing new is built.
+    """
+
+    class _AiLabRunner(Runner):
+        def _env_for(self, env_id, module):
+            if module.split(".")[0] in _OURS:
+                import skop  # noqa: F401 - _env_for looks it up by name
+
+                module = "skop"
+            return super()._env_for(env_id, module)
+
+    return _AiLabRunner()
+
+
 def _get_runner():
     global _runner
     if _runner is None:
-        _runner = Runner()
+        _runner = _make_runner()
         _runner.subscribe_build_progress(_BuildReporter())
     return _runner
 
