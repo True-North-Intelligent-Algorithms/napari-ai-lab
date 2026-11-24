@@ -125,6 +125,13 @@ class NDAILab(QWidget):
         self.augment_widget.ai_lab = self
         self.segment_widget.ai_lab = self
         self.augment_widget.before_augment = self._ask_save_first
+        # Augment reads the active annotation layer; show that choice there.
+        if self.profile.show_labels and hasattr(
+            self.label_widget, "active_annotation_combo"
+        ):
+            self.augment_widget.attach_annotation_choice(
+                self.label_widget.active_annotation_combo
+            )
         self.label_widget.save_project_btn.clicked.connect(self._mark_saved)
 
         # If model provided, set it now

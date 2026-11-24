@@ -57,6 +57,24 @@ class NDEasyAugment(BaseNDApp):
         """Set up the user interface."""
         self.setLayout(QVBoxLayout())
 
+        # Which annotation layer to augment from. Inside the AI Lab this is
+        # the Label tab's "Active Annotation Layer" -- the same list and the
+        # same choice, shown here too (attach_annotation_choice). Hidden
+        # until then.
+        self.annotations_row = QWidget()
+        row = QHBoxLayout(self.annotations_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(QLabel("Annotations:"))
+        self.annotations_combo = QComboBox()
+        self.annotations_combo.setToolTip(
+            "The annotation layer to make patches from. Each layer other "
+            "than the default gets its own patch set, patches_axis_<axes>_"
+            "<layer>, so Train can pick between them."
+        )
+        row.addWidget(self.annotations_combo, 1)
+        self.annotations_row.setVisible(False)
+        self.layout().addWidget(self.annotations_row)
+
         # Patch mode selection (first — determines how patch positions are sampled)
         self.patch_mode_label = QLabel("Patch Mode:")
         self.layout().addWidget(self.patch_mode_label)
@@ -570,6 +588,30 @@ class NDEasyAugment(BaseNDApp):
             return self.augmenter.get_parameters_dict()
         return {}
 
+    def attach_annotation_choice(self, active_combo):
+        """Show the Label tab's active-layer combo's choice here as well.
+
+        One model behind both combos, so a layer added on the Label tab is
+        listed here at once; choosing in either sets the other.
+        """
+        self._active_combo = active_combo
+        self.annotations_combo.setModel(active_combo.model())
+        self.annotations_combo.setCurrentIndex(active_combo.currentIndex())
+        active_combo.currentIndexChanged.connect(self._on_active_moved)
+        self.annotations_combo.currentIndexChanged.connect(
+            self._on_annotations_chosen
+        )
+        self.annotations_row.setVisible(True)
+
+    def _on_active_moved(self, index):
+        if self.annotations_combo.currentIndex() != index:
+            self.annotations_combo.setCurrentIndex(index)
+
+    def _on_annotations_chosen(self, index):
+        combo = getattr(self, "_active_combo", None)
+        if combo is not None and combo.currentIndex() != index:
+            combo.setCurrentIndex(index)  # makes that layer the active one
+
     def _refresh_training_patches(self):
         """Have the Train tab list the patch folders now on disk.
 
@@ -603,6 +645,15 @@ class NDEasyAugment(BaseNDApp):
         if self._makes_box_crops():
             self._make_box_crops()
             return
+
+        # Which annotations to augment from: the active layer, chosen here or
+        # on the Label tab. Its crops and patch set get folders of their own
+        # (see ImageDataModel.annotation_collection).
+        collection = self._active_annotation_name()
+        self.image_data_model.set_annotation_collection(collection)
+        self.progress_logger.log_info(
+            f"Augmenting from annotations '{collection or 'default'}'"
+        )
 
         # Validate that we have image and annotations
         if not hasattr(self, "image_layer") or self.image_layer is None:
@@ -813,6 +864,10 @@ class NDEasyAugment(BaseNDApp):
             self._show_box_crops()
             return
 
+        # The active annotation layer's patch set, as augmenting writes it.
+        self.image_data_model.set_annotation_collection(
+            self._active_annotation_name()
+        )
         # Get the selected axis from the form (matches what was used during augmentation)
         selected_axis = self.augmentation_form.get_selected_axis()
         if selected_axis:

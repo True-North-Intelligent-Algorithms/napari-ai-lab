@@ -2177,6 +2177,7 @@ class NDEasyLabel(BaseNDApp):
                 self.image_layer.data,
                 self.annotation_layer.data,
                 self.current_image_index,
+                annotation_name=self._active_annotation_name(),
             )
             print("Label patches saved.")
         else:
@@ -2236,6 +2237,7 @@ class NDEasyLabel(BaseNDApp):
                 self.image_layer.data,
                 self.annotation_layer.data,
                 self.current_image_index,
+                annotation_name=self._active_annotation_name(),
             )
         print("Label patches saved on close.")
 

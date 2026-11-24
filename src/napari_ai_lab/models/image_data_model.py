@@ -66,6 +66,20 @@ from napari_ai_lab.utility import (
 from ..artifact_io import get_artifact_io
 from ..utilities.slice_processor import SliceProcessor
 
+#: Annotation collections whose label crops and patches keep the original,
+#: unsuffixed folders: the app's default layer, and the legacy class_0.
+DEFAULT_COLLECTIONS = (None, "", "Labels (Persistent)", "class_0")
+
+
+def collection_suffix(annotation_name) -> str:
+    """The folder suffix for an annotation collection: "" for the default,
+    else its name made folder-safe -- "Blebs 2" is "blebs_2"."""
+    import re
+
+    if annotation_name in DEFAULT_COLLECTIONS:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "_", str(annotation_name).lower()).strip("_")
+
 
 class PatchMode(str, Enum):
     """Strategies for selecting patch locations during augmentation."""
@@ -460,13 +474,50 @@ class ImageDataModel:
         if axis is None:
             patches_dir = self.parent_directory / "patches"
         else:
+            # One patch set per annotation collection: patches_axis_yx for
+            # the default one, as always, and patches_axis_yx_<name> for any
+            # other, so augmenting from one does not overwrite another's.
+            suffix = collection_suffix(self.annotation_collection)
             patches_dir = (
-                self.parent_directory / "patches" / f"patches_axis_{axis}"
+                self.parent_directory
+                / "patches"
+                / f"patches_axis_{axis}{'_' + suffix if suffix else ''}"
             )
 
         patches_dir.mkdir(parents=True, exist_ok=True)
 
         return patches_dir
+
+    #: The annotation collection augmentation reads, and so the one whose
+    #: label crops and patch set are written. None means the default.
+    annotation_collection: str | None = None
+
+    def set_annotation_collection(self, name: str | None):
+        """Augment from annotation collection *name* (an annotations/ subdir)."""
+        self.annotation_collection = name
+
+    def _record_collection(self, patches_dir) -> None:
+        """Add to a patch set's info.json which annotations it came from."""
+        import json
+
+        info = Path(patches_dir) / "info.json"
+        try:
+            data = json.loads(info.read_text())
+        except (OSError, ValueError):
+            return
+        data["annotation_collection"] = self.annotation_collection
+        info.write_text(json.dumps(data, indent=2))
+
+    def get_label_crops_directory(self, annotation_name=None) -> Path:
+        """Where the label crops of *annotation_name* go: ``labels/`` for the
+        default collection, ``labels/<name>/`` for any other. ``boxes.csv``
+        stays in ``labels/``: the boxes are shared, the truth is not."""
+        labels_dir = self.get_labels_directory()
+        suffix = collection_suffix(annotation_name)
+        if suffix:
+            labels_dir = labels_dir / suffix
+            labels_dir.mkdir(parents=True, exist_ok=True)
+        return labels_dir
 
     def list_patches_directories(self) -> list[str]:
         """Return the names of existing ``patches_axis_*`` subdirectories.
@@ -1343,6 +1394,7 @@ class ImageDataModel:
         image_array: np.ndarray,
         annotations_array: np.ndarray,
         image_index: int,
+        annotation_name: str | None = None,
     ) -> Path:
         """
         For every box in *boxes_layer_data*, crop the supplied image and
@@ -1374,7 +1426,7 @@ class ImageDataModel:
         image_paths = self.get_image_paths()
 
         # Output directories: labels/input0  and  labels/truth0
-        labels_dir = self.get_labels_directory()
+        labels_dir = self.get_label_crops_directory(annotation_name)
         input_dir = labels_dir / "input0"
         truth_dir = labels_dir / "truth0"
 
@@ -1506,7 +1558,7 @@ class ImageDataModel:
             else:
                 print(message)
 
-        labels_dir = self.get_labels_directory()
+        labels_dir = self.get_label_crops_directory(annotation_name)
 
         rows = self.load_existing_boxes()
         if not rows:
@@ -2150,6 +2202,7 @@ class ImageDataModel:
                 num_truths=num_truths,
                 sub_sample=sub_sample,
             )
+            self._record_collection(patches_dir)
 
         # Log completion
         if progress_logger:
@@ -2203,7 +2256,7 @@ class ImageDataModel:
         labels_dir = (
             self.get_labels3d_directory()
             if use_3D
-            else self.get_labels_directory()
+            else self.get_label_crops_directory(self.annotation_collection)
         )
         input_dir = labels_dir / "input0"
         truth_dir = labels_dir / "truth0"
@@ -2282,6 +2335,7 @@ class ImageDataModel:
                 num_truths=1,
                 sub_sample=1,
             )
+            self._record_collection(patches_dir)
 
         self._log_augmenter_reports(progress_logger)
         msg = f"✅ Created {done} patches in {patches_dir}"
