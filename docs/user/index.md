@@ -12,4 +12,9 @@
 - Augment to add training data.
 - Train models.
 
+## Labs
+
+- [2D Instance](instance/10-segment.md): one mask per object. Cellpose, StarDist, SAM.
+- [2D Detect](detect/index.md): boxes with a class. YOLO. Docs coming soon.
+
 ![AI Lab after opening the bees project](images/ai_lab_open.png)

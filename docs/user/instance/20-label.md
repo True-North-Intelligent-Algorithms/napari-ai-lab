@@ -20,7 +20,7 @@
 - Select **Labels (Persistent)** in the layer list.
 - Paint with napari's brush and fill tools.
 
-![Painting on Labels (Persistent)](images/label_paint.png)
+![Painting on Labels (Persistent)](../images/label_paint.png)
 
 ## Draw with SAM
 
@@ -34,7 +34,7 @@ Needs the **microsam** install.
 - The first click on an image computes SAM's embedding, which takes 20 to 60
   seconds. After that, clicks are fast.
 
-![A SAM click on Labels (Working)](images/label_sam.png)
+![A SAM click on Labels (Working)](../images/label_sam.png)
 
 ## Mark finished areas
 

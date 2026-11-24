@@ -28,7 +28,7 @@ simple, some is elaborate and slow, and it is harder to inspect.
     - **Number of Patches**.
 3. **Perform Augmentations**.
 
-![The Augment tab](images/augment_tab.png)
+![The Augment tab](../images/augment_tab.png)
 
 **Delete Augmentations** clears the old patches before a new run.
 
@@ -37,12 +37,12 @@ simple, some is elaborate and slow, and it is harder to inspect.
 **Show Patches** opens them in a second napari viewer. Drag the slider to step
 through them.
 
-![Augmented patches in a second viewer](images/augment_patches.png)
+![Augmented patches in a second viewer](../images/augment_patches.png)
 
 Or open the project folder in a file browser, under
 `patches/patches_axis_yxc/`: `input0/` holds the images, `ground_truth0/` the
 labels.
 
-![Augmented patches from one label box](images/patches.png)
+![Augmented patches from one label box](../images/patches.png)
 
 `comb_03_00000_00010.tif` is image `comb_03`, label box `00000`, patch `00010`.

@@ -2,7 +2,7 @@
 
 Train when a ready-made model is not good enough on your images.
 
-![The Train tab](images/train_tab.png)
+![The Train tab](../images/train_tab.png)
 
 ## Before you train
 

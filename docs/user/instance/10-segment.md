@@ -2,11 +2,11 @@
 
 Try a ready-made model first. If it works on all your images, you are done.
 
-![The Segment tab with the segmenter list open](images/segment_tab.png)
+![The Segment tab with the segmenter list open](../images/segment_tab.png)
 
 ## Steps
 
-1. Open your project. See [Launch](launch.md).
+1. Open your project. See [Launch](../30-launch.md).
 2. **Segment** tab: choose a segmenter (StarDist, Cellpose 3, Cellpose 4, ...).
     - Check the banner under the settings. Green: ready to run. Red: not installed.
       Yellow: scikit-ops will install it in its own environment on first use.
@@ -42,4 +42,4 @@ Try a ready-made model first. If it works on all your images, you are done.
 ## Not good enough?
 
 - Copy the predictions into your labels and fix the mistakes.
-- Then [Label](label.md), [Augment](augment.md) and [Train](train.md).
+- Then [Label](20-label.md), [Augment](30-augment.md) and [Train](40-train.md).

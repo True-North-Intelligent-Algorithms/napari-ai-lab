@@ -13,14 +13,16 @@ theme:
 
 nav:
   - Home: index.md
-  - Install: install.md
-  - Get data: get-data.md
-  - Launch: launch.md
-  - Segment: segment.md
-  - Label: label.md
-  - Augment: augment.md
-  - Train: train.md
-  - Troubleshooting: troubleshooting.md
+  - Install: 10-install.md
+  - Get data: 20-get-data.md
+  - Launch: 30-launch.md
+  - 2D Instance:
+      - Segment: instance/10-segment.md
+      - Label: instance/20-label.md
+      - Augment: instance/30-augment.md
+      - Train: instance/40-train.md
+  - 2D Detect: detect/index.md
+  - Troubleshooting: 90-troubleshooting.md
 
 markdown_extensions:
   - admonition

@@ -4,7 +4,7 @@ The goal: AI Lab open on your own project folder.
 
 ## Choose the project
 
-- A folder of your images. See [Get data](get-data.md).
+- A folder of your images. See [Get data](20-get-data.md).
 - New to AI Lab? Start with an example set: bees, pollen or ladybugs.
 
 ## The settings
