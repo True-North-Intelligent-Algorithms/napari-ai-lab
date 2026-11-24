@@ -40,7 +40,8 @@ src/napari_ai_lab/vendored/     vendored third-party code (napari_bbox)
 src/launch_*.py                 top-level launchers, one per app
 pixi/install/<flavour>/         user installs from PyPI: lite, microsam
 pixi/dev/editable/              development: editable checkouts, tests, docs
-docs/, design/                  loose notes plus docs/spec/
+docs/user/                      the website (mkdocs.yml points here)
+docs/spec/, docs/dev/           specs and OPEN.md; developer notes
 notebooks/, experiments/, scripts/, temp_scripts/
 ```
 

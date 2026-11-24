@@ -167,7 +167,7 @@ The same rule should be applied wherever else the code asks which mode it is
 in, and the writer asymmetry is worth stating separately: **one input may
 produce many outputs.** A stacked dataset can be written back as a sequence of
 files, writing only the steps that have data rather than a mostly-empty array
-— the same tension `design/notes_02_23_2026.md` records between the sparse
+— the same tension `docs/dev/notes_02_23_2026.md` records between the sparse
 writers (`TiffSliceIO`, `ZarrArtifactIO`) and the whole-array ones
 (`TiffArtifactIO`, `NumpyArtifactIO`). A CZI has it too. It is a property of
 the writer, not of the viewer.

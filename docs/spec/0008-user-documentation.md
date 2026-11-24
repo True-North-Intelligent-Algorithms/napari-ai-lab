@@ -15,7 +15,7 @@ than which button to press.
 `../napari-easy-augment-batch-dl` already does this and it works.
 Its `mkdocs.yml` is Material theme with an explicit `nav`, `admonition` /
 `superfences` / `emoji` extensions, fifteen pages under `docs/`, screenshots
-in `docs/images/`, and a `how_to_make_these_docs.md` recording the workflow:
+in `docs/user/images/`, and a `how_to_make_these_docs.md` recording the workflow:
 `mkdocs serve` to preview with live reload, `mkdocs gh-deploy` to build and
 push to GitHub Pages. Copy that setup rather than designing one. There is no
 reason to evaluate sphinx here.

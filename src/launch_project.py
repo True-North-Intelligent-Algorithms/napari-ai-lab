@@ -2,7 +2,7 @@
 
     python src/launch_project.py FOLDER [--profile 2d-detect]
 
-The same settings as docs/launch.md -- sequence viewer, colour collapsed,
+The same settings as docs/user/launch.md -- sequence viewer, colour collapsed,
 NYXC -- which suit a folder of photos that may differ in size.
 """
 

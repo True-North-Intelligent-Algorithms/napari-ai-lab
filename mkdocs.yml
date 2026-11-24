@@ -1,4 +1,5 @@
 site_name: napari-ai-lab
+docs_dir: docs/user
 repo_url: https://github.com/True-North-Intelligent-Algorithms/napari-ai-lab
 theme:
   name: material
@@ -20,10 +21,6 @@ nav:
   - Augment: augment.md
   - Train: train.md
   - Troubleshooting: troubleshooting.md
-
-exclude_docs: |
-  dev/
-  spec/
 
 markdown_extensions:
   - admonition
