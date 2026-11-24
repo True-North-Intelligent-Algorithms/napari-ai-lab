@@ -103,6 +103,9 @@ def _register_skop_segmenters(prof):
         from ..Segmenters.GlobalSegmenters.Cellpose4SkopSegmenter import (
             Cellpose4SkopSegmenter,
         )
+        from ..Segmenters.GlobalSegmenters.MicroSamSkopSegmenter import (
+            MicroSamSkopSegmenter,
+        )
         from ..Segmenters.GlobalSegmenters.StardistSkopSegmenter import (
             StardistSkopSegmenter,
         )
@@ -122,6 +125,7 @@ def _register_skop_segmenters(prof):
         Cellpose4SkopSegmenter,
         Cellpose3SkopSegmenter,
         StardistSkopSegmenter,
+        MicroSamSkopSegmenter,
         YoloSkopDetector,
         FastSamSkopDetector,
         ObjectAwareYoloSkopDetector,

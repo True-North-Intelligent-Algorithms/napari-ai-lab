@@ -109,6 +109,7 @@ PROFILES: dict[str, Profile] = {
             "Cellpose4SkopSegmenter",
             "Cellpose3SkopSegmenter",
             "StardistSkopSegmenter",
+            "MicroSamSkopSegmenter",
             "CellCastStardistSegmenter",
         ),
         interactive_segmenters=(
