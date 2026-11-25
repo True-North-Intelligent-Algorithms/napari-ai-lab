@@ -17,7 +17,6 @@ profile directly.
 
 from napari.viewer import Viewer
 
-from .environments_panel import EnvironmentsPanel
 from .nd_ai_lab import NDAILab
 from .register_all import register_all
 
@@ -53,11 +52,3 @@ class NDAILabDetect2D(ProfiledAILab):
     """2D object detection: box annotations, scikit-ops detectors."""
 
     profile_name = "2d-detect"
-
-
-class EnvironmentsWidget(EnvironmentsPanel):
-    """The Environments panel, as a napari menu entry. Registers nothing:
-    it lists what an AI Lab registered, or just the environments."""
-
-    def __init__(self, viewer: Viewer):
-        super().__init__(viewer)

@@ -38,6 +38,8 @@ scikit-ops = { path = "../../../../scikit-ops", editable = true }
 opspec = { path = "../../../../scikit-ops/opspec", editable = true }
 ophelper = { path = "../../../../scikit-ops/ophelper", editable = true }
 oprunner = { path = "../../../../scikit-ops/oprunner", editable = true }
+# napari-skopkit: its Environments panel is the one the AI Lab docks.
+napari-skopkit = { path = "../../../../skop-napari", editable = true }
 # tnia-ops' ops (photo-enhance's people and bib detectors). Only their
 # declarations run here; the ops run in tnia-ops' own environments.
 tnia-ops = { path = "../../../../tnia-ops", editable = true }
