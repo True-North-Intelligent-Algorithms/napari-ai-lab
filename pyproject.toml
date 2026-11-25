@@ -142,6 +142,10 @@ exclude = [
 fix = true
 
 [tool.pytest.ini_options]
+# Our tests only. tox runs a bare `pytest`, which otherwise also collects
+# the vendored napari_bbox's _tests -- one of them the plugin template's
+# example for a .npy reader napari_bbox never had, so it always fails.
+testpaths = ["tests"]
 # Custom test configuration flags
 # Set to "false" to skip slow bioio tests
 addopts = [
