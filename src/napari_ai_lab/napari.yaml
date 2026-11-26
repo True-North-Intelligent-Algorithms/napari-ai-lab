@@ -19,6 +19,9 @@ contributions:
     - id: napari-ai-lab.nd_ai_lab_detect_2d
       python_name: napari_ai_lab.apps.nd_ai_lab_plugin:NDAILabDetect2D
       title: 2D Detect AI Lab
+    - id: napari-ai-lab.environments
+      python_name: napari_ai_lab.apps.nd_ai_lab_plugin:EnvironmentsWidget
+      title: Environments
   widgets:
     - command: napari-ai-lab.nd_ai_lab
       display_name: ND AI Lab
@@ -26,3 +29,5 @@ contributions:
       display_name: 2D Instance AI Lab
     - command: napari-ai-lab.nd_ai_lab_detect_2d
       display_name: 2D Detect AI Lab
+    - command: napari-ai-lab.environments
+      display_name: Environments

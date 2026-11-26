@@ -957,12 +957,6 @@ class NDAILab(QWidget):
         """Dock the Environments panel, or bring back the one docked."""
         from .environments_panel import EnvironmentsPanel
 
-        if EnvironmentsPanel is None:
-            print(
-                "The Environments panel is napari-skopkit's: "
-                "pip install napari-skopkit to get it."
-            )
-            return
         panel = getattr(self, "_environments_panel", None)
         if panel is not None:
             try:

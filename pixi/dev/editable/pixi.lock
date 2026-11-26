@@ -531,7 +531,6 @@ environments:
       - pypi: ../../../../scikit-ops/ophelper
       - pypi: ../../../../scikit-ops/oprunner
       - pypi: ../../../../scikit-ops/opspec
-      - pypi: ../../../../skop-napari
       - pypi: ../../../../tnia-ops
       - pypi: https://files.pythonhosted.org/packages/06/84/2f13d50a2cbec4a1b1684b30265bdb01cae0aa74b743079fa9edfc34230d/stringzilla-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
@@ -1058,7 +1057,6 @@ environments:
       - pypi: ../../../../scikit-ops/ophelper
       - pypi: ../../../../scikit-ops/oprunner
       - pypi: ../../../../scikit-ops/opspec
-      - pypi: ../../../../skop-napari
       - pypi: ../../../../tnia-ops
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/a2/53ad321b6d202cd159be3914bccb0eabaa48fa7b4fc630feb31323eccb9d/pillow_heif-1.8.1-cp312-cp312-macosx_11_0_arm64.whl
@@ -1601,7 +1599,6 @@ environments:
       - pypi: ../../../../scikit-ops/ophelper
       - pypi: ../../../../scikit-ops/oprunner
       - pypi: ../../../../scikit-ops/opspec
-      - pypi: ../../../../skop-napari
       - pypi: ../../../../tnia-ops
       - pypi: https://files.pythonhosted.org/packages/0a/e2/91f145e1f32428e9e1f21f46a7022ffe63d11f549ee55c3b9265ff5207fc/albucore-0.0.24-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl
@@ -20551,16 +20548,6 @@ packages:
 - pypi: ../../../../scikit-ops/opspec
   name: opspec
   requires_python: '>=3.10'
-- pypi: ../../../../skop-napari
-  name: napari-skopkit
-  requires_dist:
-  - scikit-ops @ ../../../../scikit-ops
-  - ophelper @ ../../../../scikit-ops/ophelper
-  - oprunner @ ../../../../scikit-ops/oprunner
-  - napari>=0.5
-  - magicgui>=0.8
-  - numpy
-  requires_python: '>=3.12'
 - pypi: ../../../../tnia-ops
   name: tnia-ops
   requires_dist:
