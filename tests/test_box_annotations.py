@@ -295,3 +295,91 @@ def test_running_a_detector_again_replaces_its_boxes(ai_lab):
     for _ in range(2):
         segment._add_predicted_boxes([BOX, BOX, BOX], (0, 0), "YXC", "Det")
     assert len(viewer.layers["Box predictions (Det)"].data) == 3
+
+
+# -- changing a box's class ---------------------------------------------------
+
+
+def _add_nucleus_class(widget):
+    """Type a second class, "nucleus", into the class combo: class 1."""
+    widget.box_layers["runners"].selected_data = set()
+    widget.class_combo.lineEdit().setText("nucleus")
+    widget._on_class_typed()
+    assert widget.class_combo.currentData() == 1
+
+
+def test_ctrl_number_gives_the_selected_boxes_that_class(ai_lab):
+    from app_model.types import KeyBinding
+
+    widget, _, _ = ai_lab
+    _add_nucleus_class(widget)
+    runners = widget.box_layers["runners"]
+    runners.selected_data = {0}
+
+    runners.keymap[KeyBinding.from_str("Ctrl+1")](runners)
+    assert list(runners.features["class"]) == [0]
+    runners.keymap[KeyBinding.from_str("Ctrl+2")](runners)
+    assert list(runners.features["class"]) == [1]
+    assert list(runners.features["name"]) == ["nucleus"]
+
+
+def test_the_class_menu_lists_the_classes_and_sets_them(ai_lab):
+    widget, _, _ = ai_lab
+    _add_nucleus_class(widget)
+    runners = widget.box_layers["runners"]
+    runners.selected_data = {0}
+
+    menu = widget._class_menu()
+    assert [a.text() for a in menu.actions()] == [
+        "runner\tCtrl+1",
+        "nucleus\tCtrl+2",
+    ]
+    menu.actions()[1].trigger()
+    assert list(runners.features["class"]) == [1]
+
+
+class _Click:
+    """What napari's mouse event tells a drag callback, for a right-click."""
+
+    button = 2
+    type = "mouse_press"
+
+    def __init__(self, position, pos=(100.0, 100.0)):
+        self.position = position
+        self.pos = pos
+
+
+def test_right_click_on_a_box_selects_it_and_opens_the_menu(
+    ai_lab, monkeypatch, qtbot
+):
+    widget, _, _ = ai_lab
+    runners = widget.box_layers["runners"]
+    shown = []
+    monkeypatch.setattr(widget, "_show_class_menu", lambda: shown.append(1))
+
+    click = _Click(position=(15.0, 15.0))  # inside BOX
+    gen = widget._on_box_right_click(runners, click)
+    next(gen)
+    click.type = "mouse_release"
+    with pytest.raises(StopIteration):
+        next(gen)
+    assert runners.selected_data == {0}
+    qtbot.waitUntil(lambda: bool(shown), timeout=1000)
+
+
+def test_right_drag_or_a_click_off_the_boxes_opens_no_menu(ai_lab):
+    widget, _, _ = ai_lab
+    runners = widget.box_layers["runners"]
+
+    # Off every box: not even a drag callback.
+    assert (
+        next(widget._on_box_right_click(runners, _Click((38.0, 58.0))), 0) == 0
+    )
+
+    click = _Click(position=(15.0, 15.0))
+    gen = widget._on_box_right_click(runners, click)
+    next(gen)
+    click.type, click.pos = "mouse_release", (160.0, 100.0)  # dragged: zoom
+    with pytest.raises(StopIteration):
+        next(gen)
+    assert runners.selected_data == set()

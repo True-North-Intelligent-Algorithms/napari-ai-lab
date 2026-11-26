@@ -7,6 +7,8 @@ into a single tabbed interface with shared model and viewer.
 
 import napari
 import numpy as np
+from qtpy.QtCore import QTimer
+from qtpy.QtGui import QCursor
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,6 +16,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -48,6 +51,54 @@ def _iou(a, b):
     inter = h * w
     union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1])
     return inter / (union - inter)
+
+
+#: Colours for a box layer's classes after class 0, which has the layer's own
+#: (NDAILab.BOX_LAYER_COLORS). Blue first: far from the first layer's yellow.
+CLASS_COLORS = ("deepskyblue", "violet", "lime", "orange", "yellow")
+
+
+def _class_colours(first, class_ids):
+    """Class id -> colour: class 0 *first*, the layer's, then CLASS_COLORS."""
+    palette = [first, *(c for c in CLASS_COLORS if c != first)]
+    return {c: palette[c % len(palette)] for c in class_ids}
+
+
+def _style_boxes(layer):
+    """Colour a box layer's boxes, and their names, by class; small on top.
+
+    Small on top so a click inside a small box -- a nucleus in its cell --
+    picks the small one: napari picks the top box under the cursor, and a
+    box drawn later is on top of the ones before. Kept up as boxes are
+    drawn, moved and deleted (_restyle_on_edit), loaded, or given a class.
+    """
+    from napari.layers.utils.color_encoding import NominalColorEncoding
+    from napari.utils.colormaps.categorical_colormap import CategoricalColormap
+
+    first = (layer.metadata or {}).get("box_colour", CLASS_COLORS[0])
+    classes = [int(c) for c in layer.features.get("class", [])]
+    if len(classes) != len(layer.data):
+        return  # mid-change: the features catch up, then this runs again
+    colours = _class_colours(first, set(classes))
+    if classes:
+        layer.edge_color = [colours[c] for c in classes]
+        bounds = [_box_bounds(b) for b in layer.data]
+        area = [(y1 - y0) * (x1 - x0) for y0, x0, y1, x1 in bounds]
+        # Biggest at the back (0), smallest in front.
+        z = np.empty(len(area), dtype=int)
+        z[np.argsort(area, kind="stable")[::-1]] = np.arange(len(area))
+        layer.z_index = z.tolist()
+    layer.text.color = NominalColorEncoding(
+        feature="class",
+        colormap=CategoricalColormap(colormap=colours, fallback_color=first),
+    )
+
+
+def _restyle_on_edit(event):
+    """A box was drawn, moved, resized or deleted: _style_boxes again."""
+    action = getattr(event.action, "value", event.action)
+    if action in ("added", "changed", "removed"):
+        _style_boxes(event.source)
 
 
 class NDAILab(QWidget):
@@ -993,7 +1044,8 @@ class NDAILab(QWidget):
 
     #: Edge colours for box annotation layers, one per layer in turn. Unlike
     #: the box predictions' (BOX_PREDICTION_COLORS in nd_easy_segment) and the
-    #: 3D boxes' magenta.
+    #: 3D boxes' magenta. A layer's class 0 has it; its other classes,
+    #: CLASS_COLORS.
     BOX_LAYER_COLORS = ("yellow", "orange", "lime", "deepskyblue", "violet")
 
     def _add_box_layer(self, folder):
@@ -1018,15 +1070,92 @@ class NDAILab(QWidget):
             },
             feature_defaults={"class": 0, "name": "0"},
             text={"string": "{name}", "size": 12, "color": colour},
-            metadata={"box_folder": folder},
+            metadata={"box_folder": folder, "box_colour": colour},
         )
         layer.events.highlight.connect(self._on_box_selection_changed)
         layer.events.data.connect(self._refresh_box_status)
+        layer.events.data.connect(_restyle_on_edit)
+        self._bind_box_class_choice(layer)
         # Known as a box layer before it is added: adding makes it the active
         # layer, and _on_active_layer_changed looks it up then.
         self.box_layers[folder] = layer
         self.viewer.add_layer(layer)
         return layer
+
+    #: Ctrl+1 to Ctrl+9 give the selected boxes the class listed 1st to 9th
+    #: in the class combo. Not the bare numbers: on a box layer napari has 1
+    #: to 7 for its tools, and 3 deletes the selected boxes.
+    CLASS_KEYS = 9
+
+    def _bind_box_class_choice(self, layer):
+        """Ctrl+number keys and a right-click menu that set boxes' class."""
+        for n in range(1, self.CLASS_KEYS + 1):
+            layer.bind_key(
+                f"Control-{n}",
+                lambda _layer, index=n - 1: self._give_selected_class(index),
+                overwrite=True,
+            )
+        layer.mouse_drag_callbacks.append(self._on_box_right_click)
+
+    def _give_selected_class(self, index):
+        """Give the selected boxes the class at *index* in the class combo.
+
+        As choosing it there does, so the next box drawn takes it too.
+        """
+        combo = self.class_combo
+        if not 0 <= index < combo.count() or combo.itemData(index) is None:
+            return
+        if index == combo.currentIndex():
+            self._on_class_chosen(index)
+        else:
+            combo.setCurrentIndex(index)  # -> _on_class_chosen
+
+    def _on_box_right_click(self, layer, event):
+        """Right-click a box: a menu of the classes, to give it one.
+
+        That box, or every selected box when it is one of them. On release,
+        and not after a drag, which zooms.
+        """
+        if event.button != 2 or layer is not self.shapes_layer:
+            return
+        if str(layer.mode) not in ("select", "direct", "pan_zoom"):
+            return
+        value = layer.get_value(event.position, world=True)
+        box = value[0] if value is not None else None
+        if box is None:
+            return
+        pressed_at = np.array(event.pos, dtype=float)
+        yield
+        while event.type == "mouse_move":
+            yield
+        if np.hypot(*(np.array(event.pos) - pressed_at)) > 5:
+            return  # a drag
+        if box not in layer.selected_data:
+            layer.selected_data = {box}
+        # Once napari is done with the click: the menu has its own loop.
+        QTimer.singleShot(0, lambda: self._show_class_menu())
+
+    def _show_class_menu(self):
+        """The class menu, at the mouse, until a class is chosen or not."""
+        menu = self._class_menu()
+        menu.exec_(QCursor.pos())
+        menu.deleteLater()
+
+    def _class_menu(self):
+        """A menu of the classes; choosing one gives it to the selected boxes."""
+        menu = QMenu(self)
+        combo = self.class_combo
+        for index in range(combo.count()):
+            if combo.itemData(index) is None:
+                continue
+            text = combo.itemText(index)
+            if index < self.CLASS_KEYS:
+                text += f"\tCtrl+{index + 1}"
+            action = menu.addAction(text)
+            action.triggered.connect(
+                lambda _checked=False, i=index: self._give_selected_class(i)
+            )
+        return menu
 
     def _live_box_layers(self):
         """The box layers still in the viewer; ones the user deleted go.
@@ -1088,6 +1217,7 @@ class NDAILab(QWidget):
                     [names.get(c, str(c)) for c in classes], dtype=object
                 ),
             }
+            _style_boxes(layer)
             layer.refresh()
         # After the features: setting them resets the next box's class.
         if self.shapes_layer is not None:
@@ -1717,6 +1847,7 @@ class NDAILab(QWidget):
             features.loc[selected, "class"] = class_id
             features.loc[selected, "name"] = name
             layer.features = features
+            _style_boxes(layer)
         # Last: setting the features resets the next box's class.
         layer.feature_defaults = {"class": class_id, "name": name}
 
