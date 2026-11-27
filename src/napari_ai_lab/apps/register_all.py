@@ -74,6 +74,9 @@ def register_all(profile=None):
         if prof.allows(seg, "global"):
             seg.register()
 
+    # Offered in the profile's order, so its first is the one selected.
+    _order_as_listed(GlobalSegmenterBase.registry, prof.global_segmenters)
+
     # Interactive segmenters
     for seg in (
         Otsu2D,
@@ -92,6 +95,24 @@ def register_all(profile=None):
     for aug in (SimpleAugmenter, AlbumentationsAugmenter, YoloCropAugmenter):
         if prof.allows(aug, "augmenter"):
             aug.register()
+
+
+def _order_as_listed(registry, listed):
+    """Put *registry* (name -> class) in the order *listed* names the classes.
+
+    A profile that lists its segmenters lists them in the order it wants them
+    offered: the Segment tab selects the first. Ones it does not list -- or
+    every one, when *listed* is None -- keep the order they registered in.
+    """
+    if not listed:
+        return
+    rank = {name.lower(): i for i, name in enumerate(listed)}
+    items = sorted(
+        registry.items(),
+        key=lambda item: rank.get(item[1].__name__.lower(), len(rank)),
+    )
+    registry.clear()
+    registry.update(items)
 
 
 def _register_skop_segmenters(prof):
@@ -122,8 +143,9 @@ def _register_skop_segmenters(prof):
         YoloSkopDetector,
     )
 
-    # Registration order is list order, and the first is the default: Cellpose
-    # (4, Cellpose-SAM) first, as the one most people reach for.
+    # Registration order is list order, and the first is the default -- unless
+    # the profile lists an order of its own (_order_as_listed): Cellpose (4,
+    # Cellpose-SAM) first, as the one most people reach for.
     for seg in (
         Cellpose4SkopSegmenter,
         Cellpose3SkopSegmenter,

@@ -139,9 +139,12 @@ PROFILES: dict[str, Profile] = {
             "boxes, so small objects in big photos are big enough to learn "
             "from."
         ),
+        # FastSAM first, so it is the one selected: it finds any object,
+        # where a stock YOLO finds nothing that is not a COCO thing. YOLO
+        # is the one that trains, on FastSAM's boxes corrected.
         global_segmenters=(
-            "YoloSkopDetector",
             "FastSamSkopDetector",
+            "YoloSkopDetector",
             "ObjectAwareYoloSkopDetector",
             "MicroSamYoloSegmenter",
             # tnia-ops: photo-enhance's people and race-bib detectors.
