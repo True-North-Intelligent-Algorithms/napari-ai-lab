@@ -151,8 +151,10 @@ class CellposeSkopSegmenterBase(SkopSegmenter, TrainingBase):
             "default": 224,
         },
     )
+    #: Cellpose skips patches with fewer cells than this; its own 5 skips
+    #: every patch of big cells, which hold one to three each.
     min_train_masks: int = field(
-        default=5,
+        default=1,
         metadata={
             "type": "int",
             "param_type": "training",
