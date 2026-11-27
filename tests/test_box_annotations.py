@@ -15,12 +15,15 @@ from napari_ai_lab.utilities.box_annotations import (
     box_file,
     box_folders,
     check_name,
+    merge_class_names,
     prediction_file,
     prediction_sources,
     read_class_names,
+    read_prediction_class_names,
     read_yolo_boxes,
     read_yolo_predictions,
     write_class_names,
+    write_prediction_class_names,
     write_yolo_boxes,
 )
 
@@ -90,12 +93,59 @@ def test_predictions_keep_their_confidence(tmp_path):
     assert np.isnan(conf[1])  # no confidence: the column is left off
 
 
+def test_classes_are_matched_by_name():
+    mapping, merged = merge_class_names(
+        {0: "cells_nuclei", 1: "cells", 2: "nuclei"}, {0: "nuclei", 1: "cells"}
+    )
+    # Same name, the layer's id; a new name, whose id 0 is taken, the next.
+    assert mapping == {0: 2, 1: 1, 2: 0}
+    assert merged == {0: "nuclei", 1: "cells", 2: "cells_nuclei"}
+
+
+def test_a_new_name_whose_id_is_taken_gets_the_next_one():
+    mapping, merged = merge_class_names({0: "bib"}, {0: "runner"})
+    assert mapping == {0: 1}
+    assert merged == {0: "runner", 1: "bib"}
+
+
+def test_prediction_class_names_round_trip_and_go(tmp_path):
+    write_prediction_class_names(tmp_path, "YoloSkopDetector", {1: "cells"})
+    assert read_prediction_class_names(tmp_path, "YoloSkopDetector") == {
+        1: "cells"
+    }
+    write_prediction_class_names(tmp_path, "YoloSkopDetector", None)
+    assert read_prediction_class_names(tmp_path, "YoloSkopDetector") == {}
+
+
+def test_a_trained_model_knows_its_class_names(tmp_path):
+    from napari_ai_lab.Segmenters.GlobalSegmenters.SkopDetector import (
+        trained_class_names,
+    )
+
+    # As train_yolo leaves its working files, beside the model.
+    data = tmp_path / "cells_nuclei_training" / "dataset" / "data.yaml"
+    data.parent.mkdir(parents=True)
+    data.write_text(
+        "path: 'D:\\images\\x'\ntrain: images/train\nval: images/val\n"
+        "names:\n  0: 'cells_nuclei'\n  1: 'cells'\n  2: 'nuclei'\n"
+    )
+    weights = tmp_path / "cells_nuclei.pt"
+    assert trained_class_names(weights) == {
+        0: "cells_nuclei",
+        1: "cells",
+        2: "nuclei",
+    }
+    assert trained_class_names(tmp_path / "yolo11s.pt") == {}
+
+
 class _FakeDetector:
     """What save_box_predictions reads from a detector after it ran."""
 
-    def __init__(self, boxes, scores=None):
+    def __init__(self, boxes, scores=None, classes=None, names=None):
         self.last_napari_boxes = boxes
         self.last_box_scores = scores
+        self.last_box_classes = classes
+        self.last_box_class_names = names
 
 
 def test_model_saves_a_detectors_boxes(tmp_path):
@@ -111,6 +161,25 @@ def test_model_saves_a_detectors_boxes(tmp_path):
     assert conf.tolist() == pytest.approx([0.9])
     # A segmenter that finds no boxes at all saves nothing.
     assert model.save_box_predictions(object(), 0) is None
+
+
+def test_model_saves_a_detectors_classes_and_their_names(tmp_path):
+    from napari_ai_lab.models import ImageDataModel
+
+    imsave(tmp_path / "a.png", np.zeros((40, 60, 3), dtype=np.uint8))
+    model = ImageDataModel(str(tmp_path))
+    model.load_image(0)
+    names = {1: "cells", 2: "nuclei"}
+    path = model.save_box_predictions(
+        _FakeDetector([BOX, BOX], [0.9, 0.8], [2, 1], names), 0
+    )
+    _, classes, _ = read_yolo_predictions(path, 40, 60)
+    assert classes.tolist() == [2, 1]
+    assert read_prediction_class_names(tmp_path, "_FakeDetector") == names
+
+    # The next run's model names none: the old names go.
+    model.save_box_predictions(_FakeDetector([BOX]), 0)
+    assert read_prediction_class_names(tmp_path, "_FakeDetector") == {}
 
 
 # -- the layers ---------------------------------------------------------------
@@ -295,6 +364,84 @@ def test_running_a_detector_again_replaces_its_boxes(ai_lab):
     for _ in range(2):
         segment._add_predicted_boxes([BOX, BOX, BOX], (0, 0), "YXC", "Det")
     assert len(viewer.layers["Box predictions (Det)"].data) == 3
+
+
+# -- a model that names its classes -------------------------------------------
+
+CELLS = {0: "cells_nuclei", 1: "cells", 2: "nuclei"}
+OTHER = np.array([[1.0, 40.0], [1.0, 55.0], [12.0, 55.0], [12.0, 40.0]])
+NAMED = "Box predictions (YoloSkopDetector)"
+
+
+def _named_predictions(project, widget, viewer, model):
+    """A YOLO model's cell and nucleus on the first photo, a cell on the
+    second, saved as a run saves them."""
+    write_yolo_boxes(
+        prediction_file(project, "YoloSkopDetector", "a"),
+        [BOX, OTHER],
+        [1, 2],
+        40,
+        60,
+        confidences=[0.8, 0.6],
+    )
+    write_yolo_boxes(
+        prediction_file(project, "YoloSkopDetector", "b"), [OTHER], [1], 40, 60
+    )
+    write_prediction_class_names(project, "YoloSkopDetector", CELLS)
+    _go_to(widget, viewer, model, 0)
+    return viewer.layers[NAMED]
+
+
+def test_named_predictions_show_their_class_in_its_colour(ai_lab, project):
+    widget, viewer, model = ai_lab
+    layer = _named_predictions(project, widget, viewer, model)
+    assert list(layer.features["label"]) == ["cells 0.80", "nuclei 0.60"]
+    assert not np.allclose(layer.edge_color[0], layer.edge_color[1])
+    # Deleting one works: the text colours are in step.
+    layer.selected_data = {0}
+    layer.remove_selected()
+    assert list(layer.features["label"]) == ["nuclei 0.60"]
+    # Unnamed ones show their score only, in one colour.
+    plain = viewer.layers[PREDICTED]
+    assert list(plain.features["label"]) == ["0.80", "0.30"]
+    assert np.allclose(plain.edge_color[0], plain.edge_color[1])
+
+
+def test_a_detector_run_shows_its_named_classes(ai_lab):
+    widget, viewer, _ = ai_lab
+    widget.segment_widget._add_predicted_boxes(
+        [BOX, OTHER], (0, 0), "YXC", "Det", [0.9, 0.5], [2, 1], CELLS
+    )
+    layer = viewer.layers["Box predictions (Det)"]
+    assert list(layer.features["label"]) == ["nuclei 0.90", "cells 0.50"]
+
+
+def test_copy_keeps_named_classes_adding_names_the_layer_lacks(
+    ai_lab, project
+):
+    widget, viewer, model = ai_lab
+    _named_predictions(project, widget, viewer, model)
+    _copy(widget, source=NAMED)
+    runners = widget.box_layers["runners"]
+    # BOX is already there; OTHER, a nucleus, is new to runners.
+    assert list(runners.features["name"]) == ["runner", "nuclei"]
+    assert list(runners.features["class"]) == [0, 2]
+    assert read_class_names(project, "runners") == {0: "runner", 2: "nuclei"}
+    assert widget.class_combo.currentText() == "runner"  # still the next box's
+    assert runners.feature_defaults["class"][0] == 0
+
+
+def test_copy_to_all_photos_keeps_named_classes(ai_lab, project):
+    widget, viewer, model = ai_lab
+    _named_predictions(project, widget, viewer, model)
+    widget._ask_copy_all = lambda text: "copy"
+    widget.copy_from_combo.setCurrentText(NAMED)
+    widget.copy_to_combo.setCurrentText("runners")
+    widget._on_copy_box_predictions_all()
+    # Photo a has runners boxes already, so only b's cell is copied.
+    _, classes = read_yolo_boxes(box_file(project, "runners", "b"), 40, 60)
+    assert classes.tolist() == [1]
+    assert read_class_names(project, "runners") == {0: "runner", 1: "cells"}
 
 
 # -- changing a box's class ---------------------------------------------------

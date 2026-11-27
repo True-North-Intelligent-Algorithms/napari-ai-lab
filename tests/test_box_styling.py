@@ -75,3 +75,22 @@ def test_a_box_moved_bigger_goes_to_the_back():
     layer.data = [_box(0, 0, 100, 100), layer.data[1]]
 
     assert layer._data_view.inside([45, 45]) == 1
+
+
+def test_a_box_deletes_cleanly_after_styling():
+    """Deleting must not fail on the names' colours: it did, halfway, and
+    left the boxes and their classes out of step."""
+    layer = _box_layer()
+    layer.add_rectangles([_box(0, 0, 10, 10), _box(20, 20, 30, 30)])
+    layer.feature_defaults = {"class": 1, "name": "cell"}
+    layer.add_rectangles([_box(40, 40, 50, 50)])
+    _style_boxes(layer)
+
+    layer.selected_data = {0}
+    layer.remove_selected()
+    assert len(layer.data) == len(layer.features) == 2
+    assert list(layer.features["class"]) == [0, 1]
+    np.testing.assert_allclose(
+        layer.text.color(layer.features),
+        [_colour("yellow"), _colour("deepskyblue")],
+    )

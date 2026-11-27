@@ -1884,6 +1884,7 @@ class ImageDataModel:
         """
         from ..utilities.box_annotations import (
             prediction_file,
+            write_prediction_class_names,
             write_yolo_boxes,
         )
 
@@ -1892,16 +1893,22 @@ class ImageDataModel:
             return None
         height, width = self.image_data.shape[:2]
         stem = self.get_image_paths()[image_index].stem
-        path = prediction_file(
-            self.parent_directory, type(segmenter).__name__, stem
-        )
+        source = type(segmenter).__name__
+        path = prediction_file(self.parent_directory, source, stem)
+        classes = getattr(segmenter, "last_box_classes", None)
         write_yolo_boxes(
             path,
             boxes,
-            [0] * len(boxes),
+            classes if classes is not None else [0] * len(boxes),
             height,
             width,
             confidences=getattr(segmenter, "last_box_scores", None),
+        )
+        # The names of the model that ran last; none for one without them.
+        write_prediction_class_names(
+            self.parent_directory,
+            source,
+            getattr(segmenter, "last_box_class_names", None),
         )
         return path
 

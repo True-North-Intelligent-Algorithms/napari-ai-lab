@@ -16,6 +16,10 @@ apart, one folder per source -- the detector, or e.g. ``photo-enhance-bibs``:
   confidence after them, ``class x_center y_center width height conf``,
   as ultralytics saves its own; the confidence is left off when the source
   gives none. A file exists only for an image the source ran on.
+- ``box_predictions/<source>/classes.yaml``: the names of the source's
+  classes, when it says what each box is -- a YOLO model trained on named
+  classes. A source that finds every object, as FastSAM, has none, and its
+  class column means nothing.
 
 The older layout, a single layer, is still read: txt files directly in
 ``box_annotations/``, with the project's own ``classes.yaml``. Its folder is
@@ -230,14 +234,22 @@ def delete_box_folder(project, folder: str) -> Path:
 
 def read_class_names(project, folder: str = LEGACY) -> dict[int, str]:
     """Class id -> name from *folder*'s classes.yaml, or {} if none."""
-    path = _classes_path(project, folder)
-    if not path.exists():
+    return read_names(_classes_path(project, folder))
+
+
+def read_names(path) -> dict[int, str]:
+    """Class id -> name from the ``names:`` of a YOLO yaml, or {} if none.
+
+    A classes.yaml, or a YOLO dataset's data.yaml.
+    """
+    path = Path(path)
+    if not path.is_file():
         return {}
 
     import yaml
 
-    with open(path) as f:
-        names = (yaml.safe_load(f) or {}).get("names", {})
+    with open(path, encoding="utf-8") as f:
+        names = (yaml.safe_load(f) or {}).get("names") or {}
     # YOLO allows either a list or an id -> name mapping.
     if isinstance(names, list):
         return dict(enumerate(names))
@@ -246,13 +258,37 @@ def read_class_names(project, folder: str = LEGACY) -> dict[int, str]:
 
 def write_class_names(project, names, folder: str = LEGACY):
     """Write class id -> name to *folder*'s classes.yaml."""
+    _write_names(_classes_path(project, folder), names)
+
+
+def _write_names(path, names):
     import yaml
 
     text = yaml.safe_dump({"names": dict(sorted(names.items()))})
     header = "# Class names for box annotations, in YOLO data.yaml form.\n"
-    path = _classes_path(project, folder)
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(header + text)
+    path.write_text(header + text, encoding="utf-8")
+
+
+def merge_class_names(names, into):
+    """Match the classes *names* names to the ids *into* has for them.
+
+    For copying a detector's boxes into a box layer: a class keeps its name,
+    whatever id the layer has for it. A name *into* lacks is added, under
+    its own id if that is free, else the next free one. Returns
+    ``(id -> id, the names *into* ends up with)``.
+    """
+    merged = dict(into)
+    ids = {name: i for i, name in merged.items()}
+    mapping = {}
+    for class_id, name in sorted(names.items()):
+        if name not in ids:
+            free = class_id not in merged
+            ids[name] = class_id if free else max(merged) + 1
+            merged[ids[name]] = name
+        mapping[class_id] = ids[name]
+    return mapping, merged
 
 
 def prediction_sources(project) -> list[str]:
@@ -266,6 +302,22 @@ def prediction_sources(project) -> list[str]:
 def prediction_file(project, source: str, image_stem: str) -> Path:
     """The YOLO txt file holding *source*'s predicted boxes for one image."""
     return Path(project) / BOX_PREDICTIONS_DIR / source / f"{image_stem}.txt"
+
+
+def read_prediction_class_names(project, source: str) -> dict[int, str]:
+    """The names of *source*'s classes, or {} when it does not name them."""
+    return read_names(
+        Path(project) / BOX_PREDICTIONS_DIR / source / CLASSES_FILE
+    )
+
+
+def write_prediction_class_names(project, source: str, names):
+    """Record the names of *source*'s classes; None or {} removes them."""
+    path = Path(project) / BOX_PREDICTIONS_DIR / source / CLASSES_FILE
+    if names:
+        _write_names(path, names)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def read_yolo_predictions(path, height, width):

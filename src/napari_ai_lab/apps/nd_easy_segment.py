@@ -23,6 +23,7 @@ from qtpy.QtWidgets import (
     QRadioButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..models import ImageDataModel
@@ -37,6 +38,53 @@ from ..widgets import NDOperationWidget
 from ..widgets.train_dialog import TrainDialog
 from .base_nd_app import BaseNDApp
 from .profiles import box_predictions_name
+
+
+def _show_error(parent, title, summary, details):
+    """An error box whose text can be copied: selected with the mouse, or
+    all of it with the Copy button.
+
+    Shows *summary* and the error's last line -- a traceback's own summary,
+    e.g. "ZeroDivisionError: float division by zero" -- with the whole of
+    *details* under Show Details.
+    """
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import QApplication
+
+    details = str(details).strip()
+    last = details.splitlines()[-1] if details else ""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Critical)
+    box.setWindowTitle(title)
+    box.setText(f"{summary}:\n\n{last}" if last else summary)
+    box.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    if details and details != last:
+        box.setDetailedText(details)
+    copy = box.addButton("Copy", QMessageBox.ActionRole)
+    # Copies and leaves the box open: a box button would close it.
+    copy.clicked.disconnect()
+    copy.clicked.connect(
+        lambda: QApplication.clipboard().setText(f"{summary}\n\n{details}")
+    )
+    box.addButton(QMessageBox.Ok)
+    box.exec_()
+
+
+def _can_train(segmenter_class) -> bool:
+    """Whether a segmenter class trains: what the Train tab lists."""
+    return callable(getattr(segmenter_class, "train", None))
+
+
+class _TrainingTab(QWidget):
+    """The Train tab's page: tells *on_show* each time it is shown."""
+
+    def __init__(self, on_show):
+        super().__init__()
+        self._on_show = on_show
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._on_show()
 
 
 class NDEasySegment(BaseNDApp):
@@ -269,19 +317,32 @@ class NDEasySegment(BaseNDApp):
             self.segmenter_combo.addItem("No segmenters available")
             self.segmenter_combo.setEnabled(False)
 
-        # Also populate training combo if it exists
+        # Also populate training combo if it exists: the segmenters that
+        # train, only. A detector that only finds (FastSAM) is not one; its
+        # boxes, corrected, are what a YOLO trains on.
         if hasattr(self, "training_segmenter_combo"):
-            self.training_segmenter_combo.clear()
-            if frameworks:
-                for name in framework_names:
-                    self.training_segmenter_combo.addItem(name)
-                if self.training_segmenter_combo.count() > 0:
-                    self.training_segmenter_combo.setCurrentIndex(0)
-            else:
-                self.training_segmenter_combo.addItem(
-                    "No segmenters available"
+            combo = self.training_segmenter_combo
+            # Quietly: filling it must not change the segmenter, now that
+            # its first item need not be the Segment tab's.
+            combo.blockSignals(True)
+            combo.clear()
+            trainable = [
+                name
+                for name in (framework_names if frameworks else [])
+                if _can_train(frameworks[name])
+            ]
+            for name in trainable:
+                combo.addItem(name)
+            if trainable:
+                combo.setEnabled(True)
+                first = self.segmenter_combo.currentText()
+                combo.setCurrentText(
+                    first if first in trainable else trainable[0]
                 )
-                self.training_segmenter_combo.setEnabled(False)
+            else:
+                combo.addItem("No segmenters that train")
+                combo.setEnabled(False)
+            combo.blockSignals(False)
 
         # Now trigger the change handler if we have items
         if frameworks and self.segmenter_combo.count() > 0:
@@ -299,9 +360,13 @@ class NDEasySegment(BaseNDApp):
         # Only sync if training combo exists and sender is one of our combos
         if hasattr(self, "training_segmenter_combo"):
             if sender == self.segmenter_combo:
-                self.training_segmenter_combo.blockSignals(True)
-                self.training_segmenter_combo.setCurrentText(segmenter_name)
-                self.training_segmenter_combo.blockSignals(False)
+                # Only to one that trains; for one that only finds, the
+                # Train tab keeps its pick, and switches to it when shown.
+                combo = self.training_segmenter_combo
+                if combo.findText(segmenter_name) >= 0:
+                    combo.blockSignals(True)
+                    combo.setCurrentText(segmenter_name)
+                    combo.blockSignals(False)
             elif sender == self.training_segmenter_combo:
                 self.segmenter_combo.blockSignals(True)
                 self.segmenter_combo.setCurrentText(segmenter_name)
@@ -309,6 +374,23 @@ class NDEasySegment(BaseNDApp):
 
         # Call base class implementation to actually change the segmenter
         super()._on_segmenter_changed(segmenter_name)
+
+    def _pick_a_trainer(self):
+        """On showing the Train tab: if the segmenter in use only finds --
+        FastSAM, say -- switch to the Train tab's, a YOLO in the detect
+        profile. That is the usual next step: find with FastSAM, correct the
+        boxes, train a YOLO on them (which can start from FastSAM). The
+        Segment tab follows, so the trained model is what Segment runs next.
+        """
+        combo = getattr(self, "training_segmenter_combo", None)
+        segmenter = getattr(self, "segmenter", None)
+        if combo is None or not combo.isEnabled() or combo.count() == 0:
+            return
+        if segmenter is not None and _can_train(type(segmenter)):
+            return
+        was = self.segmenter_combo.currentText()
+        self.segmenter_combo.setCurrentText(combo.currentText())
+        print(f"Train: {was} does not train; training {combo.currentText()}")
 
     def _create_training_parameter_form(self):
         """Create the training parameter form widget."""
@@ -545,9 +627,9 @@ class NDEasySegment(BaseNDApp):
         This allows the same NDEasySegment instance to show different views
         in different tabs without duplication.
         """
-        from qtpy.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
+        from qtpy.QtWidgets import QLabel, QLineEdit, QVBoxLayout
 
-        training_widget = QWidget()
+        training_widget = _TrainingTab(self._pick_a_trainer)
         layout = QVBoxLayout(training_widget)
 
         # Segmenter selection (create separate combo that stays in sync)
@@ -1131,6 +1213,8 @@ class NDEasySegment(BaseNDApp):
                     segmentation_axis,
                     segmenter_name,
                     getattr(self.segmenter, "last_box_scores", None),
+                    getattr(self.segmenter, "last_box_classes", None),
+                    getattr(self.segmenter, "last_box_class_names", None),
                 )
 
         except (
@@ -1490,7 +1574,7 @@ class NDEasySegment(BaseNDApp):
         full_msg = f"Training failed with error:\n{error_msg}"
         if getattr(self, "_training_use_progress_logger", False):
             self.progress_logger.log_error(full_msg)
-        QMessageBox.critical(self, "Training Error", full_msg)
+        _show_error(self, "Training Error", "Training failed", error_msg)
 
     def _on_training_finished(self, result):
         """Handle training completion (called on the main/GUI thread)."""
@@ -1714,7 +1798,8 @@ class NDEasySegment(BaseNDApp):
 
         *source* is the segmenter's class name, or whatever else saved boxes
         under box_predictions/ -- e.g. photo-enhance-bibs. Each box shows its
-        confidence, where the source gave one.
+        confidence, where the source gave one, after its class name, where
+        the source names its classes.
         """
         name = box_predictions_name(source)
         layer = self.box_predictions_layers.get(name)
@@ -1737,34 +1822,103 @@ class NDEasySegment(BaseNDApp):
             # axis is not a dimension. Counting it made a 3-D shapes layer,
             # whose slider then sliced the next image down to one row.
             ndim=self.image_layer.ndim,
-            features={"score": np.zeros(0, dtype=object)},
-            feature_defaults={"score": ""},
-            text={"string": "{score}", "size": 10, "color": colour},
+            features={
+                "score": np.zeros(0, dtype=object),
+                "class": np.zeros(0, dtype=int),
+                "label": np.zeros(0, dtype=object),
+            },
+            feature_defaults={"score": "", "class": 0, "label": ""},
+            text={"string": "{label}", "size": 10, "color": colour},
+            metadata={"colour": colour, "class_names": None},
         )
         self.box_predictions_layers[name] = layer
         return layer
 
-    def show_box_predictions(self, source, boxes, confidences=None, add=False):
+    def show_box_predictions(
+        self,
+        source,
+        boxes,
+        confidences=None,
+        add=False,
+        classes=None,
+        class_names=None,
+    ):
         """Put *boxes* in *source*'s predictions layer, replacing what is there.
 
         *add* keeps the boxes already shown -- for an ND image, where each
-        slice's boxes join the others'.
+        slice's boxes join the others'. *classes*, one id per box, count
+        only with *class_names* (id -> name): then each box is labelled and
+        coloured by its class, and keeps it when copied to a box layer.
         """
         layer = self.box_predictions_layer(source)
+        n = len(boxes)
         if confidences is None:
-            confidences = [None] * len(boxes)
+            confidences = [None] * n
         scores = [
             "" if c is None or np.isnan(c) else f"{c:.2f}" for c in confidences
         ]
+        named = bool(class_names) and classes is not None and len(classes) == n
+        ids = [int(c) for c in classes] if named else [0] * n
+        labels = [
+            f"{class_names.get(c, c)} {s}".strip() if named else s
+            for c, s in zip(ids, scores, strict=True)
+        ]
         if add:
-            scores = [*layer.features["score"], *scores]
+            old = layer.features
+            scores = [*old["score"], *scores]
+            ids = [*old["class"], *ids]
+            labels = [*old["label"], *labels]
         else:
             layer.data = []
-        if len(boxes):
+        if n:
             layer.add_rectangles(list(boxes))
-        layer.features = {"score": np.array(scores, dtype=object)}
+        layer.features = {
+            "score": np.array(scores, dtype=object),
+            "class": np.array(ids, dtype=int),
+            "label": np.array(labels, dtype=object),
+        }
+        if named or not add:
+            layer.metadata["class_names"] = (
+                dict(class_names) if named else None
+            )
+        self._colour_predictions(layer)
         layer.refresh()
         return layer
+
+    def _colour_predictions(self, layer):
+        """One colour per class for named classes, else the source's colour.
+
+        The palette starts at the source's colour and goes on through the
+        other prediction colours, so no class takes a box layer's colour.
+        """
+        from napari.layers.utils.color_encoding import NominalColorEncoding
+        from napari.utils.colormaps.categorical_colormap import (
+            CategoricalColormap,
+        )
+
+        colour = layer.metadata.get("colour", self.BOX_PREDICTION_COLORS[0])
+        if not layer.metadata.get("class_names"):
+            if len(layer.data):
+                layer.edge_color = colour
+            layer.text.color = colour
+            layer.refresh_text()
+            return
+        palette = [colour] + [
+            c for c in self.BOX_PREDICTION_COLORS if c != colour
+        ]
+        classes = [int(c) for c in layer.features["class"]]
+        colours = {c: palette[c % len(palette)] for c in set(classes)}
+        if classes:
+            layer.edge_color = [colours[c] for c in classes]
+        layer.text.color = NominalColorEncoding(
+            feature="class",
+            colormap=CategoricalColormap(
+                colormap=colours, fallback_color=colour
+            ),
+        )
+        # Fill the text colours now: deleting a box before they are drawn
+        # fails halfway otherwise (see nd_ai_lab._style_boxes).
+        layer.refresh_text()
 
     def _add_predicted_boxes(
         self,
@@ -1773,6 +1927,8 @@ class NDEasySegment(BaseNDApp):
         segmentation_axis,
         segmenter_name,
         confidences=None,
+        classes=None,
+        class_names=None,
     ):
         """Show a segmenter's predicted boxes in its "Box predictions" layer.
 
@@ -1807,7 +1963,12 @@ class NDEasySegment(BaseNDApp):
                 box_predictions_name(segmenter_name)
             )
         self.show_box_predictions(
-            segmenter_name, nd_boxes, confidences, add=bool(leading)
+            segmenter_name,
+            nd_boxes,
+            confidences,
+            add=bool(leading),
+            classes=classes,
+            class_names=class_names,
         )
 
     def _setup_interactive_layers(self, image_data):

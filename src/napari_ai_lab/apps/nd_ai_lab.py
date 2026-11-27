@@ -92,6 +92,10 @@ def _style_boxes(layer):
         feature="class",
         colormap=CategoricalColormap(colormap=colours, fallback_color=first),
     )
+    # Work the names' colours out now: a new encoding starts with none, and
+    # deleting a box deletes its colour too -- from nothing, an IndexError
+    # halfway through, leaving the boxes and their classes out of step.
+    layer.refresh_text()
 
 
 def _restyle_on_edit(event):
@@ -586,6 +590,7 @@ class NDAILab(QWidget):
         from ..utilities.box_annotations import (
             prediction_file,
             prediction_sources,
+            read_prediction_class_names,
             read_yolo_predictions,
         )
         from .profiles import box_predictions_name
@@ -612,10 +617,16 @@ class NDAILab(QWidget):
         for source in prediction_sources(project):
             if box_predictions_name(source) in hidden:
                 continue
-            boxes, _, confidences = read_yolo_predictions(
+            boxes, classes, confidences = read_yolo_predictions(
                 prediction_file(project, source, stem), *shape
             )
-            segment.show_box_predictions(source, boxes, confidences)
+            segment.show_box_predictions(
+                source,
+                boxes,
+                confidences,
+                classes=classes,
+                class_names=read_prediction_class_names(project, source),
+            )
 
     def _update_prediction_layers(self, image_shape):
         """Refresh every prediction layer for the current image.
@@ -1419,9 +1430,11 @@ class NDAILab(QWidget):
 
         Only the selected boxes when some are selected, else all of them.
         Added to what the layer has, skipping any box it already has (see
-        SAME_BOX_IOU), so copying twice does not double them. They take the
-        class showing in the class combo when the target is the active box
-        layer, else the target's class 0. Saved with the layer, as any edit.
+        SAME_BOX_IOU), so copying twice does not double them. Boxes whose
+        classes have names -- a YOLO model's -- keep their class. Others take
+        the class showing in the class combo when the target is the active
+        box layer, else the target's class 0. Saved with the layer, as any
+        edit.
         """
         from napari.utils.notifications import show_info
 
@@ -1447,36 +1460,85 @@ class NDAILab(QWidget):
 
         rows = sorted(source.selected_data) or range(len(source.data))
         have = [_box_bounds(b) for b in target.data]
-        new = []
+        new, new_rows = [], []
         for row in rows:
             box = np.asarray(source.data[row])[:, -2:]
             bounds = _box_bounds(box)
             if all(_iou(bounds, h) < self.SAME_BOX_IOU for h in have):
                 new.append(box)
+                new_rows.append(row)
                 have.append(bounds)
 
-        chosen = self.class_combo.currentData()
-        if target is self.shapes_layer and chosen is not None:
-            class_id = chosen
-            name = self.class_combo.currentText()
+        source_names = (source.metadata or {}).get("class_names")
+        if source_names:
+            classes = [int(source.features["class"][r]) for r in new_rows]
+            self._add_boxes_with_classes(target, new, classes, source_names)
+            how = "with their classes"
         else:
-            project = self.image_data_model.parent_directory
-            class_id = 0
-            name = read_class_names(project, self._box_folder(target)).get(
-                0, "0"
-            )
-        if new:
-            target.feature_defaults = {"class": class_id, "name": name}
-            target.add_rectangles(new)
-            target.refresh()
+            chosen = self.class_combo.currentData()
+            if target is self.shapes_layer and chosen is not None:
+                class_id = chosen
+                name = self.class_combo.currentText()
+            else:
+                project = self.image_data_model.parent_directory
+                class_id = 0
+                name = read_class_names(project, self._box_folder(target)).get(
+                    0, "0"
+                )
+            if new:
+                target.feature_defaults = {"class": class_id, "name": name}
+                target.add_rectangles(new)
+                target.refresh()
+            how = f"as {name}"
 
         skipped = len(rows) - len(new)
-        message = f"Copied {len(new)} boxes to {target.name} as {name}"
+        message = f"Copied {len(new)} boxes to {target.name} {how}"
         if skipped:
             message += f"; {skipped} already there"
         print(message)
         show_info(message)
         self.viewer.layers.selection.active = target
+
+    def _target_class_ids(self, target, names, used):
+        """Map a detector's class ids to *target*'s ids for the same names.
+
+        Only the *used* ids, the ones being copied: a name the target's
+        classes.yaml lacks is added to it (and to the class combo, for the
+        active layer). Returns (id -> id, the target's names).
+        """
+        from ..utilities.box_annotations import (
+            merge_class_names,
+            read_class_names,
+            write_class_names,
+        )
+
+        project = self.image_data_model.parent_directory
+        folder = self._box_folder(target)
+        have = read_class_names(project, folder)
+        mapping, merged = merge_class_names(
+            {c: n for c, n in names.items() if c in used}, have
+        )
+        if merged != have:
+            write_class_names(project, merged, folder)
+            if target is self.shapes_layer:
+                self._fill_class_combo(merged)
+        return mapping, merged
+
+    def _add_boxes_with_classes(self, target, boxes, classes, names):
+        """Add *boxes* to *target*, each keeping the class *names* gives it."""
+        mapping, merged = self._target_class_ids(target, names, set(classes))
+        ids = [mapping.get(c, c) for c in classes]
+        for class_id in sorted(set(ids)):
+            target.feature_defaults = {
+                "class": class_id,
+                "name": merged.get(class_id, str(class_id)),
+            }
+            target.add_rectangles(
+                [b for b, c in zip(boxes, ids, strict=True) if c == class_id]
+            )
+        if target is self.shapes_layer:
+            self._set_next_box_class()  # the combo's class again
+        target.refresh()
 
     def _copy_target(self):
         """The box layer the copy row's "to" combo names, or None."""
@@ -1508,6 +1570,7 @@ class NDAILab(QWidget):
             box_file,
             read_class_names,
             read_complete,
+            read_prediction_class_names,
             write_complete,
         )
         from .profiles import box_predictions_name
@@ -1526,12 +1589,17 @@ class NDAILab(QWidget):
         project = Path(self.image_data_model.parent_directory)
         folder = self._box_folder(target)
 
-        chosen = self.class_combo.currentData()
-        if target is self.shapes_layer and chosen is not None:
-            class_id, class_name = chosen, self.class_combo.currentText()
+        source_names = read_prediction_class_names(project, source)
+        if source_names:
+            how = "with their classes"
         else:
-            class_id = 0
-            class_name = read_class_names(project, folder).get(0, "0")
+            chosen = self.class_combo.currentData()
+            if target is self.shapes_layer and chosen is not None:
+                class_id, class_name = chosen, self.class_combo.currentText()
+            else:
+                class_id = 0
+                class_name = read_class_names(project, folder).get(0, "0")
+            how = f"as {class_name}"
 
         stems = {p.stem for p in self.image_data_model.get_image_paths()}
         files = [
@@ -1559,7 +1627,7 @@ class NDAILab(QWidget):
             )
             return
         answer = self._ask_copy_all(
-            f"Copy the boxes of {source} into {target.name} as {class_name}, "
+            f"Copy the boxes of {source} into {target.name} {how}, "
             f"on {len(todo)} photos? ({len(files) - len(todo)} already have "
             f"boxes or are complete, and are left alone.)\n\n"
             f"Copy only: then fix each photo and tick Complete.\n"
@@ -1569,12 +1637,29 @@ class NDAILab(QWidget):
         if answer is None:
             return
 
-        boxes = empty = 0
-        for f in todo:
-            rows = [line.split() for line in f.read_text().splitlines()]
-            lines = [
-                f"{class_id} {' '.join(r[1:5])}\n" for r in rows if len(r) >= 5
+        rows_of = {
+            f: [
+                r
+                for r in (line.split() for line in f.read_text().splitlines())
+                if len(r) >= 5
             ]
+            for f in todo
+        }
+        if source_names:
+            used = {
+                int(float(r[0])) for rows in rows_of.values() for r in rows
+            }
+            mapping, _ = self._target_class_ids(target, source_names, used)
+
+        def class_of(row):
+            if not source_names:
+                return class_id
+            predicted = int(float(row[0]))
+            return mapping.get(predicted, predicted)
+
+        boxes = empty = 0
+        for f, rows in rows_of.items():
+            lines = [f"{class_of(r)} {' '.join(r[1:5])}\n" for r in rows]
             boxes += len(lines)
             empty += not lines
             if lines:

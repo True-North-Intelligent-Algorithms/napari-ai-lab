@@ -110,20 +110,48 @@ class SkopDetector(SkopSegmenter):
             )
         self.last_napari_boxes = None
         self.last_box_scores = None
+        self.last_box_classes = None
+        self.last_box_class_names = None
         result = self._run(image)
         boxes = getattr(result, "boxes", result)
         self.last_napari_boxes = _to_napari(boxes)
+        n = len(self.last_napari_boxes)
         # One confidence per box, where the op gives them: tnia-ops' people
         # call them confidences, its bibs scores; skop's Boxes has neither.
         for attr in ("scores", "confidences"):
             scores = getattr(result, attr, None)
-            if scores is not None and len(scores) == len(
-                self.last_napari_boxes
-            ):
+            if scores is not None and len(scores) == n:
                 self.last_box_scores = [float(s) for s in scores]
                 break
-        print(f"{type(self).__name__}: {len(self.last_napari_boxes)} boxes")
+        # And a class per box, where it gives them (skop's Detections). They
+        # mean something only when the classes have names.
+        classes = getattr(result, "classes", None)
+        if classes is not None and len(classes) == n:
+            self.last_box_classes = [int(c) for c in classes]
+            self.last_box_class_names = self._class_names() or None
+        print(f"{type(self).__name__}: {n} boxes")
         return np.zeros(image.shape[:2], dtype=np.uint16)
+
+    def _class_names(self) -> dict:
+        """Class id -> name for the model just run; {} when unknown."""
+        return {}
+
+
+def trained_class_names(weights) -> dict:
+    """The class names a model trained by train_yolo was trained with.
+
+    train_yolo keeps its working files in ``<name>_training/`` beside
+    ``<name>.pt``, and the dataset's data.yaml, which names the classes, is
+    one of them. {} for a stock model, or one copied in without them.
+    """
+    from pathlib import Path
+
+    from ...utilities.box_annotations import read_names
+
+    path = Path(weights)
+    return read_names(
+        path.with_name(f"{path.stem}_training") / "dataset" / "data.yaml"
+    )
 
 
 class PtModelPicker:
@@ -296,15 +324,23 @@ Training: make crops first (Augment tab, YOLO crops), then pick them as
             }
         if not self.model_save_dir:
             return {"success": False, "message": "model_save_dir is not set."}
-        if not self.patch_path or not os.path.isfile(
-            os.path.join(self.patch_path, "pairs.json")
-        ):
+        if not self.patch_path:
             return {
                 "success": False,
                 "message": (
-                    f"No crop set at {self.patch_path!r}. Make one in the "
-                    "Augment tab with YOLO crops, then pick it as Patches "
-                    "to Process."
+                    "Please augment first: in the Augment tab, choose YOLO "
+                    "crops and press Perform Augmentations. Then pick the "
+                    "crops here, in Patches to Process."
+                ),
+            }
+        if not os.path.isfile(os.path.join(self.patch_path, "pairs.json")):
+            return {
+                "success": False,
+                "message": (
+                    f"'{os.path.basename(self.patch_path)}' is not YOLO "
+                    "crops. In Patches to Process, pick the crops YOLO crops "
+                    "made (yolo_<box layer>), or make them in the Augment "
+                    "tab: choose YOLO crops and press Perform Augmentations."
                 ),
             }
         pairs = read_pairs(self.patch_path)
@@ -408,6 +444,9 @@ Training: make crops first (Augment tab, YOLO crops), then pick them as
             "object_size": float(self.object_size) or None,
             "overlap": self.overlap,
         }
+
+    def _class_names(self) -> dict:
+        return trained_class_names(self._weights())
 
     @property
     def op(self):
